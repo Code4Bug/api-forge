@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 导入弹窗</title>
+    <style id="theme-vars">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --api-bg: #f5f7fb;
+  --api-surface: #ffffff;
+  --api-surface-muted: #f8fafc;
+  --api-surface-raised: #ffffff;
+  --api-border: #d9e1ec;
+  --api-border-strong: #b8c4d4;
+  --api-text: #101828;
+  --api-text-muted: #667085;
+  --api-text-soft: #98a2b3;
+  --api-primary: #1d4ed8;
+  --api-primary-50: #eff6ff;
+  --api-primary-100: #dbeafe;
+  --api-primary-600: #2563eb;
+  --api-primary-700: #1d4ed8;
+  --api-primary-900: #1e3a8a;
+  --state-success: #15803d;
+  --state-success-bg: #ecfdf3;
+  --state-warning: #b45309;
+  --state-warning-bg: #fffbeb;
+  --state-error: #b42318;
+  --state-error-bg: #fef3f2;
+  --state-info: #0369a1;
+  --state-info-bg: #eef6ff;
+  --api-code-bg: #0f172a;
+  --api-code-surface: #111827;
+  --api-code-border: #243044;
+  --api-code-text: #d1d5db;
+  --api-code-muted: #94a3b8;
+  --api-radius-sm: 4px;
+  --api-radius-md: 8px;
+  --api-radius-lg: 12px;
+  --api-radius-full: 9999px;
+  --api-shadow-static: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --api-shadow-float: 0 18px 45px rgba(15, 23, 42, 0.18);
+  --api-font-body: 'Inter', 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --api-font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.dark {
+  --api-bg: #0b1220;
+  --api-surface: #111827;
+  --api-surface-muted: #182235;
+  --api-surface-raised: #151f30;
+  --api-border: #253247;
+  --api-border-strong: #334155;
+  --api-text: #f8fafc;
+  --api-text-muted: #a7b0c0;
+  --api-text-soft: #778397;
+}
+
+body {
+  font-family: var(--api-font-body);
+  background: var(--api-bg);
+  color: var(--api-text);
+}
+
+.api-title { font-weight: 800; letter-spacing: -0.02em; }
+.api-code { font-family: var(--api-font-code); }
+.api-card { background: var(--api-surface); border: 1px solid var(--api-border); box-shadow: var(--api-shadow-static); border-radius: var(--api-radius-lg); }
+.api-panel { background: var(--api-surface-muted); border: 1px solid var(--api-border); border-radius: var(--api-radius-md); }
+.api-focus { outline: 2px solid rgba(37, 99, 235, 0.22); outline-offset: 1px; }
+.api-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.api-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+.api-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--api-primary);
+    --color-border: var(--api-border);
+  }
+  @layer base {
+    body { background: var(--api-surface); color: var(--api-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="min-h-screen overflow-hidden" style="background: var(--api-bg); color: var(--api-text);">
+      <div class="relative min-h-screen">
+        <div class="absolute inset-0 opacity-55 blur-[0.2px] pointer-events-none select-none" aria-hidden="true">
+          <div class="h-12 border-b flex items-center justify-between px-4" style="background: var(--api-surface); border-color: var(--api-border);">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <i data-lucide="braces" class="w-4 h-4" style="color: var(--api-primary);"></i>
+                <span>接口调试台</span>
+              </div>
+              <div class="h-5 w-px" style="background: var(--api-border);"></div>
+              <div class="flex items-center gap-2 text-xs" style="color: var(--api-text-muted);">
+                <span class="inline-flex h-6 items-center justify-center rounded px-2" style="background: var(--api-surface-muted); border: 1px solid var(--api-border);">测试环境</span>
+                <span class="api-code">https://api.dev.local</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 text-xs" style="color: var(--api-text-muted);">
+              <span class="inline-flex h-6 items-center justify-center rounded px-2" style="border: 1px solid var(--api-border);">代理开启</span>
+              <span class="inline-flex h-6 items-center justify-center rounded px-2" style="border: 1px solid var(--api-border);">保存中</span>
+            </div>
+          </div>
+
+          <div class="grid min-h-[calc(100vh-48px)] grid-cols-[280px_minmax(0,1fr)]">
+            <aside class="border-r p-3" style="background: var(--api-surface); border-color: var(--api-border);">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="text-sm font-semibold">API 目录</div>
+                <button class="inline-flex h-7 w-7 items-center justify-center rounded" style="border: 1px solid var(--api-border);"><i data-lucide="folder-plus" class="w-3.5 h-3.5"></i></button>
+              </div>
+              <div class="space-y-1 text-sm">
+                <div class="flex h-8 items-center gap-2 rounded px-2" style="background: var(--api-primary-50); color: var(--api-primary-900);"><i data-lucide="chevron-down" class="w-3.5 h-3.5"></i><span class="truncate font-medium">用户服务</span></div>
+                <div class="ml-5 flex h-8 items-center gap-2 rounded px-2"><span class="api-code text-[11px] font-semibold" style="color: var(--state-success);">GET</span><span class="truncate">用户列表</span></div>
+                <div class="ml-5 flex h-8 items-center gap-2 rounded px-2"><span class="api-code text-[11px] font-semibold" style="color: var(--api-primary);">POST</span><span class="truncate">创建用户</span></div>
+                <div class="flex h-8 items-center gap-2 rounded px-2"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="truncate font-medium">订单服务</span></div>
+                <div class="flex h-8 items-center gap-2 rounded px-2"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span class="truncate font-medium">支付网关</span></div>
+              </div>
+            </aside>
+
+            <section class="min-w-0 p-4">
+              <div class="mb-3 flex items-center justify-between border-b pb-3" style="border-color: var(--api-border);">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="inline-flex h-7 items-center justify-center rounded px-2 text-xs font-semibold" style="background: var(--api-primary-50); color: var(--api-primary); border: 1px solid var(--api-primary-100);">POST</span>
+                  <span class="truncate text-sm font-semibold">/v1/users/import</span>
+                </div>
+                <button class="inline-flex h-8 items-center justify-center rounded px-3 text-sm font-semibold text-white" style="background: var(--api-primary);">发送</button>
+              </div>
+              <div class="grid grid-cols-[minmax(0,1fr)_320px] gap-4">
+                <div class="api-card min-h-[520px] p-4">
+                  <div class="mb-3 flex items-center gap-3 border-b pb-2 text-sm" style="border-color: var(--api-border);">
+                    <span class="font-semibold" style="color: var(--api-primary);">参数</span>
+                    <span style="color: var(--api-text-muted);">请求体</span>
+                    <span style="color: var(--api-text-muted);">脚本</span>
+                  </div>
+                  <div class="api-code rounded p-4 text-xs leading-6" style="background: var(--api-code-bg); color: var(--api-code-text); border: 1px solid var(--api-code-border);">
+                    {<br>
+                    &nbsp;&nbsp;"source": "postman",<br>
+                    &nbsp;&nbsp;"folder": "用户服务",<br>
+                    &nbsp;&nbsp;"mode": "merge"<br>
+                    }
+                  </div>
+                </div>
+                <div class="api-card min-h-[520px] p-4">
+                  <div class="mb-3 text-sm font-semibold">响应预览</div>
+                  <div class="space-y-2 text-xs" style="color: var(--api-text-muted);">
+                    <div class="flex items-center justify-between rounded p-2" style="background: var(--api-surface-muted);"><span>状态</span><span style="color: var(--state-success);">200 OK</span></div>
+                    <div class="flex items-center justify-between rounded p-2" style="background: var(--api-surface-muted);"><span>耗时</span><span>186 ms</span></div>
+                    <div class="flex items-center justify-between rounded p-2" style="background: var(--api-surface-muted);"><span>大小</span><span>24.6 KB</span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="absolute inset-0" style="background: rgba(16, 24, 40, 0.28);"></div>
+
+        <section class="relative z-10 flex min-h-screen items-center justify-center p-6">
+          <div class="w-full max-w-[920px] overflow-hidden rounded-xl" role="dialog" aria-modal="true" aria-labelledby="import-title" style="background: var(--api-surface); border: 1px solid var(--api-border-strong); box-shadow: var(--api-shadow-float);">
+            <div class="flex items-start justify-between border-b px-6 py-5" style="border-color: var(--api-border);">
+              <div class="min-w-0">
+                <div class="flex items-center gap-3">
+                  <h1 id="import-title" class="api-title text-2xl leading-tight" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">API 导入</h1>
+                  <span class="inline-flex h-6 items-center justify-center rounded px-2 text-xs font-medium" style="background: var(--api-primary-50); color: var(--api-primary); border: 1px solid var(--api-primary-100);">预览模式</span>
+                </div>
+                <p class="mt-2 text-sm" style="color: var(--api-text-muted);">从 Postman 或 Swagger/OpenAPI 导入接口，解析后合并到当前工作区。</p>
+              </div>
+              <a id="back-http-debug" data-dom-id="back-http-debug" href="#" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-[background-color,border-color,color] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="border: 1px solid var(--api-border); color: var(--api-text-muted); outline-color: var(--api-primary);" aria-label="关闭">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </a>
+            </div>
+
+            <div class="grid grid-cols-[minmax(0,1fr)_300px] gap-0 max-lg:grid-cols-1">
+              <div class="min-w-0 px-6 py-5">
+                <div class="mb-5 grid grid-cols-[160px_minmax(0,1fr)] items-start gap-4 max-sm:grid-cols-1">
+                  <label class="pt-1.5 text-sm font-medium" style="color: var(--api-text);">来源类型</label>
+                  <div class="inline-grid h-10 grid-cols-2 rounded-lg p-1" style="background: var(--api-surface-muted); border: 1px solid var(--api-border);">
+                    <button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-semibold" style="background: var(--api-surface); color: var(--api-primary); border: 1px solid var(--api-border); box-shadow: var(--api-shadow-static);"><i data-lucide="box" class="w-4 h-4"></i>Postman</button>
+                    <button class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-medium" style="color: var(--api-text-muted);"><i data-lucide="file-json" class="w-4 h-4"></i>OpenAPI</button>
+                  </div>
+                </div>
+
+                <div class="mb-5 grid grid-cols-[160px_minmax(0,1fr)] items-start gap-4 max-sm:grid-cols-1">
+                  <label class="pt-1.5 text-sm font-medium" style="color: var(--api-text);">文件导入</label>
+                  <div class="rounded-lg border border-dashed p-5 text-center transition-[background-color,border-color] duration-150" style="border-color: var(--api-border-strong); background: var(--api-surface-muted);">
+                    <div class="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-lg" style="background: var(--api-primary-50); color: var(--api-primary);"><i data-lucide="upload-cloud" class="w-5 h-5"></i></div>
+                    <div class="text-sm font-semibold">拖放集合文件</div>
+                    <div class="mt-1 text-xs" style="color: var(--api-text-muted);">支持 .json、.yaml、.yml，最大 20 MB</div>
+                    <button class="mt-4 inline-flex h-8 items-center justify-center whitespace-nowrap rounded-md px-3 text-sm font-medium" style="border: 1px solid var(--api-border); background: var(--api-surface);">选择文件</button>
+                  </div>
+                </div>
+
+                <div class="mb-5 grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4 max-sm:grid-cols-1">
+                  <label class="text-sm font-medium" for="import-url">URL 导入</label>
+                  <div class="flex h-10 min-w-0 items-center rounded-lg" style="border: 1px solid var(--api-border); background: var(--api-surface);">
+                    <span class="flex h-full items-center border-r px-3 text-xs" style="border-color: var(--api-border); color: var(--api-text-muted);">URL</span>
+                    <input id="import-url" class="h-full min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" value="https://gateway.example.com/openapi.json" aria-label="URL 导入地址">
+                  </div>
+                </div>
+
+                <div class="mb-5 grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4 max-sm:grid-cols-1">
+                  <label class="text-sm font-medium" for="target-dir">目标目录</label>
+                  <div class="flex h-10 items-center justify-between rounded-lg px-3" style="border: 1px solid var(--api-border); background: var(--api-surface);">
+                    <div class="flex min-w-0 items-center gap-2 text-sm"><i data-lucide="folder" class="w-4 h-4" style="color: var(--api-text-muted);"></i><span class="truncate">工作区 / 用户服务 / 导入集合</span></div>
+                    <i data-lucide="chevron-down" class="w-4 h-4 shrink-0" style="color: var(--api-text-muted);"></i>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-[160px_minmax(0,1fr)] items-start gap-4 max-sm:grid-cols-1">
+                  <label class="pt-1.5 text-sm font-medium">冲突处理</label>
+                  <div class="grid gap-2">
+                    <label class="flex min-h-10 items-center gap-3 rounded-lg px-3" style="border: 1px solid var(--api-primary); background: var(--api-primary-50);">
+                      <span class="inline-flex h-4 w-4 items-center justify-center rounded-full" style="border: 4px solid var(--api-primary);"></span>
+                      <span class="min-w-0 flex-1 text-sm font-medium">同名接口自动合并</span>
+                      <span class="text-xs" style="color: var(--api-text-muted);">推荐</span>
+                    </label>
+                    <label class="flex min-h-10 items-center gap-3 rounded-lg px-3" style="border: 1px solid var(--api-border); background: var(--api-surface);">
+                      <span class="inline-flex h-4 w-4 rounded-full" style="border: 1px solid var(--api-border-strong);"></span>
+                      <span class="text-sm">保留副本并追加后缀</span>
+                    </label>
+                    <label class="flex min-h-10 items-center gap-3 rounded-lg px-3" style="border: 1px solid var(--api-border); background: var(--api-surface);">
+                      <span class="inline-flex h-4 w-4 rounded-full" style="border: 1px solid var(--api-border-strong);"></span>
+                      <span class="text-sm">跳过重复接口</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="border-l p-5 max-lg:border-l-0 max-lg:border-t" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+                <h2 class="text-lg font-semibold">解析预览</h2>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                  <div class="rounded-lg p-3" style="background: var(--api-surface); border: 1px solid var(--api-border);">
+                    <div class="text-xs" style="color: var(--api-text-muted);">接口数</div>
+                    <div class="mt-1 text-2xl font-bold">48</div>
+                  </div>
+                  <div class="rounded-lg p-3" style="background: var(--api-surface); border: 1px solid var(--api-border);">
+                    <div class="text-xs" style="color: var(--api-text-muted);">方法数</div>
+                    <div class="mt-1 text-2xl font-bold">6</div>
+                  </div>
+                  <div class="rounded-lg p-3" style="background: var(--api-surface); border: 1px solid var(--api-border);">
+                    <div class="text-xs" style="color: var(--api-text-muted);">目录数</div>
+                    <div class="mt-1 text-2xl font-bold">12</div>
+                  </div>
+                  <div class="rounded-lg p-3" style="background: var(--api-surface); border: 1px solid var(--api-border);">
+                    <div class="text-xs" style="color: var(--api-text-muted);">冲突项</div>
+                    <div class="mt-1 text-2xl font-bold" style="color: var(--state-warning);">3</div>
+                  </div>
+                </div>
+
+                <div class="mt-5 overflow-hidden rounded-lg" style="border: 1px solid var(--api-border); background: var(--api-surface);">
+                  <div class="grid grid-cols-[72px_1fr_56px] border-b px-3 py-2 text-xs font-medium" style="border-color: var(--api-border); color: var(--api-text-muted);">
+                    <span>方法</span><span>路径</span><span class="text-right">数量</span>
+                  </div>
+                  <div class="divide-y text-xs" style="divide-color: var(--api-border);">
+                    <div class="grid grid-cols-[72px_1fr_56px] items-center px-3 py-2" style="border-bottom: 1px solid var(--api-border);"><span class="api-code font-semibold" style="color: var(--state-success);">GET</span><span class="truncate">/v1/users</span><span class="text-right">18</span></div>
+                    <div class="grid grid-cols-[72px_1fr_56px] items-center px-3 py-2" style="border-bottom: 1px solid var(--api-border);"><span class="api-code font-semibold" style="color: var(--api-primary);">POST</span><span class="truncate">/v1/orders</span><span class="text-right">12</span></div>
+                    <div class="grid grid-cols-[72px_1fr_56px] items-center px-3 py-2"><span class="api-code font-semibold" style="color: var(--state-error);">DEL</span><span class="truncate">/v1/tokens</span><span class="text-right">4</span></div>
+                  </div>
+                </div>
+
+                <div class="mt-5 space-y-2">
+                  <div class="flex gap-2 rounded-lg p-3" style="background: var(--state-warning-bg); border: 1px solid var(--api-border);">
+                    <i data-lucide="triangle-alert" class="mt-0.5 h-4 w-4 shrink-0" style="color: var(--state-warning);"></i>
+                    <div class="min-w-0 text-xs leading-5"><div class="font-semibold" style="color: var(--state-warning);">鉴权脚本未导入</div><div style="color: var(--api-text-muted);">Postman 预请求脚本需要手动迁移。</div></div>
+                  </div>
+                  <div class="flex gap-2 rounded-lg p-3" style="background: var(--state-info-bg); border: 1px solid var(--api-border);">
+                    <i data-lucide="info" class="mt-0.5 h-4 w-4 shrink-0" style="color: var(--state-info);"></i>
+                    <div class="min-w-0 text-xs leading-5"><div class="font-semibold" style="color: var(--state-info);">Schema 已压缩</div><div style="color: var(--api-text-muted);">大型对象仅显示前 30 个字段。</div></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+
+            <div class="flex items-center justify-between gap-4 border-t px-6 py-4" style="border-color: var(--api-border); background: var(--api-surface);">
+              <div class="min-w-0 text-sm" style="color: var(--api-text-muted);">将创建 12 个目录，导入 48 个接口，重复项按合并策略处理。</div>
+              <div class="flex shrink-0 items-center gap-2">
+                <a href="#" class="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-md px-4 text-sm font-medium transition-[background-color,border-color] duration-150" style="border: 1px solid var(--api-border); color: var(--api-text);">取消</a>
+                <a id="cta-sse-stream" data-dom-id="cta-sse-stream" href="#" class="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-semibold text-white transition-[background-color,transform] duration-150 hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style="background: var(--api-primary); outline-color: var(--api-primary);">开始导入<i data-lucide="arrow-right" class="w-4 h-4"></i></a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

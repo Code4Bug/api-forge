@@ -1,0 +1,305 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #050505;
+  --app-surface: #0b0b0b;
+  --app-raised: #151515;
+  --app-border: #262626;
+  --app-text: #f5f5f5;
+  --app-muted: #8a8a8a;
+  --app-accent: #f59e0b;
+  --app-accent-soft: rgba(245, 158, 11, .14);
+  --app-accent-border: #75551c;
+  --app-input: #101010;
+  --app-hover: #242424;
+  --app-selection: rgba(245, 158, 11, .28);
+  color-scheme: dark;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html.light {
+  color-scheme: light;
+  --app-bg: #f4f7fb;
+}
+
+html.dim {
+  --app-bg: #101722;
+}
+
+html.light body,
+html.light #root {
+  background: var(--app-bg);
+  color: #1f2937;
+}
+
+html.light [class*="bg-zinc-950"],
+html.light [class*="bg-[#"] {
+  background-color: #ffffff !important;
+}
+
+html.light [class*="bg-zinc-900"] {
+  background-color: #eef2f7 !important;
+}
+
+html.light [class*="bg-zinc-800"] {
+  background-color: #e5eaf1 !important;
+}
+
+html.light [class*="border-zinc-800"],
+html.light [class*="border-zinc-700"] {
+  border-color: #d3dae5 !important;
+}
+
+html.light [class*="text-zinc-100"],
+html.light [class*="text-zinc-200"],
+html.light [class*="text-zinc-300"] {
+  color: #263241 !important;
+}
+
+html[data-theme] [class*="bg-zinc-950"],
+html[data-theme] [class*="bg-[#"] {
+  background-color: var(--app-surface) !important;
+}
+
+html[data-theme] [class*="bg-zinc-900"] {
+  background-color: var(--app-raised) !important;
+}
+
+html[data-theme] [class*="bg-zinc-800"] {
+  background-color: color-mix(in srgb, var(--app-raised) 78%, var(--app-bg)) !important;
+}
+
+html[data-theme] [class*="border-zinc-800"],
+html[data-theme] [class*="border-zinc-700"] {
+  border-color: var(--app-border) !important;
+}
+
+html[data-theme] [class*="text-zinc-100"],
+html[data-theme] [class*="text-zinc-200"],
+html[data-theme] [class*="text-zinc-300"] {
+  color: var(--app-text) !important;
+}
+
+html[data-theme] [class*="text-zinc-500"],
+html[data-theme] [class*="text-zinc-400"] {
+  color: var(--app-muted) !important;
+}
+
+html[data-theme] .variable-input-field {
+  color: transparent !important;
+}
+
+html[data-theme] .variable-input-field,
+html[data-theme] .variable-input-field + * {
+  line-height: inherit;
+}
+
+html[data-theme] body,
+html[data-theme] #root {
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+/* 主题通用控件层：避免页面内的固定 zinc 色值破坏主题层次。 */
+html[data-theme] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme] select,
+html[data-theme] textarea {
+  background-color: var(--app-input);
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+html[data-theme] input:not([type="checkbox"]):not([type="radio"]):focus,
+html[data-theme] select:focus,
+html[data-theme] textarea:focus {
+  border-color: var(--app-accent-border);
+  outline: 2px solid var(--app-accent-soft);
+  outline-offset: 0;
+}
+
+/* 复选框使用当前主题色，避免固定的 cyan 强调色破坏主题一致性。 */
+html[data-theme] input[type="checkbox"] {
+  accent-color: var(--app-accent) !important;
+  background-color: var(--app-input);
+  border-color: var(--app-border);
+}
+
+html[data-theme] ::selection {
+  background: var(--app-selection);
+  color: var(--app-text);
+}
+
+html[data-theme] ::-webkit-scrollbar-track {
+  background: var(--app-surface);
+}
+
+html[data-theme] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-border) 88%, var(--app-text));
+  border-color: var(--app-surface);
+}
+
+html[data-theme] ::-webkit-scrollbar-thumb:hover {
+  background: var(--app-accent-border);
+}
+
+html[data-theme] [class~="bg-cyan-400"] {
+  background-color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/"] {
+  background-color: color-mix(in srgb, var(--app-accent) 15%, transparent) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/10"],
+html[data-theme] [class*="bg-cyan-400/15"],
+html[data-theme] [class*="bg-cyan-400/20"] {
+  background-color: var(--app-accent-soft) !important;
+}
+
+html[data-theme] [class*="border-cyan-400"] {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, transparent) !important;
+}
+
+html[data-theme] [class*="text-cyan-300"],
+html[data-theme] [class*="text-cyan-200"],
+html[data-theme] [class*="text-cyan-100"] {
+  color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/"][class*="text-cyan-100"],
+html[data-theme] [class*="bg-cyan-400/"][class*="text-cyan-200"] {
+  color: var(--app-text) !important;
+}
+
+/* 描边按钮需要和页面背景拉开层次，避免深色主题下按钮不可见。 */
+html[data-theme] button[class*="border-zinc-700"],
+html[data-theme] button[class*="border-zinc-800"] {
+  background-color: var(--app-raised) !important;
+}
+
+html[data-theme] button[class*="border-zinc-700"]:hover,
+html[data-theme] button[class*="border-zinc-800"]:hover,
+html[data-theme] button[class*="hover:bg-zinc-800"]:hover {
+  background-color: var(--app-hover) !important;
+}
+
+html[data-theme] [class*="ring-cyan-400"],
+html[data-theme] [class*="ring-cyan-500"] {
+  --tw-ring-color: var(--app-accent-border) !important;
+}
+
+html[data-theme] [class*="divide-zinc-800"] > :not([hidden]) ~ :not([hidden]),
+html[data-theme] [class*="border-t-zinc-800"],
+html[data-theme] [class*="border-b-zinc-800"] {
+  border-color: var(--app-border) !important;
+}
+
+html.light [class*="text-emerald-300"],
+html.light [class*="text-emerald-200"] {
+  color: #047857 !important;
+}
+
+html.light [class*="text-amber-300"],
+html.light [class*="text-amber-200"] {
+  color: #b45309 !important;
+}
+
+html.light [class*="text-blue-300"],
+html.light [class*="text-blue-200"] {
+  color: #2563eb !important;
+}
+
+html.light [class*="text-violet-300"],
+html.light [class*="text-violet-200"] {
+  color: #7c3aed !important;
+}
+
+html.light [class*="text-rose-200"],
+html.light [class*="text-red-400"] {
+  color: #be123c !important;
+}
+
+html.light [class*="text-zinc-950"] {
+  color: #ffffff !important;
+}
+
+html.light select,
+html.light input,
+html.light textarea {
+  color: #1f2937;
+  caret-color: #0e7490;
+}
+
+html.light option {
+  background: #ffffff;
+  color: #1f2937;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #050505;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+option {
+  background: #0f141b;
+  color: #e4e4e7;
+}
+
+input[list]::-webkit-calendar-picker-indicator {
+  opacity: 0.65;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b0f14;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border: 2px solid #0b0f14;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>请求错误状态</title>
+    <style id="theme-vars">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --api-bg: #f5f7fb;
+  --api-surface: #ffffff;
+  --api-surface-muted: #f8fafc;
+  --api-surface-raised: #ffffff;
+  --api-border: #d9e1ec;
+  --api-border-strong: #b8c4d4;
+  --api-text: #101828;
+  --api-text-muted: #667085;
+  --api-text-soft: #98a2b3;
+  --api-primary: #1d4ed8;
+  --api-primary-50: #eff6ff;
+  --api-primary-100: #dbeafe;
+  --api-primary-600: #2563eb;
+  --api-primary-700: #1d4ed8;
+  --api-primary-900: #1e3a8a;
+  --state-success: #15803d;
+  --state-success-bg: #ecfdf3;
+  --state-warning: #b45309;
+  --state-warning-bg: #fffbeb;
+  --state-error: #b42318;
+  --state-error-bg: #fef3f2;
+  --state-info: #0369a1;
+  --state-info-bg: #eef6ff;
+  --api-code-bg: #0f172a;
+  --api-code-surface: #111827;
+  --api-code-border: #243044;
+  --api-code-text: #d1d5db;
+  --api-code-muted: #94a3b8;
+  --api-radius-sm: 4px;
+  --api-radius-md: 8px;
+  --api-radius-lg: 12px;
+  --api-radius-full: 9999px;
+  --api-shadow-static: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --api-shadow-float: 0 18px 45px rgba(15, 23, 42, 0.18);
+  --api-font-body: 'Inter', 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --api-font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.dark {
+  --api-bg: #0b1220;
+  --api-surface: #111827;
+  --api-surface-muted: #182235;
+  --api-surface-raised: #151f30;
+  --api-border: #253247;
+  --api-border-strong: #334155;
+  --api-text: #f8fafc;
+  --api-text-muted: #a7b0c0;
+  --api-text-soft: #778397;
+}
+
+body {
+  font-family: var(--api-font-body);
+  background: var(--api-bg);
+  color: var(--api-text);
+}
+
+.api-title { font-weight: 800; letter-spacing: -0.02em; }
+.api-code { font-family: var(--api-font-code); }
+.api-card { background: var(--api-surface); border: 1px solid var(--api-border); box-shadow: var(--api-shadow-static); border-radius: var(--api-radius-lg); }
+.api-panel { background: var(--api-surface-muted); border: 1px solid var(--api-border); border-radius: var(--api-radius-md); }
+.api-focus { outline: 2px solid rgba(37, 99, 235, 0.22); outline-offset: 1px; }
+.api-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.api-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+.api-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--api-primary);
+    --color-border: var(--api-border);
+  }
+  @layer base {
+    body { background: var(--api-surface); color: var(--api-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="min-h-screen overflow-hidden" style="background: var(--api-bg); color: var(--api-text); font-family: var(--api-font-body);">
+      <div class="flex h-screen min-h-[720px] w-full overflow-hidden">
+        <aside class="hidden w-[312px] shrink-0 flex-col border-r lg:flex" style="background: var(--api-surface); border-color: var(--api-border);">
+          <div class="flex h-12 items-center justify-between border-b px-3" style="border-color: var(--api-border);">
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md" style="background: var(--api-primary-50); color: var(--api-primary);">
+                <i data-lucide="braces" class="h-4 w-4"></i>
+              </div>
+              <div class="min-w-0">
+                <h1 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">接口调试</h1>
+                <p class="truncate text-[11px]" style="color: var(--api-text-muted);">Payments Workspace</p>
+              </div>
+            </div>
+            <button class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-[background-color,border-color,color] duration-150 hover:border-[var(--api-border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="border-color: var(--api-border); color: var(--api-text-muted);" aria-label="设置">
+              <i data-lucide="settings" class="h-4 w-4"></i>
+            </button>
+          </div>
+
+          <div class="border-b p-3" style="border-color: var(--api-border);">
+            <label class="flex h-8 items-center gap-2 rounded-md border px-2" style="background: var(--api-surface-muted); border-color: var(--api-border); color: var(--api-text-muted);">
+              <i data-lucide="search" class="h-3.5 w-3.5 shrink-0"></i>
+              <input class="h-full min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:opacity-70" placeholder="搜索目录或接口" value="订单" />
+            </label>
+          </div>
+
+          <div class="flex min-h-0 flex-1 flex-col">
+            <div class="flex h-10 items-center justify-between px-3">
+              <div class="flex min-w-0 items-center gap-2">
+                <i data-lucide="folder-tree" class="h-4 w-4 shrink-0" style="color: var(--api-text-muted);"></i>
+                <h2 class="truncate text-xs font-semibold">API 目录</h2>
+              </div>
+              <button class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-[background-color,color] duration-150 hover:bg-[var(--api-primary-50)] hover:text-[var(--api-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="color: var(--api-primary);" aria-label="新建目录">
+                <i data-lucide="plus" class="h-4 w-4"></i>
+              </button>
+            </div>
+
+            <div class="api-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              <div class="space-y-1">
+                <div class="rounded-md" style="background: var(--api-primary-50);">
+                  <div class="flex h-8 items-center gap-2 px-2">
+                    <i data-lucide="chevron-down" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-primary);"></i>
+                    <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-primary);"></i>
+                    <span class="min-w-0 flex-1 truncate text-xs font-semibold" style="color: var(--api-primary-900);">订单服务</span>
+                    <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-[var(--api-primary-100)]" aria-label="目录菜单">
+                      <i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i>
+                    </button>
+                  </div>
+                  <div class="ml-6 border-l py-1" style="border-color: var(--api-border);">
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-[var(--api-surface-muted)]">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-primary-50); color: var(--api-primary);">POST</span>
+                      <span class="min-w-0 flex-1 truncate text-xs font-semibold">订单同步</span>
+                      <span class="inline-flex h-5 shrink-0 items-center justify-center rounded px-2 text-[10px] font-semibold" style="background: var(--state-error-bg); color: var(--state-error);">失败</span>
+                    </div>
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-[var(--api-surface-muted)]">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-primary-50); color: var(--api-primary);">POST</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">创建订单</span>
+                      <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded" aria-label="接口菜单"><i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i></button>
+                    </div>
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-[var(--api-surface-muted)]">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface-muted); color: var(--api-text-muted);">GET</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">订单详情</span>
+                      <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded" aria-label="接口菜单"><i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i></button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-md">
+                  <div class="flex h-8 items-center gap-2 px-2 hover:bg-[var(--api-surface-muted)]">
+                    <i data-lucide="chevron-down" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                    <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                    <span class="min-w-0 flex-1 truncate text-xs font-medium">用户中心</span>
+                    <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded" aria-label="目录菜单"><i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i></button>
+                  </div>
+                  <div class="ml-6 border-l py-1" style="border-color: var(--api-border);">
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-[var(--api-surface-muted)]">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface-muted); color: var(--api-text-muted);">GET</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">用户资料</span>
+                    </div>
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-[var(--api-surface-muted)]">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface-muted); color: var(--api-text-muted);">PATCH</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">权限刷新</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-3 rounded-md border p-2" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+                  <div class="mb-2 flex items-center justify-between gap-2">
+                    <span class="truncate text-[11px] font-semibold" style="color: var(--api-text-muted);">最近失败</span>
+                    <span class="inline-flex h-5 items-center justify-center rounded px-2 text-[10px] font-semibold" style="background: var(--state-error-bg); color: var(--state-error);">1 条</span>
+                  </div>
+                  <div class="space-y-1 text-[11px]" style="color: var(--api-text-muted);">
+                    <div class="flex items-center justify-between gap-2 rounded px-2 py-1" style="background: var(--api-surface);">
+                      <span class="truncate">订单同步</span>
+                      <span class="shrink-0 api-code">500</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-2 rounded px-2 py-1" style="background: var(--api-surface);">
+                      <span class="truncate">库存锁定</span>
+                      <span class="shrink-0 api-code">超时</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="flex min-w-0 flex-1 flex-col">
+          <header class="flex h-12 shrink-0 items-center justify-between border-b px-4" style="background: var(--api-surface); border-color: var(--api-border);">
+            <div class="flex min-w-0 items-center gap-3">
+              <div class="hidden items-center gap-1 rounded-md border p-0.5 md:flex" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+                <a href="#" class="inline-flex h-7 items-center justify-center rounded px-3 text-xs font-semibold whitespace-nowrap" style="background: var(--api-surface); color: var(--api-primary); box-shadow: var(--api-shadow-static);">HTTP</a>
+                <a href="#" data-dom-id="nav-websocket-test" class="inline-flex h-7 items-center justify-center rounded px-3 text-xs font-medium whitespace-nowrap transition-[background-color,color] duration-150 hover:bg-[var(--api-primary-50)]" style="color: var(--api-text-muted);">WebSocket</a>
+                <a href="#" data-dom-id="nav-socket-test" class="inline-flex h-7 items-center justify-center rounded px-3 text-xs font-medium whitespace-nowrap transition-[background-color,color] duration-150 hover:bg-[var(--api-primary-50)]" style="color: var(--api-text-muted);">Socket</a>
+              </div>
+              <div class="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                <i data-lucide="server" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                <span class="truncate text-xs font-medium">测试环境</span>
+                <span class="hidden truncate text-[11px] md:block" style="color: var(--api-text-muted);">api.staging.example.com</span>
+              </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="hidden items-center gap-1 rounded px-2 py-1 text-[11px] md:inline-flex" style="background: var(--state-error-bg); color: var(--state-error);">
+                <i data-lucide="circle-alert" class="h-3 w-3"></i>
+                请求失败
+              </span>
+              <button class="inline-flex h-8 items-center justify-center gap-1 rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-[background-color,border-color,color] duration-150 hover:bg-[var(--api-surface-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="border-color: var(--api-border); color: var(--api-text-muted);">
+                <i data-lucide="save" class="h-3.5 w-3.5"></i>
+                保存
+              </button>
+            </div>
+          </header>
+
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div class="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b px-3 no-scrollbar" style="background: var(--api-surface); border-color: var(--api-border);">
+              <button class="flex h-8 min-w-0 max-w-[220px] items-center gap-2 rounded-md px-3 text-xs font-semibold" style="background: var(--state-error-bg); color: var(--state-error);">
+                <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface); color: var(--api-primary);">POST</span>
+                <span class="truncate">订单同步</span>
+                <i data-lucide="x" class="h-3.5 w-3.5 shrink-0"></i>
+              </button>
+              <button class="flex h-8 min-w-0 max-w-[200px] items-center gap-2 rounded-md px-3 text-xs transition-[background-color] duration-150 hover:bg-[var(--api-surface-muted)]" style="color: var(--api-text-muted);">
+                <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface-muted); color: var(--api-text-muted);">GET</span>
+                <span class="truncate">订单详情</span>
+              </button>
+              <button class="flex h-8 min-w-0 max-w-[200px] items-center gap-2 rounded-md px-3 text-xs transition-[background-color] duration-150 hover:bg-[var(--api-surface-muted)]" style="color: var(--api-text-muted);">
+                <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-surface-muted); color: var(--api-text-muted);">POST</span>
+                <span class="truncate">创建订单</span>
+              </button>
+            </div>
+
+            <div class="api-scrollbar min-h-0 flex-1 overflow-auto p-4">
+              <div class="grid min-w-[980px] grid-cols-12 gap-4">
+                <section class="col-span-12 api-card p-3">
+                  <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div class="flex min-w-0 flex-1 items-center gap-2 rounded-md border p-1" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+                      <span class="inline-flex h-9 w-[86px] shrink-0 items-center justify-center rounded-md text-sm font-semibold" style="background: var(--api-primary); color: var(--api-surface);">POST</span>
+                      <div class="flex h-9 min-w-0 flex-1 items-center rounded-md border px-3 api-code text-sm" style="background: var(--api-surface); border-color: var(--api-border);">
+                        <span class="truncate">/v1/orders/sync</span>
+                      </div>
+                      <button class="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-md px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,transform] duration-150 hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="background: var(--api-primary); color: var(--api-surface);">
+                        <i data-lucide="send" class="h-3.5 w-3.5"></i>
+                        发送
+                      </button>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                      <button data-dom-id="retry-request" class="inline-flex h-9 items-center justify-center gap-1 rounded-md px-3 text-xs font-semibold whitespace-nowrap transition-[background-color,transform] duration-150 hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="background: var(--api-primary); color: var(--api-surface);">
+                        <i data-lucide="rotate-cw" class="h-3.5 w-3.5"></i>
+                        重试
+                      </button>
+                      <button data-dom-id="copy-error" class="inline-flex h-9 items-center justify-center gap-1 rounded-md border px-3 text-xs font-medium whitespace-nowrap transition-[background-color,border-color] duration-150 hover:bg-[var(--api-surface-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="border-color: var(--api-border); color: var(--api-text-muted);">
+                        <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                        复制错误
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="col-span-12 xl:col-span-8 api-card p-4">
+                  <div class="mb-4 flex items-start justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="truncate text-lg font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">错误摘要</h2>
+                        <span class="inline-flex h-6 items-center justify-center gap-1 rounded-md px-2 text-xs font-semibold whitespace-nowrap" style="background: var(--state-error-bg); color: var(--state-error);">
+                          <i data-lucide="triangle-alert" class="h-3.5 w-3.5"></i>
+                          500
+                        </span>
+                        <span class="inline-flex h-6 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap" style="border-color: var(--api-border); color: var(--api-text-muted);">874 ms</span>
+                      </div>
+                      <p class="mt-2 line-clamp-2 text-sm" style="color: var(--api-text-muted);">订单同步接口返回内部错误，服务端在持久化阶段抛出异常，请优先核对请求体字段与库存锁定链路。</p>
+                    </div>
+                    <div class="shrink-0 rounded-md border px-3 py-2 text-right" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <p class="text-[11px] font-medium" style="color: var(--api-text-muted);">Trace ID</p>
+                      <p class="api-code text-xs font-semibold">trc_9f24c7a1</p>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-4 gap-2">
+                    <div class="rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <p class="truncate text-[11px] font-medium" style="color: var(--api-text-muted);">状态码</p>
+                      <p class="mt-1 truncate api-code text-base font-semibold" style="color: var(--state-error);">500</p>
+                    </div>
+                    <div class="rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <p class="truncate text-[11px] font-medium" style="color: var(--api-text-muted);">错误类型</p>
+                      <p class="mt-1 truncate text-sm font-semibold">服务异常</p>
+                    </div>
+                    <div class="rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <p class="truncate text-[11px] font-medium" style="color: var(--api-text-muted);">响应耗时</p>
+                      <p class="mt-1 truncate api-code text-sm font-semibold">874 ms</p>
+                    </div>
+                    <div class="rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <p class="truncate text-[11px] font-medium" style="color: var(--api-text-muted);">重试次数</p>
+                      <p class="mt-1 truncate api-code text-sm font-semibold">0 / 3</p>
+                    </div>
+                  </div>
+                </section>
+
+                <aside class="col-span-12 xl:col-span-4 api-card p-4">
+                  <div class="flex items-center justify-between gap-2">
+                    <h2 class="truncate text-lg font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">修复建议</h2>
+                    <button class="inline-flex h-8 items-center justify-center rounded-md border px-2 text-xs font-medium whitespace-nowrap hover:bg-[var(--api-surface-muted)]" style="border-color: var(--api-border); color: var(--api-text-muted);">导出</button>
+                  </div>
+                  <div class="mt-4 space-y-3">
+                    <label class="flex gap-2 rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <input type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--api-primary)]" checked />
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-semibold">核对请求体</span>
+                        <span class="mt-1 block line-clamp-2 text-xs" style="color: var(--api-text-muted);">确认 items[].skuId 与 quantity 字段未为空。</span>
+                      </span>
+                    </label>
+                    <label class="flex gap-2 rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <input type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--api-primary)]" />
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-semibold">检查库存锁</span>
+                        <span class="mt-1 block line-clamp-2 text-xs" style="color: var(--api-text-muted);">查看库存服务是否存在锁等待或事务回滚。</span>
+                      </span>
+                    </label>
+                    <label class="flex gap-2 rounded-md border p-3" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <input type="checkbox" class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--api-primary)]" />
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-semibold">对照 Trace</span>
+                        <span class="mt-1 block line-clamp-2 text-xs" style="color: var(--api-text-muted);">用 Trace ID 检索服务端日志与网关日志。</span>
+                      </span>
+                    </label>
+                  </div>
+                </aside>
+
+                <section class="col-span-12 xl:col-span-8 api-card p-0">
+                  <div class="flex h-11 items-center justify-between border-b px-4" style="border-color: var(--api-border);">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <h2 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">响应内容</h2>
+                      <span class="inline-flex h-6 items-center justify-center rounded-md px-2 text-xs font-medium whitespace-nowrap" style="background: var(--state-error-bg); color: var(--state-error);">异常栈</span>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-1 rounded-md border p-0.5" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                      <button class="inline-flex h-7 items-center justify-center rounded px-2 text-xs font-semibold whitespace-nowrap" style="background: var(--api-surface); color: var(--api-primary); box-shadow: var(--api-shadow-static);">原始</button>
+                      <button class="inline-flex h-7 items-center justify-center rounded px-2 text-xs font-medium whitespace-nowrap hover:bg-[var(--api-primary-50)]" style="color: var(--api-text-muted);">预览</button>
+                    </div>
+                  </div>
+                  <div class="api-scrollbar max-h-[420px] overflow-auto p-4" style="background: var(--api-code-bg); color: var(--api-code-text);">
+<pre class="api-code text-xs leading-6"><code>{
+  "error": {
+    "code": "ORDER_SYNC_FAILED",
+    "message": "订单同步失败，库存锁定服务返回异常",
+    "traceId": "trc_9f24c7a1",
+    "requestId": "req_20260710_184233",
+    "status": 500,
+    "detail": {
+      "service": "inventory-locker",
+      "method": "reserveStock",
+      "reason": "NullPointerException: skuId is null"
+    }
+  }
+}
+
+java.lang.NullPointerException: skuId is null
+  at com.example.inventory.StockLocker.reserveStock(StockLocker.java:118)
+  at com.example.order.OrderSyncService.sync(OrderSyncService.java:72)
+  at com.example.gateway.OrderController.sync(OrderController.java:45)</code></pre>
+                  </div>
+                </section>
+
+                <section class="col-span-12 xl:col-span-4 api-card p-0">
+                  <div class="flex h-11 items-center justify-between border-b px-4" style="border-color: var(--api-border);">
+                    <h2 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">时间线</h2>
+                    <span class="truncate api-code text-xs" style="color: var(--api-text-muted);">874 ms</span>
+                  </div>
+                  <div class="p-4">
+                    <div class="space-y-3">
+                      <div class="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-xs">
+                        <span class="truncate api-code" style="color: var(--api-text-muted);">DNS</span>
+                        <div class="h-2 overflow-hidden rounded" style="background: var(--api-surface-muted);"><div class="h-full w-[8%] rounded" style="background: var(--api-primary);"></div></div>
+                        <span class="truncate text-right api-code">18ms</span>
+                      </div>
+                      <div class="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-xs">
+                        <span class="truncate api-code" style="color: var(--api-text-muted);">TLS</span>
+                        <div class="h-2 overflow-hidden rounded" style="background: var(--api-surface-muted);"><div class="h-full w-[12%] rounded" style="background: var(--api-primary);"></div></div>
+                        <span class="truncate text-right api-code">42ms</span>
+                      </div>
+                      <div class="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-xs">
+                        <span class="truncate api-code" style="color: var(--api-text-muted);">Connect</span>
+                        <div class="h-2 overflow-hidden rounded" style="background: var(--api-surface-muted);"><div class="h-full w-[10%] rounded" style="background: var(--api-primary);"></div></div>
+                        <span class="truncate text-right api-code">36ms</span>
+                      </div>
+                      <div class="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-xs">
+                        <span class="truncate api-code" style="color: var(--api-text-muted);">Send</span>
+                        <div class="h-2 overflow-hidden rounded" style="background: var(--api-surface-muted);"><div class="h-full w-[6%] rounded" style="background: var(--api-primary);"></div></div>
+                        <span class="truncate text-right api-code">9ms</span>
+                      </div>
+                      <div class="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-xs">
+                        <span class="truncate api-code" style="color: var(--state-error);">Wait</span>
+                        <div class="h-2 overflow-hidden rounded" style="background: var(--api-surface-muted);"><div class="h-full w-[88%] rounded" style="background: var(--state-error);"></div></div>
+                        <span class="truncate text-right api-code" style="color: var(--state-error);">769ms</span>
+                      </div>
+                    </div>
+                    <div class="mt-4 rounded-md border p-3" style="background: var(--state-error-bg); border-color: var(--api-border); color: var(--state-error);">
+                      <div class="flex items-center gap-2">
+                        <i data-lucide="timer-off" class="h-4 w-4 shrink-0"></i>
+                        <h3 class="truncate text-sm font-semibold">等待异常</h3>
+                      </div>
+                      <p class="mt-2 line-clamp-3 text-xs">服务端等待阶段占用 88% 耗时，错误发生在业务处理链路而非网络握手。</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="col-span-12 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div class="api-card p-0">
+                    <div class="flex h-11 items-center justify-between border-b px-4" style="border-color: var(--api-border);">
+                      <h2 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">响应头</h2>
+                      <span class="truncate text-xs" style="color: var(--api-text-muted);">8 项</span>
+                    </div>
+                    <div class="api-scrollbar overflow-x-auto p-3">
+                      <table class="w-full table-fixed text-left text-xs">
+                        <thead style="color: var(--api-text-muted);">
+                          <tr class="border-b" style="border-color: var(--api-border);">
+                            <th class="w-[34%] py-2 pr-3">键</th>
+                            <th class="py-2">值</th>
+                          </tr>
+                        </thead>
+                        <tbody class="api-code">
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">content-type</td><td class="truncate py-2">application/json</td></tr>
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">x-request-id</td><td class="truncate py-2">req_20260710_184233</td></tr>
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">x-trace-id</td><td class="truncate py-2">trc_9f24c7a1</td></tr>
+                          <tr><td class="truncate py-2 pr-3">server-timing</td><td class="truncate py-2">app;dur=769, db;dur=318</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="api-card p-0">
+                    <div class="flex h-11 items-center justify-between border-b px-4" style="border-color: var(--api-border);">
+                      <h2 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">请求头</h2>
+                      <span class="truncate text-xs" style="color: var(--api-text-muted);">6 项</span>
+                    </div>
+                    <div class="api-scrollbar overflow-x-auto p-3">
+                      <table class="w-full table-fixed text-left text-xs">
+                        <thead style="color: var(--api-text-muted);">
+                          <tr class="border-b" style="border-color: var(--api-border);">
+                            <th class="w-[34%] py-2 pr-3">键</th>
+                            <th class="py-2">值</th>
+                          </tr>
+                        </thead>
+                        <tbody class="api-code">
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">authorization</td><td class="truncate py-2">Bearer sk_live_••••••</td></tr>
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">content-type</td><td class="truncate py-2">application/json</td></tr>
+                          <tr class="border-b" style="border-color: var(--api-border);"><td class="truncate py-2 pr-3">idempotency-key</td><td class="truncate py-2">order-sync-8821</td></tr>
+                          <tr><td class="truncate py-2 pr-3">x-client-version</td><td class="truncate py-2">web-tester/2.4.1</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

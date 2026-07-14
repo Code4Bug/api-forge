@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新建目录弹窗</title>
+    <style id="theme-vars">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --api-bg: #f5f7fb;
+  --api-surface: #ffffff;
+  --api-surface-muted: #f8fafc;
+  --api-surface-raised: #ffffff;
+  --api-border: #d9e1ec;
+  --api-border-strong: #b8c4d4;
+  --api-text: #101828;
+  --api-text-muted: #667085;
+  --api-text-soft: #98a2b3;
+  --api-primary: #1d4ed8;
+  --api-primary-50: #eff6ff;
+  --api-primary-100: #dbeafe;
+  --api-primary-600: #2563eb;
+  --api-primary-700: #1d4ed8;
+  --api-primary-900: #1e3a8a;
+  --state-success: #15803d;
+  --state-success-bg: #ecfdf3;
+  --state-warning: #b45309;
+  --state-warning-bg: #fffbeb;
+  --state-error: #b42318;
+  --state-error-bg: #fef3f2;
+  --state-info: #0369a1;
+  --state-info-bg: #eef6ff;
+  --api-code-bg: #0f172a;
+  --api-code-surface: #111827;
+  --api-code-border: #243044;
+  --api-code-text: #d1d5db;
+  --api-code-muted: #94a3b8;
+  --api-radius-sm: 4px;
+  --api-radius-md: 8px;
+  --api-radius-lg: 12px;
+  --api-radius-full: 9999px;
+  --api-shadow-static: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --api-shadow-float: 0 18px 45px rgba(15, 23, 42, 0.18);
+  --api-font-body: 'Inter', 'Noto Sans SC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --api-font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.dark {
+  --api-bg: #0b1220;
+  --api-surface: #111827;
+  --api-surface-muted: #182235;
+  --api-surface-raised: #151f30;
+  --api-border: #253247;
+  --api-border-strong: #334155;
+  --api-text: #f8fafc;
+  --api-text-muted: #a7b0c0;
+  --api-text-soft: #778397;
+}
+
+body {
+  font-family: var(--api-font-body);
+  background: var(--api-bg);
+  color: var(--api-text);
+}
+
+.api-title { font-weight: 800; letter-spacing: -0.02em; }
+.api-code { font-family: var(--api-font-code); }
+.api-card { background: var(--api-surface); border: 1px solid var(--api-border); box-shadow: var(--api-shadow-static); border-radius: var(--api-radius-lg); }
+.api-panel { background: var(--api-surface-muted); border: 1px solid var(--api-border); border-radius: var(--api-radius-md); }
+.api-focus { outline: 2px solid rgba(37, 99, 235, 0.22); outline-offset: 1px; }
+.api-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.api-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+.api-scrollbar::-webkit-scrollbar-track { background: transparent; }
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-primary: var(--api-primary);
+    --color-border: var(--api-border);
+  }
+  @layer base {
+    body { background: var(--api-surface); color: var(--api-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main class="min-h-screen overflow-hidden" style="background: var(--api-bg); color: var(--api-text); font-family: var(--api-font-body);">
+      <!-- Dimmed workbench shell -->
+      <div class="flex h-screen w-full overflow-hidden" style="opacity: 0.35; pointer-events: none; user-select: none;">
+        <!-- Left sidebar -->
+        <aside class="hidden w-[312px] shrink-0 flex-col border-r lg:flex" style="background: var(--api-surface); border-color: var(--api-border);">
+          <div class="flex h-12 items-center justify-between border-b px-3" style="border-color: var(--api-border);">
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md" style="background: var(--api-primary-50); color: var(--api-primary);">
+                <i data-lucide="braces" class="h-4 w-4"></i>
+              </div>
+              <div class="min-w-0">
+                <h1 class="truncate text-sm font-semibold" style="text-wrap: balance; word-break: keep-all; overflow-wrap: break-word;">接口调试</h1>
+                <p class="truncate text-[11px]" style="color: var(--api-text-muted);">Payments Workspace</p>
+              </div>
+            </div>
+            <button class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border" style="border-color: var(--api-border); color: var(--api-text-muted);" aria-label="更多">
+              <i data-lucide="settings" class="h-4 w-4"></i>
+            </button>
+          </div>
+
+          <div class="border-b p-3" style="border-color: var(--api-border);">
+            <label class="flex h-8 items-center gap-2 rounded-md border px-2" style="background: var(--api-surface-muted); border-color: var(--api-border); color: var(--api-text-muted);">
+              <i data-lucide="search" class="h-3.5 w-3.5 shrink-0"></i>
+              <input class="h-full min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:opacity-70" placeholder="搜索目录或接口" />
+            </label>
+          </div>
+
+          <div class="flex min-h-0 flex-1 flex-col">
+            <div class="flex h-10 items-center justify-between px-3">
+              <div class="flex min-w-0 items-center gap-2">
+                <i data-lucide="folder-tree" class="h-4 w-4 shrink-0" style="color: var(--api-text-muted);"></i>
+                <h2 class="truncate text-xs font-semibold">API 目录</h2>
+              </div>
+              <button class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md" style="color: var(--api-primary);" aria-label="新建目录">
+                <i data-lucide="plus" class="h-4 w-4"></i>
+              </button>
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              <div class="space-y-1">
+                <div class="rounded-md" style="background: var(--api-primary-50);">
+                  <div class="flex h-8 items-center gap-2 px-2">
+                    <i data-lucide="chevron-down" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-primary);"></i>
+                    <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-primary);"></i>
+                    <span class="min-w-0 flex-1 truncate text-xs font-semibold" style="color: var(--api-primary-900);">订单服务</span>
+                    <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded" aria-label="目录菜单">
+                      <i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i>
+                    </button>
+                  </div>
+                  <div class="ml-6 border-l py-1" style="border-color: var(--api-border);">
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--state-success-bg); color: var(--state-success);">GET</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">订单详情</span>
+                    </div>
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--api-primary-50); color: var(--api-primary);">POST</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">创建订单</span>
+                    </div>
+                    <div class="flex h-8 items-center gap-2 rounded-md px-2">
+                      <span class="inline-flex h-5 w-11 shrink-0 items-center justify-center rounded text-[10px] font-semibold" style="background: var(--state-warning-bg); color: var(--state-warning);">PUT</span>
+                      <span class="min-w-0 flex-1 truncate text-xs">更新地址</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-md">
+                  <div class="flex h-8 items-center gap-2 px-2">
+                    <i data-lucide="chevron-down" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                    <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                    <span class="min-w-0 flex-1 truncate text-xs font-medium">用户中心</span>
+                    <button class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded" aria-label="目录菜单">
+                      <i data-lucide="more-horizontal" class="h-3.5 w-3.5"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Right content area -->
+        <section class="flex min-w-0 flex-1 flex-col">
+          <header class="flex h-12 shrink-0 items-center justify-between border-b px-4" style="background: var(--api-surface); border-color: var(--api-border);">
+            <div class="flex min-w-0 items-center gap-3">
+              <div class="hidden items-center gap-1 rounded-md border p-0.5 md:flex" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+                <a class="inline-flex h-7 items-center rounded px-3 text-xs font-semibold" style="background: var(--api-surface); color: var(--api-primary); box-shadow: var(--api-shadow-static);">HTTP</a>
+                <a class="inline-flex h-7 items-center rounded px-3 text-xs font-medium" style="color: var(--api-text-muted);">WebSocket</a>
+                <a class="inline-flex h-7 items-center rounded px-3 text-xs font-medium" style="color: var(--api-text-muted);">Socket</a>
+              </div>
+              <div class="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                <i data-lucide="server" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                <span class="truncate text-xs" style="color: var(--api-text-muted);">环境</span>
+                <span class="truncate text-xs font-medium">生产 prod-cn</span>
+              </div>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <button class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold" style="border-color: var(--api-border); color: var(--api-primary);">
+                <i data-lucide="upload" class="h-3.5 w-3.5"></i>导入
+              </button>
+              <button class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium" style="border-color: var(--api-border); color: var(--api-text-muted);">
+                <i data-lucide="history" class="h-3.5 w-3.5"></i>历史
+              </button>
+            </div>
+          </header>
+
+          <div class="flex h-10 shrink-0 items-end gap-1 overflow-x-auto border-b px-3" style="background: var(--api-surface); border-color: var(--api-border);">
+            <button class="flex h-9 min-w-[168px] items-center justify-between gap-2 rounded-t-md border border-b-0 px-3" style="background: var(--api-bg); border-color: var(--api-border); color: var(--api-text);">
+              <span class="min-w-0 truncate text-xs font-semibold">POST 创建订单</span><i data-lucide="x" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+            </button>
+            <button class="flex h-8 min-w-[148px] items-center justify-between gap-2 rounded-t-md border border-b-0 px-3" style="background: var(--api-surface-muted); border-color: var(--api-border); color: var(--api-text-muted);">
+              <span class="min-w-0 truncate text-xs">GET 订单详情</span><i data-lucide="x" class="h-3.5 w-3.5 shrink-0"></i>
+            </button>
+            <button class="flex h-8 min-w-[156px] items-center justify-between gap-2 rounded-t-md border border-b-0 px-3" style="background: var(--api-surface-muted); border-color: var(--api-border); color: var(--api-text-muted);">
+              <span class="min-w-0 truncate text-xs">DELETE 注销账户</span><i data-lucide="x" class="h-3.5 w-3.5 shrink-0"></i>
+            </button>
+          </div>
+
+          <div class="flex-1 p-4">
+            <div class="mx-auto max-w-[1360px]">
+              <div class="overflow-hidden" style="background: var(--api-surface); border: 1px solid var(--api-border); box-shadow: var(--api-shadow-static); border-radius: var(--api-radius-lg);">
+                <div class="flex flex-col gap-2 border-b p-3 md:flex-row md:items-center" style="border-color: var(--api-border);">
+                  <div class="flex h-10 shrink-0 items-center rounded-md border" style="border-color: var(--api-border); background: var(--api-surface-muted);">
+                    <span class="h-full rounded-md bg-transparent px-3 text-xs font-bold" style="color: var(--api-primary);">POST</span>
+                  </div>
+                  <label class="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border px-3" style="border-color: var(--api-border); background: var(--api-surface);">
+                    <i data-lucide="link" class="h-4 w-4 shrink-0" style="color: var(--api-text-soft);"></i>
+                    <span class="api-code min-w-0 flex-1 truncate text-sm">https://api.example.com/v1/orders</span>
+                  </label>
+                  <button class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md px-5 text-sm font-semibold text-white" style="background: var(--api-primary);">
+                    发送<i data-lucide="send" class="h-4 w-4"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Modal backdrop -->
+      <div class="cf-backdrop fixed inset-0 z-40" data-dom-id="backdrop-close-modal" aria-hidden="true" style="background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);"></div>
+
+      <!-- Create folder modal -->
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-labelledby="cf-modal-title" class="cf-modal-card relative w-full max-w-[480px]" style="background: var(--api-surface); border: 1px solid var(--api-border); border-radius: var(--api-radius-lg); box-shadow: var(--api-shadow-float);">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-5 py-4">
+            <h2 id="cf-modal-title" class="text-base font-semibold" style="color: var(--api-text);">新建目录</h2>
+            <button data-dom-id="modal-close" type="button" aria-label="关闭" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-[background-color] duration-150 hover:bg-[var(--api-surface-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="color: var(--api-text-muted);">
+              <i data-lucide="x" class="h-4 w-4"></i>
+            </button>
+          </div>
+
+          <div style="border-top: 1px solid var(--api-border);"></div>
+
+          <!-- Body -->
+          <div class="space-y-4 px-5 py-4">
+
+            <!-- Parent directory breadcrumb -->
+            <div class="flex items-center gap-1.5 text-xs" style="color: var(--api-text-muted);">
+              <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0"></i>
+              <span>API 目录</span>
+              <i data-lucide="chevron-right" class="h-3 w-3 shrink-0"></i>
+              <span class="font-medium" style="color: var(--api-text);">用户模块</span>
+            </div>
+
+            <!-- 目录名称 -->
+            <div>
+              <label for="cf-folder-name" class="mb-1.5 block text-xs font-medium" style="color: var(--api-text);">
+                目录名称 <span style="color: var(--state-error);">*</span>
+              </label>
+              <input id="cf-folder-name" type="text" placeholder="输入目录名称" class="cf-input w-full rounded-md border px-3 text-sm" style="height: 40px; border-color: var(--api-border); background: var(--api-surface); color: var(--api-text);" />
+              <p class="mt-1.5 text-xs" style="color: var(--api-text-soft);">2-32 个字符，支持中文、英文、数字和连字符</p>
+            </div>
+
+            <!-- 描述 -->
+            <div>
+              <div class="mb-1.5 flex items-center gap-2">
+                <label for="cf-folder-desc" class="text-xs font-medium" style="color: var(--api-text);">描述</label>
+                <span class="text-[11px] font-normal" style="color: var(--api-text-soft);">可选</span>
+              </div>
+              <textarea id="cf-folder-desc" placeholder="可选描述" rows="3" class="cf-input w-full rounded-md border px-3 py-2 text-sm resize-none" style="border-color: var(--api-border); background: var(--api-surface); color: var(--api-text); min-height: 80px;"></textarea>
+            </div>
+
+            <!-- 排序位置 + 可见性 -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label for="cf-sort-position" class="mb-1.5 block text-xs font-medium" style="color: var(--api-text);">排序位置</label>
+                <div class="relative">
+                  <select id="cf-sort-position" class="cf-input w-full appearance-none rounded-md border px-3 pr-8 text-sm" style="height: 40px; border-color: var(--api-border); background: var(--api-surface); color: var(--api-text);">
+                    <option>末尾</option>
+                    <option>顶部</option>
+                    <option>指定位置</option>
+                  </select>
+                  <i data-lucide="chevron-down" class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2" style="color: var(--api-text-soft);"></i>
+                </div>
+              </div>
+              <div>
+                <span class="mb-1.5 block text-xs font-medium" style="color: var(--api-text);">可见性</span>
+                <div class="flex h-10 items-center gap-4">
+                  <label class="flex cursor-pointer items-center gap-1.5">
+                    <input type="radio" name="cf-visibility" value="public" checked class="cf-radio h-4 w-4" />
+                    <span class="text-sm" style="color: var(--api-text);">公开</span>
+                  </label>
+                  <label class="flex cursor-pointer items-center gap-1.5">
+                    <input type="radio" name="cf-visibility" value="private" class="cf-radio h-4 w-4" />
+                    <span class="text-sm" style="color: var(--api-text);">私有</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Preview section -->
+            <div class="rounded-md border p-3" style="background: var(--api-surface-muted); border-color: var(--api-border);">
+              <h3 class="mb-2 text-xs font-semibold" style="color: var(--api-text-muted);">预览效果</h3>
+              <div class="text-xs">
+                <div class="flex items-center gap-2 py-0.5" style="color: var(--api-text-muted);">
+                  <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0"></i>
+                  <span>API 目录</span>
+                </div>
+                <div class="ml-3 border-l pl-3" style="border-color: var(--api-border);">
+                  <div class="flex items-center gap-2 py-0.5">
+                    <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-text-muted);"></i>
+                    <span style="color: var(--api-text);">用户模块</span>
+                  </div>
+                  <div class="ml-3 border-l pl-3" style="border-color: var(--api-border);">
+                    <div class="flex items-center gap-2 py-0.5" style="color: var(--api-text-muted);">
+                      <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0"></i>
+                      <span>支付接口</span>
+                    </div>
+                    <div class="flex items-center gap-2 py-0.5" style="color: var(--api-text-muted);">
+                      <i data-lucide="folder" class="h-3.5 w-3.5 shrink-0"></i>
+                      <span>余额查询</span>
+                    </div>
+                    <div class="flex items-center gap-2 rounded-md py-1 pr-2" style="border: 1px dashed var(--api-primary); background: var(--api-primary-50); margin-left: -4px; padding-left: 4px;">
+                      <i data-lucide="folder-plus" class="h-3.5 w-3.5 shrink-0" style="color: var(--api-primary);"></i>
+                      <span class="font-medium" style="color: var(--api-primary);">新目录</span>
+                      <span class="ml-auto inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap" style="background: var(--api-primary-100); color: var(--api-primary);">末尾</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--api-border);"></div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-5 py-4">
+            <button data-dom-id="modal-cancel" type="button" class="inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium whitespace-nowrap transition-[background-color,border-color] duration-150 hover:border-[var(--api-border-strong)] hover:bg-[var(--api-surface-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 active:bg-[var(--api-surface-muted)]" style="border-color: var(--api-border); color: var(--api-text-muted);">
+              取消
+            </button>
+            <button data-dom-id="modal-create" type="button" class="inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-semibold text-white whitespace-nowrap transition-[background-color,transform] duration-150 hover:opacity-90 hover:-translate-y-px active:translate-y-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1" style="background: var(--api-primary);">
+              创建
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <style>
+      /* Form input focus and hover */
+      .cf-input {
+        transition: border-color 150ms cubic-bezier(.2,.8,.2,1), box-shadow 150ms cubic-bezier(.2,.8,.2,1);
+      }
+      .cf-input:hover {
+        border-color: var(--api-border-strong) !important;
+      }
+      .cf-input:focus {
+        border-color: var(--api-primary) !important;
+        box-shadow: 0 0 0 2px rgba(29,78,216,0.22);
+        outline: none;
+      }
+
+      /* Radio accent */
+      .cf-radio {
+        accent-color: var(--api-primary);
+      }
+
+      /* Modal enter animation */
+      @keyframes cf-modal-enter {
+        from { opacity: 0; transform: scale(0.97) translateY(8px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes cf-backdrop-enter {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .cf-modal-card {
+        animation: cf-modal-enter 240ms cubic-bezier(.3,0,0,1) both;
+      }
+      .cf-backdrop {
+        animation: cf-backdrop-enter 200ms cubic-bezier(.3,0,0,1) both;
+      }
+
+      /* Reduced motion */
+      @media (prefers-reduced-motion: reduce) {
+        .cf-modal-card,
+        .cf-backdrop {
+          animation-duration: 0.01ms !important;
+        }
+        .cf-input {
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
