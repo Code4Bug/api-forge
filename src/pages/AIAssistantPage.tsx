@@ -6,11 +6,11 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 
 type Message = { id: string; role: 'user' | 'assistant' | 'reasoning' | 'tool'; content: string; tool?: string; reasoningDone?: boolean }
 type Conversation = { id: string; title: string; messages: Message[]; updatedAt: string }
-type ToolName = 'list_directories' | 'list_apis' | 'create_api' | 'edit_api' | 'delete_api'
+type ToolName = 'list_directories' | 'list_apis' | 'create_api' | 'edit_api' | 'delete_api' | 'get_app_version' | 'get_usage_help'
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>; tool_call_id?: string; name?: string }
 
-const toolLabels: Record<ToolName, string> = { list_directories: '列出目录', list_apis: '列出接口', create_api: '新增接口', edit_api: '编辑接口', delete_api: '删除接口' }
-const toolDefinitions = Object.entries(toolLabels).map(([name, description]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties: name === 'create_api' ? { name: { type: 'string' }, parentId: { type: 'string' }, protocol: { type: 'string', enum: ['http', 'websocket', 'socket'] }, method: { type: 'string' }, url: { type: 'string' }, headers: { type: 'array' }, body: { type: 'string' } } : name === 'edit_api' ? { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, method: { type: 'string' }, body: { type: 'string' } } : { id: { type: 'string' } }, required: name === 'create_api' ? ['name'] : [] } } }))
+const toolLabels: Record<ToolName, string> = { list_directories: '列出目录', list_apis: '列出接口', create_api: '新增接口', edit_api: '编辑接口', delete_api: '删除接口', get_app_version: '获取应用版本', get_usage_help: '获取使用说明' }
+const toolDefinitions = Object.entries(toolLabels).map(([name, description]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties: name === 'create_api' ? { name: { type: 'string' }, parentId: { type: 'string' }, protocol: { type: 'string', enum: ['http', 'websocket', 'socket'] }, method: { type: 'string' }, url: { type: 'string' }, headers: { type: 'array' }, body: { type: 'string' } } : name === 'edit_api' ? { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, method: { type: 'string' }, body: { type: 'string' } } : name === 'delete_api' || name === 'list_directories' || name === 'list_apis' ? { id: { type: 'string' } } : {}, required: name === 'create_api' ? ['name'] : [] } } }))
 
 function flatten(nodes: ApiTreeNode[]): ApiTreeNode[] { return nodes.flatMap((node) => [node, ...(node.children ? flatten(node.children) : [])]) }
 function json(value: unknown) { return JSON.stringify(value, null, 2) }
@@ -167,6 +167,18 @@ export default function AIAssistantPage() {
   }
 
   async function runTool(name: ToolName, args: Record<string, unknown>) {
+    if (name === 'get_app_version') {
+      const info = await window.desktopApi?.getAppInfo()
+      return info ? json({ name: info.name, version: info.version, platform: info.platform }) : '应用信息不可用'
+    }
+    if (name === 'get_usage_help') return `API-forge 使用说明：
+- HTTP 调试：在 API 目录中打开或新建接口，填写 URL、Params、Headers、Body 后发送请求。
+- 环境变量：在环境管理中维护变量，使用 {{变量名}} 插入 URL、请求头和请求体。
+- WebSocket：打开 WebSocket 接口后连接、发送消息并查看帧日志。
+- TCP/UDP：在 Socket 页面填写主机和端口，连接后发送文本或 Hex 报文。
+- 请求历史：底部或历史页面可查看请求结果，并恢复请求配置。
+- AI 工具：可列出目录和接口、创建或编辑接口；删除操作必须先征得用户确认。
+- 应用更新：系统设置中检查、下载并安装新版本。`
     if (!workspace) return '工作区尚未加载'
     if (name === 'list_directories') return json(nodes.filter((n) => n.type === 'folder').map(({ id, name, parentId }) => ({ id, name, parentId })))
     if (name === 'list_apis') return json(nodes.filter((n) => n.type === 'api').map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })))
