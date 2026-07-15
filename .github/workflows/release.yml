@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 发布版本标签，例如 v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -80,7 +85,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: API-forge ${{ github.ref_name }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: API-forge ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: release-files/*
