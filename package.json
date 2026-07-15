@@ -1,11 +1,11 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
     "name": "Code4Bug",
-    "email": "code4bug@users.noreply.github.com"
+    "email": "113855503@qq.com"
   },
   "type": "module",
   "main": "dist-electron/electron/main/index.js",
