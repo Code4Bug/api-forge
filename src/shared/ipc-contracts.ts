@@ -40,6 +40,7 @@ export interface RequestDefinition {
   id: string
   protocol: Protocol
   name: string
+  description?: string
   method?: HttpMethod
   url: string
   params: KeyValueItem[]

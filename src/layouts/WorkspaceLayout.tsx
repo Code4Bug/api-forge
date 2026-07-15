@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X } from 'lucide-react'
+import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
@@ -154,13 +154,14 @@ const saveStatusContent = {
 
 export function WorkspaceLayout() {
   const { workspace, activeApiId, activeEnvironmentId, saveStatus, autoSaveEnabled, autoSaveInterval, loadWorkspace, saveNow, setActiveApiId, setActiveEnvironmentId, setOpenApiIds: saveOpenApiIds, createFolder, createApi, updateRequest, moveApi, renameNode, deleteNode } = useWorkspaceStore()
-  const { isDark } = useTheme()
+  const { theme, setTheme, isDark } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [openApiIds, setOpenApiIds] = useState<string[]>([])
   const [tabsInitialized, setTabsInitialized] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number }>()
   const [dialog, setDialog] = useState<{ mode: 'folder' | 'api' | 'rename'; parentId?: string; node?: ApiTreeNode }>()
   const [dialogName, setDialogName] = useState('')
+  const [dialogDescription, setDialogDescription] = useState('')
   const [dialogFolderId, setDialogFolderId] = useState<string | undefined>()
   const [dialogProtocol, setDialogProtocol] = useState<Protocol>('http')
   const [dialogMethod, setDialogMethod] = useState<HttpMethod | undefined>('GET')
@@ -329,6 +330,7 @@ export function WorkspaceLayout() {
   function openDialog(next: { mode: 'folder' | 'api' | 'rename'; parentId?: string; node?: ApiTreeNode }) {
     setDialog(next)
     setDialogName(next.node?.name ?? '')
+    setDialogDescription('')
     setDialogFolderId(next.parentId)
     setDialogProtocol(next.node?.protocol ?? 'http')
     setDialogMethod(next.node?.method ?? (next.node?.protocol === 'websocket' || next.node?.protocol === 'socket' ? undefined : 'GET'))
@@ -346,7 +348,8 @@ export function WorkspaceLayout() {
     if (dialog.mode === 'api') {
       const id = createApi(dialogFolderId, { name: dialogName, protocol: dialogProtocol, method: dialogMethod })
       if (id) {
-        if (parsedCurl) updateRequest({ id, name: dialogName, protocol: parsedCurl.protocol, method: parsedCurl.method, url: parsedCurl.url, headers: parsedCurl.headers.map((item, index) => ({ id: `${id}-header-${index}`, ...item })), params: [], body: parsedCurl.body, updatedAt: new Date().toISOString() })
+        if (parsedCurl) updateRequest({ id, name: dialogName, description: dialogDescription.trim() || undefined, protocol: parsedCurl.protocol, method: parsedCurl.method, url: parsedCurl.url, headers: parsedCurl.headers.map((item, index) => ({ id: `${id}-header-${index}`, ...item })), params: [], body: parsedCurl.body, updatedAt: new Date().toISOString() })
+        else updateRequest({ id, name: dialogName, description: dialogDescription.trim() || undefined, protocol: dialogProtocol, method: dialogMethod, url: '', params: [], headers: [], updatedAt: new Date().toISOString() })
         setActiveApiId(id)
         setParsedCurl(undefined)
         updateOpenApiIds(openApiIds.includes(id) ? openApiIds : [...openApiIds, id])
@@ -421,10 +424,13 @@ export function WorkspaceLayout() {
         </div>
 
         <div className="border-t border-zinc-800 p-3 text-xs text-zinc-500">
-          <NavLink to="/settings" className="flex h-8 items-center gap-2 rounded px-2 hover:bg-zinc-800 hover:text-zinc-200" title="系统设置">
+          <div className="flex items-center gap-1">
+          <NavLink to="/settings" className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded px-2 hover:bg-zinc-800 hover:text-zinc-200" title="系统设置">
             <Settings2 className="h-3.5 w-3.5" />
-            系统设置
+            <span className="truncate">系统设置</span>
           </NavLink>
+          <label className="flex h-8 shrink-0 items-center rounded border border-zinc-700 bg-zinc-950/60 px-1.5" title="主题快速切换"><Palette className="mr-1 h-3 w-3 text-cyan-300" /><select aria-label="主题快速切换" value={theme} onChange={(event) => setTheme(event.target.value as Parameters<typeof setTheme>[0])} className="h-6 max-w-[76px] border-0 bg-transparent px-0 text-[10px] text-zinc-300 outline-none"><option value="dark">深色</option><option value="light">浅色</option><option value="system">系统</option><option value="custom">自定义</option></select></label>
+          </div>
         </div>
         </>}
         {!sidebarCollapsed && <button onPointerDown={(event) => { event.preventDefault(); setResizingSidebar(true) }} className={`group absolute right-0 top-0 z-10 flex h-full w-px translate-x-1/2 cursor-col-resize items-center justify-center bg-transparent transition-[width,background-color] hover:w-3 ${resizingSidebar ? 'w-3 bg-cyan-400/10' : 'hover:bg-cyan-400/10'}`} title="调整侧栏宽度" aria-label="调整侧栏宽度">
@@ -498,6 +504,7 @@ export function WorkspaceLayout() {
         <form onSubmit={(event) => { event.preventDefault(); submitDialog() }} className="w-full max-w-md rounded-lg border border-zinc-700 bg-[#111821] p-5 shadow-2xl">
           <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-semibold">{dialog.mode === 'folder' ? '新建目录' : dialog.mode === 'api' ? '新建 API' : '重命名'}</h2><button type="button" onClick={() => setDialog(undefined)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"><X className="h-4 w-4" /></button></div>
           <label className="mb-4 block text-xs text-zinc-400">名称<input autoFocus value={dialogName} onChange={(event) => setDialogName(event.target.value)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="请输入名称" /></label>
+          {dialog.mode === 'api' && <label className="mb-4 block text-xs text-zinc-400">备注描述<textarea value={dialogDescription} onChange={(event) => setDialogDescription(event.target.value)} className="mt-2 min-h-20 w-full resize-y rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="请输入接口用途或备注" /></label>}
           {dialog.mode === 'api' && <div className="space-y-3"><label className="block text-xs text-zinc-400">所属目录<select value={dialogFolderId ?? ''} onChange={(event) => setDialogFolderId(event.target.value || undefined)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="">根目录</option>{flattenFolders(workspace?.apiTree ?? []).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><label className="text-xs text-zinc-400">协议<select value={dialogProtocol} onChange={(event) => changeDialogProtocol(event.target.value as Protocol)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="http">HTTP</option><option value="websocket">WebSocket</option><option value="socket">Socket</option></select></label><label className="text-xs text-zinc-400">方法<select disabled={protocolMethods[dialogProtocol].length === 0} value={dialogMethod ?? ''} onChange={(event) => setDialogMethod((event.target.value || undefined) as HttpMethod | undefined)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="">不适用</option>{protocolMethods[dialogProtocol].map((method) => <option key={method} value={method}>{method}</option>)}</select></label></div></div>}
           <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDialog(undefined)} className="h-9 rounded border border-zinc-700 px-4 text-xs text-zinc-300 hover:bg-zinc-800">取消</button><button type="submit" disabled={!dialogName.trim()} className="h-9 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 disabled:opacity-40">保存</button></div>
         </form>

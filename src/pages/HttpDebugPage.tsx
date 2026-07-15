@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { Check, Copy, Plus, Save, Trash2 } from 'lucide-react'
+import { Check, Copy, LoaderCircle, Plus, Save, Send, Trash2 } from 'lucide-react'
 import { StatusPill } from '@/components/common/StatusPill'
 import { VariableInput } from '@/components/common/VariableInput'
 import { replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
@@ -219,6 +219,7 @@ export default function HttpDebugPage() {
   const [followRedirects, setFollowRedirects] = useState(true)
   const [validateCertificates, setValidateCertificates] = useState(true)
   const [assertion, setAssertion] = useState('')
+  const [description, setDescription] = useState('')
   const [assertionResult, setAssertionResult] = useState<{ ok: boolean; message: string }>()
   const [saveMessage, setSaveMessage] = useState('')
   const saveRequestRef = useRef<() => void>(() => undefined)
@@ -230,8 +231,8 @@ export default function HttpDebugPage() {
   const requestTabs = useMemo(() => {
     if (activeApiNode && activeApiNode.protocol !== 'http') return ['Info'] as const
     return method === 'GET' || method === 'HEAD'
-      ? ['Headers', 'Bearer', 'Params', 'Settings', 'Info'] as const
-      : ['Headers', 'Bearer', 'BODY', 'Params', 'Settings', 'Info'] as const
+      ? ['Headers', 'Bearer', 'Params', 'Settings', 'Test', 'Info'] as const
+      : ['Headers', 'Bearer', 'BODY', 'Params', 'Settings', 'Test', 'Info'] as const
   }, [activeApiNode?.protocol, method])
   const [requestTabOrder, setRequestTabOrder] = useState<string[]>(() => {
     try {
@@ -295,6 +296,7 @@ export default function HttpDebugPage() {
       setAssertionResult(undefined)
       setInputError('')
       setAssertion('')
+      setDescription('')
       setSaveMessage('')
       return
     }
@@ -310,6 +312,7 @@ export default function HttpDebugPage() {
     setFormFields(request?.formFields?.length ? request.formFields : [{ id: `${activeApiId}-form-0`, key: '', value: '', kind: 'text', enabled: true }])
     const authorization = request?.headers?.find((item) => item.key.toLowerCase() === 'authorization')?.value ?? ''
     setBearerToken(authorization.replace(/^Bearer\s+/i, ''))
+    setDescription(request?.description ?? '')
     setResult(undefined)
     setAssertionResult(undefined)
     setInputError('')
@@ -339,6 +342,7 @@ export default function HttpDebugPage() {
       id: activeApiId,
       protocol: activeApiNode?.protocol ?? 'http',
       name: activeApiNode?.name ?? activeApiId,
+      description: description.trim() || undefined,
       method,
       url,
       params: params.map((item, index) => ({ id: `${activeApiId}-param-${index}`, ...item })),
@@ -501,7 +505,7 @@ export default function HttpDebugPage() {
             <VariableInput value={url} variables={variables} onChange={setUrl} placeholder="输入请求地址，例如 {{base_url}}/api" className="h-9 w-full rounded border border-zinc-700 bg-transparent px-3 text-sm text-zinc-100 caret-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/60" />
           </div>
           <button onClick={sendRequest} disabled={loading} className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-60">
-            <span className="inline-flex h-3.5 w-3.5 items-center justify-center">▶</span>
+            {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             {loading ? '发送中' : '发送'}
           </button>
           <button onClick={saveCurrentRequest} disabled={!activeApiId} title={activeApiId ? '保存当前 API' : '请先从左侧打开一个 API'} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saveMessage || '保存'}</button>
@@ -624,7 +628,10 @@ export default function HttpDebugPage() {
             <div className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><label className="flex items-center justify-between text-zinc-300">请求超时（毫秒）<input type="number" min="0" value={timeout} onChange={(event) => setTimeoutValue(Number(event.target.value))} className="h-8 w-32 rounded border border-zinc-700 bg-zinc-900 px-2 text-right text-zinc-100" /></label><label className="flex items-center justify-between text-zinc-300">跟随重定向<input type="checkbox" checked={followRedirects} onChange={(event) => setFollowRedirects(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><label className="flex items-center justify-between text-zinc-300">校验证书<input type="checkbox" checked={validateCertificates} onChange={(event) => setValidateCertificates(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label></div>
           )}
           {activeRequestTab === 'Info' && (
-            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><div className="grid grid-cols-2 gap-3"><div><div className="text-zinc-600">接口名称</div><div className="mt-1 text-zinc-200">{activeApiNode?.name ?? '-'}</div></div><div><div className="text-zinc-600">协议</div><div className="mt-1 uppercase text-cyan-200">{activeApiNode?.protocol ?? '-'}</div></div><div><div className="text-zinc-600">参数数量</div><div className="mt-1 text-zinc-200">{params.length}</div></div><div><div className="text-zinc-600">最后修改</div><div className="mt-1 text-zinc-400">{activeRequest?.updatedAt ? new Date(activeRequest.updatedAt).toLocaleString() : '未保存'}</div></div></div><label className="block text-zinc-400">响应断言<VariableInput multiline value={assertion} variables={variables} onChange={(value) => { setAssertion(value); setAssertionResult(undefined) }} placeholder="例如：status === 200 或 {{expected_status}}" className="mt-2 box-border block min-h-24 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs leading-5 text-zinc-100 outline-none focus:border-cyan-400/60" /></label>{assertionResult && <div className={`rounded border px-3 py-2 text-xs ${assertionResult.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>{assertionResult.message}</div>}<button onClick={() => { setAssertion('status === 200'); setAssertionResult(undefined) }} className="inline-flex items-center gap-1 rounded border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-800"><Check className="h-3.5 w-3.5" />插入常用断言</button></div>
+            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><div className="grid grid-cols-2 gap-3"><div><div className="text-zinc-600">接口名称</div><div className="mt-1 text-zinc-200">{activeApiNode?.name ?? '-'}</div></div><div><div className="text-zinc-600">协议</div><div className="mt-1 uppercase text-cyan-200">{activeApiNode?.protocol ?? '-'}</div></div><div><div className="text-zinc-600">参数数量</div><div className="mt-1 text-zinc-200">{params.length}</div></div><div><div className="text-zinc-600">最后修改</div><div className="mt-1 text-zinc-400">{activeRequest?.updatedAt ? new Date(activeRequest.updatedAt).toLocaleString() : '未保存'}</div></div></div><label className="block text-zinc-400">备注描述<textarea value={description} onChange={(event) => setDescription(event.target.value)} onBlur={saveCurrentRequest} className="mt-2 min-h-24 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 text-xs leading-5 text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="请输入接口用途、前置条件或其他备注" /></label></div>
+          )}
+          {activeRequestTab === 'Test' && (
+            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><label className="block text-zinc-400">响应断言<VariableInput multiline value={assertion} variables={variables} onChange={(value) => { setAssertion(value); setAssertionResult(undefined) }} placeholder="例如：status === 200 或 {{expected_status}}" className="mt-2 box-border block min-h-24 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs leading-5 text-zinc-100 outline-none focus:border-cyan-400/60" /></label>{assertionResult && <div className={`rounded border px-3 py-2 text-xs ${assertionResult.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>{assertionResult.message}</div>}<button onClick={() => { setAssertion('status === 200'); setAssertionResult(undefined) }} className="inline-flex items-center gap-1 rounded border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-800"><Check className="h-3.5 w-3.5" />插入常用断言</button><div className="border-t border-zinc-800 pt-3 text-[11px] leading-5 text-zinc-500"><div className="mb-1 font-medium text-zinc-300">断言编写说明</div><p>请求发送后执行断言，表达式结果为 true 时通过。</p><p><code className="text-cyan-300">status</code> 表示状态码，<code className="text-cyan-300">headers</code> 表示响应头，<code className="text-cyan-300">body</code> 表示响应内容（JSON 会自动解析）。</p><p>示例：<code className="text-zinc-300">status === 200</code>、<code className="text-zinc-300">body.code === 0</code>、<code className="text-zinc-300">body.data.length &gt; 0</code></p><p>可使用 <code className="text-cyan-300">{'{{变量名}}'}</code> 引用当前环境变量。</p></div></div>
           )}
           {inputError && <p className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">{inputError}</p>}
           {!available && <p className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">当前环境不可用：请启动 Electron 桌面端后发送真实 HTTP 请求。</p>}
