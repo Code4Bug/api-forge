@@ -14,8 +14,11 @@
     "preview": "vite preview",
     "check": "tsc -b --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "build:mac": "npm run build && electron-builder --mac",
-    "build:win": "npm run build && electron-builder --win",
-    "dist:all": "npm run build && electron-builder --mac --win"
+    "build:win": "npm run build && electron-builder --win --x64",
+    "build:win:x64": "npm run build && electron-builder --win --x64",
+    "build:linux": "npm run build && electron-builder --linux --x64",
+    "build:linux:x64": "npm run build && electron-builder --linux --x64",
+    "build:all": "npm run build && electron-builder --mac --win --linux"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -56,6 +59,7 @@
     "directories": {
       "output": "release"
     },
+    "publish": null,
     "icon": "public/favicon.png",
     "files": [
       "dist/**/*",
@@ -70,8 +74,20 @@
     },
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
     }
   }
 }

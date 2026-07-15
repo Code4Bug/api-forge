@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen } from 'electron';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,47 @@ const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged;
 app.setName('API-forge');
 app.setAppUserModelId('com.api-test-tools.desktop');
 const WORKSPACE_VERSION = 2;
+const originalConsole = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+};
+function runtimeLogPath() {
+    const date = new Date().toISOString().slice(0, 10);
+    const homePath = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath('home');
+    return join(homePath, '.api-forge', 'logs', `runtime-${date}.log`);
+}
+function writeRuntimeLog(level, args) {
+    try {
+        const targetPath = runtimeLogPath();
+        mkdirSync(dirname(targetPath), { recursive: true });
+        const message = args.map((value) => value instanceof Error ? `${value.message}\n${value.stack ?? ''}` : typeof value === 'string' ? value : JSON.stringify(value)).join(' ');
+        appendFileSync(targetPath, `${new Date().toISOString()} [${level}] ${message}\n`, 'utf8');
+    }
+    catch {
+        // 日志写入失败不能影响应用运行。
+    }
+}
+function installRuntimeLogging() {
+    for (const level of ['log', 'info', 'warn', 'error']) {
+        console[level] = (...args) => {
+            originalConsole[level](...args);
+            writeRuntimeLog(level.toUpperCase(), args);
+        };
+    }
+    process.on('uncaughtException', (error) => {
+        writeRuntimeLog('UNCAUGHT_EXCEPTION', [error]);
+    });
+    process.on('unhandledRejection', (reason) => {
+        writeRuntimeLog('UNHANDLED_REJECTION', [reason]);
+    });
+    process.on('exit', (code) => {
+        writeRuntimeLog('EXIT', [`code=${code}`]);
+    });
+    writeRuntimeLog('START', [`API-forge ${app.getVersion()} started`, `packaged=${app.isPackaged}`, `platform=${process.platform}`, `arch=${process.arch}`]);
+}
+installRuntimeLogging();
 const appIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0B0F14"/><rect x="8" y="10" width="48" height="44" rx="8" fill="#111821" stroke="#263342" stroke-width="2"/><path d="M18 24l8 8-8 8" fill="none" stroke="#32F08C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 41h13" stroke="#42D9FF" stroke-width="4" stroke-linecap="round"/><circle cx="17" cy="17" r="2" fill="#42D9FF"/><circle cx="24" cy="17" r="2" fill="#32F08C"/></svg>`;
 const defaultWorkspace = {
     version: WORKSPACE_VERSION,
@@ -275,7 +316,7 @@ function createApplicationMenu(mainWindow) {
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 function createWindow() {
-    const iconPath = join(__dirname, isDev ? '../../public/favicon.png' : '../../dist/favicon.png');
+    const iconPath = join(__dirname, isDev ? '../../../public/favicon.png' : '../../../dist/favicon.png');
     if (process.platform === 'darwin' && app.dock) {
         app.dock.setIcon(nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(appIconSvg).toString('base64')}`));
     }
@@ -305,10 +346,22 @@ function createWindow() {
         });
     }
     else {
-        void mainWindow.loadFile(join(__dirname, '../../dist/index.html')).catch((error) => {
+        void mainWindow.loadFile(join(__dirname, '../../../dist/index.html')).catch((error) => {
             console.error('加载应用页面失败:', error);
         });
     }
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        console.info(`渲染进程 console level=${level} ${sourceId}:${line}`, message);
+    });
+    mainWindow.webContents.on('did-finish-load', () => {
+        console.info('应用页面加载完成');
+    });
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        console.error('应用页面加载失败:', { errorCode, errorDescription, validatedURL, isMainFrame });
+    });
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        console.error('渲染进程退出:', details);
+    });
     mainWindow.once('ready-to-show', () => mainWindow.show());
     if (windowState.isMaximized)
         mainWindow.maximize();

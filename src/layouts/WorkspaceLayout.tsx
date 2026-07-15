@@ -385,9 +385,9 @@ export function WorkspaceLayout() {
     <div className="flex h-screen min-h-0 overflow-hidden bg-[#0b0f14] text-zinc-100">
       <aside className={`relative flex shrink-0 flex-col border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? 'select-none' : 'transition-[width] duration-150'}`} style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}>
         <div className={`flex h-14 items-center border-b border-zinc-800 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-cyan-400/15">
+          {!sidebarCollapsed && <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-cyan-400/15">
             <img src={isDark ? lightLogo : logo} alt="API-forge" className="h-6 w-6" />
-          </div>
+          </div>}
           {!sidebarCollapsed && <div className="min-w-0">
             <div className="text-sm font-semibold">API-forge</div>
             <div className="text-[11px] text-zinc-500">Local API Workspace</div>

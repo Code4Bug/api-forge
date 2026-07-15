@@ -73,7 +73,21 @@ npm start
 | `npm run lint` | ESLint 检查（当前存在 1 个错误和 3 个警告） |
 | `npm run build` | 构建应用 |
 | `npm run build:mac` | 构建 macOS 安装包 |
-| `npm run build:win` | 构建 Windows 安装包 |
+| `npm run build:win` | 构建 Windows x64 安装包 |
+| `npm run build:win:x64` | 在 macOS/Linux 上构建 Windows x64 安装包 |
+| `npm run build:linux` | 构建 Linux x64 安装包 |
+| `npm run build:linux:x64` | 构建 Linux x64 安装包（AppImage 和 deb） |
+
+在 macOS 上构建 Windows 安装包需要 Wine（NSIS 使用 Wine 运行）。可使用 Homebrew 安装：
+
+```bash
+brew install --cask wine-stable
+npm run build:win:x64
+```
+
+Windows 产物会输出到 `release/` 目录，默认生成 NSIS 安装程序。应用未配置代码签名，安装时可能显示 Windows SmartScreen 提示。
+
+Linux 产物也会输出到 `release/` 目录，默认生成 AppImage 和 deb 安装包。Linux 打包建议在 Linux 环境执行；在 macOS 上跨平台构建可能需要额外的 Docker 或系统打包工具支持。
 
 项目当前没有配置 `npm test` 测试脚本或自动化测试文件。当前 `check` 和 `build` 通过，`lint` 因 `electron/main/index.ts:246` 的未使用变量 `_history` 失败，并存在 3 个 React Hook 警告。
 
