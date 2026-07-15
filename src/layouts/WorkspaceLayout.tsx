@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
+import AIAssistantPage from '@/pages/AIAssistantPage'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
 import logo from '@/assets/icons/favicon.svg'
 import lightLogo from '@/assets/icons/favicon-light.svg'
@@ -491,7 +492,12 @@ export function WorkspaceLayout() {
         </header>
 
         <section className="min-h-0 flex-1 overflow-hidden">
-          <Outlet />
+          <div className={location.pathname === '/ai' ? 'h-full' : 'hidden'}>
+            <AIAssistantPage />
+          </div>
+          <div className={location.pathname === '/ai' ? 'hidden' : 'h-full'}>
+            <Outlet />
+          </div>
         </section>
 
         <footer className="flex h-10 shrink-0 items-center gap-2 border-t border-zinc-800 bg-[#0f141b] px-3 text-[11px] text-zinc-500">

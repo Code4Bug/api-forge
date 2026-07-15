@@ -7,7 +7,6 @@ import HttpDebugPage from '@/pages/HttpDebugPage'
 import SocketPage from '@/pages/SocketPage'
 import WebSocketPage from '@/pages/WebSocketPage'
 import SettingsPage from '@/pages/SettingsPage'
-import AIAssistantPage from '@/pages/AIAssistantPage'
 
 function CursorMosaicGlow() {
   const glowRef = useRef<HTMLDivElement>(null)
@@ -65,7 +64,7 @@ export default function App() {
           <Route path="/socket" element={<SocketPage />} />
           <Route path="/environments" element={<EnvironmentPage />} />
           <Route path="/history" element={<HistoryPage />} />
-          <Route path="/ai" element={<AIAssistantPage />} />
+          <Route path="/ai" element={null} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/http" replace />} />
         </Route>

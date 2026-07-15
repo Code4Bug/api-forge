@@ -121,6 +121,17 @@ npm run lint
 npm run build
 ```
 
+## GitHub 自动发布
+
+推送版本标签后，GitHub Actions 会自动在 macOS、Windows 和 Linux 上构建安装包，并创建对应的 GitHub Release：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+标签必须以 `v` 开头，例如 `v1.0.0`。发布流程使用仓库的 `GITHUB_TOKEN`，无需额外配置密钥。
+
 详细开发计划和逐项完成情况见 [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md) 与 [`todo-list.md`](todo-list.md)。
 
 ## 当前限制
