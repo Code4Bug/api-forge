@@ -16,6 +16,7 @@
     "build": "tsc -b && tsc -p tsconfig.electron.json && vite build",
     "lint": "eslint .",
     "test": "npm run check",
+    "release:tag": "node -e \"const { execSync } = require('node:child_process'); const tag = process.env.npm_config_tag || 'v' + process.env.npm_package_version; execSync('git tag ' + tag, { stdio: 'inherit' }); execSync('git push github ' + tag, { stdio: 'inherit' })\"",
     "preview": "vite preview",
     "check": "tsc -b --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "build:mac": "npm run build && electron-builder --mac --publish never",
