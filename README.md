@@ -6,7 +6,8 @@ API-forge 是一个基于 Electron 的桌面端接口测试与调试工具，面
 
 ## 产品截图
 
-![API-forge AI 工作台](snapshots/截图01.jpg)
+![API-forge AI 工作台 暗色](snapshots/截图01.jpg)
+![API-forge AI 工作台 亮色](snapshots/截图02.jpg)
 
 ## 当前能力
 
