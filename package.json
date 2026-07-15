@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "license": "Apache-2.0",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
@@ -80,12 +80,14 @@
       "package.json"
     ],
     "mac": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "target": [
         {
           "target": "nsis",
@@ -96,6 +98,7 @@
       ]
     },
     "linux": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         "AppImage",
         "deb"
