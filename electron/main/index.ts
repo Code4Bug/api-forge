@@ -184,6 +184,15 @@ const defaultWorkspace: WorkspaceSnapshot = {
     activeProtocol: 'http',
     openApiIds: [],
     theme: 'dark',
+    largeModel: {
+      enabled: false,
+      provider: 'OpenAI 兼容',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      temperature: 0.7,
+      maxTokens: 2048,
+    },
   },
 }
 

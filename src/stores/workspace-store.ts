@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
+import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, LargeModelConfig, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
 
 export function replaceEnvironmentVariables(value: string, variables: Record<string, string>): string {
   return value.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) => variables[key] ?? match)
@@ -42,6 +42,7 @@ interface WorkspaceState {
   deleteNode: (nodeId: string) => void
   saveNow: () => void
   setAutoSaveSettings: (enabled: boolean, interval: number) => void
+  updateLargeModelConfig: (config: LargeModelConfig) => void
 }
 
 const fallbackWorkspace: WorkspaceSnapshot = {
@@ -82,6 +83,7 @@ const fallbackWorkspace: WorkspaceSnapshot = {
     activeApiId: undefined,
     openApiIds: [],
     theme: 'dark',
+    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048 },
   },
 }
 
@@ -321,5 +323,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     localStorage.setItem('autoSaveEnabled', String(enabled))
     localStorage.setItem('autoSaveInterval', String(interval))
     set({ autoSaveEnabled: enabled, autoSaveInterval: interval })
+  },
+  updateLargeModelConfig: (config) => {
+    const { workspace } = get()
+    if (!workspace) return
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: config } }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
   },
 }))

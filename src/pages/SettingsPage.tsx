@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import type { LargeModelConfig } from '@/shared/ipc-contracts'
 
 const themes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
   { id: 'dark', name: '深色', description: '适合低光环境', icon: Moon },
@@ -20,9 +21,19 @@ const colorThemes: Array<{ id: Theme; name: string; description: string; icon: t
 export default function SettingsPage() {
   const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
+  const { workspace, updateLargeModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
+  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048 })
+  const [showApiKey, setShowApiKey] = useState(false)
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
+  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig(workspace.preferences.largeModel) }, [workspace?.preferences.largeModel])
+
+  function updateModelConfig(patch: Partial<LargeModelConfig>) {
+    const next = { ...modelConfig, ...patch }
+    setModelConfig(next)
+    updateLargeModelConfig(next)
+  }
 
   function updateCustomColor(key: keyof ThemeConfig, value: string) {
     setCustomColors((current) => ({ ...current, [key]: value }))
@@ -52,6 +63,16 @@ export default function SettingsPage() {
           </div>
           <button onClick={() => saveCustomTheme(customColors)} className="mt-4 flex h-9 items-center gap-2 rounded border border-cyan-400/50 px-3 text-xs text-cyan-200 hover:bg-cyan-400/10"><Palette className="h-3.5 w-3.5" />保存并应用自定义主题</button>
         </div>
+        </div>
+      </section>
+      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-4 flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div>
+        <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用大模型</span><span className="mt-1 block text-[11px] text-zinc-500">用于智能生成、分析和辅助调试</span></span><input type="checkbox" checked={modelConfig.enabled} onChange={(event) => updateModelConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-violet-400" /></label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {([['provider', '服务商', '例如：OpenAI、通义千问'], ['baseUrl', '接口地址', 'https://api.openai.com/v1'], ['model', '模型名称', 'gpt-4o-mini']] as Array<[keyof LargeModelConfig, string, string]>).map(([key, label, placeholder]) => <label key={key} className="text-xs text-zinc-400"><span className="mb-1 block">{label}</span><input value={String(modelConfig[key])} onChange={(event) => updateModelConfig({ [key]: event.target.value })} placeholder={placeholder} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>)}
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-violet-400"><input type={showApiKey ? 'text' : 'password'} value={modelConfig.apiKey} onChange={(event) => updateModelConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!modelConfig.enabled} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showApiKey ? '隐藏 API Key' : '显示 API Key'}>{showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={modelConfig.temperature} onChange={(event) => updateModelConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">

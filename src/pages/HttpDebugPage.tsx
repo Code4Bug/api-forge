@@ -219,6 +219,7 @@ export default function HttpDebugPage() {
   const [followRedirects, setFollowRedirects] = useState(true)
   const [validateCertificates, setValidateCertificates] = useState(true)
   const [assertion, setAssertion] = useState('')
+  const [assertionResult, setAssertionResult] = useState<{ ok: boolean; message: string }>()
   const [saveMessage, setSaveMessage] = useState('')
   const saveRequestRef = useRef<() => void>(() => undefined)
 
@@ -291,6 +292,7 @@ export default function HttpDebugPage() {
       setFormFields([])
       setBearerToken('')
       setResult(undefined)
+      setAssertionResult(undefined)
       setInputError('')
       setAssertion('')
       setSaveMessage('')
@@ -309,6 +311,7 @@ export default function HttpDebugPage() {
     const authorization = request?.headers?.find((item) => item.key.toLowerCase() === 'authorization')?.value ?? ''
     setBearerToken(authorization.replace(/^Bearer\s+/i, ''))
     setResult(undefined)
+    setAssertionResult(undefined)
     setInputError('')
   }, [activeApiId, activeApiNode?.method, activeRequest])
 
@@ -438,6 +441,21 @@ export default function HttpDebugPage() {
         body: method === 'GET' || method === 'HEAD' ? undefined : buildRequestBody(),
       })
       setResult(response)
+      if (assertion.trim()) {
+        const expression = replaceEnvironmentVariables(assertion.trim(), variables)
+        try {
+          const responseBody = response.ok ? response.body : ''
+          let parsedBody: unknown = responseBody
+          try { parsedBody = JSON.parse(responseBody) } catch { /* 非 JSON 响应按文本提供给断言 */ }
+          const evaluate = new Function('status', 'headers', 'body', `return Boolean(${expression})`) as (status: number | undefined, headers: Record<string, string>, body: unknown) => boolean
+          const passed = evaluate(response.ok ? response.status : undefined, response.ok ? response.headers : {}, parsedBody)
+          setAssertionResult({ ok: passed, message: passed ? '断言通过' : '断言未通过' })
+        } catch (error) {
+          setAssertionResult({ ok: false, message: `断言表达式无效：${error instanceof Error ? error.message : '无法执行'}` })
+        }
+      } else {
+        setAssertionResult(undefined)
+      }
       addHistory({
         id: `history-${crypto.randomUUID()}`,
         protocol: 'http',
@@ -606,7 +624,7 @@ export default function HttpDebugPage() {
             <div className="space-y-3 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><label className="flex items-center justify-between text-zinc-300">请求超时（毫秒）<input type="number" min="0" value={timeout} onChange={(event) => setTimeoutValue(Number(event.target.value))} className="h-8 w-32 rounded border border-zinc-700 bg-zinc-900 px-2 text-right text-zinc-100" /></label><label className="flex items-center justify-between text-zinc-300">跟随重定向<input type="checkbox" checked={followRedirects} onChange={(event) => setFollowRedirects(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label><label className="flex items-center justify-between text-zinc-300">校验证书<input type="checkbox" checked={validateCertificates} onChange={(event) => setValidateCertificates(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label></div>
           )}
           {activeRequestTab === 'Info' && (
-            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><div className="grid grid-cols-2 gap-3"><div><div className="text-zinc-600">接口名称</div><div className="mt-1 text-zinc-200">{activeApiNode?.name ?? '-'}</div></div><div><div className="text-zinc-600">协议</div><div className="mt-1 uppercase text-cyan-200">{activeApiNode?.protocol ?? '-'}</div></div><div><div className="text-zinc-600">参数数量</div><div className="mt-1 text-zinc-200">{params.length}</div></div><div><div className="text-zinc-600">最后修改</div><div className="mt-1 text-zinc-400">{activeRequest?.updatedAt ? new Date(activeRequest.updatedAt).toLocaleString() : '未保存'}</div></div></div><label className="block text-zinc-400">响应断言<VariableInput multiline value={assertion} variables={variables} onChange={setAssertion} placeholder="例如：status === 200 或 {{expected_status}}" className="mt-2 min-h-20 w-full rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-100 outline-none focus:border-cyan-400/60" /></label><button onClick={() => setAssertion('status === 200')} className="inline-flex items-center gap-1 rounded border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-800"><Check className="h-3.5 w-3.5" />插入常用断言</button></div>
+            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs"><div className="grid grid-cols-2 gap-3"><div><div className="text-zinc-600">接口名称</div><div className="mt-1 text-zinc-200">{activeApiNode?.name ?? '-'}</div></div><div><div className="text-zinc-600">协议</div><div className="mt-1 uppercase text-cyan-200">{activeApiNode?.protocol ?? '-'}</div></div><div><div className="text-zinc-600">参数数量</div><div className="mt-1 text-zinc-200">{params.length}</div></div><div><div className="text-zinc-600">最后修改</div><div className="mt-1 text-zinc-400">{activeRequest?.updatedAt ? new Date(activeRequest.updatedAt).toLocaleString() : '未保存'}</div></div></div><label className="block text-zinc-400">响应断言<VariableInput multiline value={assertion} variables={variables} onChange={(value) => { setAssertion(value); setAssertionResult(undefined) }} placeholder="例如：status === 200 或 {{expected_status}}" className="mt-2 box-border block min-h-24 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs leading-5 text-zinc-100 outline-none focus:border-cyan-400/60" /></label>{assertionResult && <div className={`rounded border px-3 py-2 text-xs ${assertionResult.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>{assertionResult.message}</div>}<button onClick={() => { setAssertion('status === 200'); setAssertionResult(undefined) }} className="inline-flex items-center gap-1 rounded border border-zinc-700 px-3 py-2 text-zinc-300 hover:bg-zinc-800"><Check className="h-3.5 w-3.5" />插入常用断言</button></div>
           )}
           {inputError && <p className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">{inputError}</p>}
           {!available && <p className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">当前环境不可用：请启动 Electron 桌面端后发送真实 HTTP 请求。</p>}

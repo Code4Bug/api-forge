@@ -71,6 +71,17 @@ export interface UserPreferences {
   activeApiId?: string
   openApiIds?: string[]
   theme: 'dark' | 'light' | 'system' | 'dim'
+  largeModel?: LargeModelConfig
+}
+
+export interface LargeModelConfig {
+  enabled: boolean
+  provider: string
+  baseUrl: string
+  apiKey: string
+  model: string
+  temperature: number
+  maxTokens: number
 }
 
 export interface WorkspaceSnapshot {
