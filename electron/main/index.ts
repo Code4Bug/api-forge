@@ -11,6 +11,17 @@ import type { DesktopApi, RequestHistoryItem, UpdateStatus, UserPreferences, Wor
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
+function resolveApplicationVersion() {
+  const packagePath = isDev
+    ? join(__dirname, '../../../package.json')
+    : join(process.resourcesPath, 'app.asar', 'package.json')
+  try {
+    const packageInfo = JSON.parse(readFileSync(packagePath, 'utf8')) as { version?: string }
+    return packageInfo.version ?? app.getVersion()
+  } catch {
+    return app.getVersion()
+  }
+}
 app.setName('API-forge')
 app.setAppUserModelId('com.api-test-tools.desktop')
 const WORKSPACE_VERSION = 2
@@ -457,7 +468,7 @@ function createWindow() {
 
 ipcMain.handle('app:get-info', () => ({
   name: app.getName(),
-  version: app.getVersion(),
+  version: resolveApplicationVersion(),
   platform: process.platform,
 }))
 ipcMain.handle('update:check', checkForUpdates)
