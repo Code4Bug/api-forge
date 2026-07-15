@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
-import type { RequestHistoryItem, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import type { RequestHistoryItem, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
@@ -208,6 +208,10 @@ function workspacePath() {
   return join(app.getPath('home'), '.api-forge', 'workspace.json')
 }
 
+function configPath() {
+  return join(app.getPath('home'), '.api-forge', 'config.json')
+}
+
 function historyPath() {
   return join(app.getPath('home'), '.api-forge', 'history.json')
 }
@@ -261,10 +265,11 @@ async function readWorkspace(): Promise<WorkspaceSnapshot> {
     const content = await readFile(workspacePath(), 'utf-8')
     const workspace = JSON.parse(content) as WorkspaceSnapshot
     if (workspace.version === WORKSPACE_VERSION) {
+      const preferences = JSON.parse(await readFile(configPath(), 'utf-8')) as UserPreferences
       const history = await readHistory()
       const embeddedHistory = Array.isArray(workspace.history) ? workspace.history : []
       if (history.length === 0 && embeddedHistory.length > 0) await writeHistory(embeddedHistory)
-      return { ...workspace, history: history.length > 0 ? history : embeddedHistory }
+      return { ...workspace, preferences, history: history.length > 0 ? history : embeddedHistory }
     }
     await writeWorkspace(defaultWorkspace)
     await writeHistory(defaultWorkspace.history)
@@ -293,6 +298,13 @@ async function writeHistory(history: RequestHistoryItem[]) {
   return { ok: true as const }
 }
 
+async function writeConfig(preferences: UserPreferences) {
+  const targetPath = configPath()
+  await mkdir(dirname(targetPath), { recursive: true })
+  await writeFile(targetPath, JSON.stringify(preferences, null, 2), 'utf-8')
+  return { ok: true as const }
+}
+
 async function writeWorkspace(workspace: WorkspaceSnapshot) {
   const targetPath = workspacePath()
   const directory = dirname(targetPath)
@@ -300,9 +312,10 @@ async function writeWorkspace(workspace: WorkspaceSnapshot) {
   await mkdir(directory, { recursive: true })
 
   try {
-    const { history: _history, ...workspaceOnly } = workspace
+    const { history: _history, preferences: _preferences, ...workspaceOnly } = workspace
     await writeFile(temporaryPath, JSON.stringify(workspaceOnly, null, 2), 'utf-8')
     await rename(temporaryPath, targetPath)
+    await writeConfig(workspace.preferences)
     return { ok: true as const }
   } catch (error) {
     await unlink(temporaryPath).catch(() => undefined)

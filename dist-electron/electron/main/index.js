@@ -197,6 +197,9 @@ function emitSocket(event, payload) {
 function workspacePath() {
     return join(app.getPath('home'), '.api-forge', 'workspace.json');
 }
+function configPath() {
+    return join(app.getPath('home'), '.api-forge', 'config.json');
+}
 function historyPath() {
     return join(app.getPath('home'), '.api-forge', 'history.json');
 }
@@ -241,11 +244,12 @@ async function readWorkspace() {
         const content = await readFile(workspacePath(), 'utf-8');
         const workspace = JSON.parse(content);
         if (workspace.version === WORKSPACE_VERSION) {
+            const preferences = JSON.parse(await readFile(configPath(), 'utf-8'));
             const history = await readHistory();
             const embeddedHistory = Array.isArray(workspace.history) ? workspace.history : [];
             if (history.length === 0 && embeddedHistory.length > 0)
                 await writeHistory(embeddedHistory);
-            return { ...workspace, history: history.length > 0 ? history : embeddedHistory };
+            return { ...workspace, preferences, history: history.length > 0 ? history : embeddedHistory };
         }
         await writeWorkspace(defaultWorkspace);
         await writeHistory(defaultWorkspace.history);
@@ -273,15 +277,22 @@ async function writeHistory(history) {
     await writeFile(targetPath, JSON.stringify(history, null, 2), 'utf-8');
     return { ok: true };
 }
+async function writeConfig(preferences) {
+    const targetPath = configPath();
+    await mkdir(dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, JSON.stringify(preferences, null, 2), 'utf-8');
+    return { ok: true };
+}
 async function writeWorkspace(workspace) {
     const targetPath = workspacePath();
     const directory = dirname(targetPath);
     const temporaryPath = join(directory, `.workspace-${process.pid}-${Date.now()}-${randomUUID()}.tmp`);
     await mkdir(directory, { recursive: true });
     try {
-        const { history: _history, ...workspaceOnly } = workspace;
+        const { history: _history, preferences: _preferences, ...workspaceOnly } = workspace;
         await writeFile(temporaryPath, JSON.stringify(workspaceOnly, null, 2), 'utf-8');
         await rename(temporaryPath, targetPath);
+        await writeConfig(workspace.preferences);
         return { ok: true };
     }
     catch (error) {

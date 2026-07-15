@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, LargeModelConfig, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
+import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, KeyValueItem, LargeModelConfig, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
 
 export function replaceEnvironmentVariables(value: string, variables: Record<string, string>): string {
   return value.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) => variables[key] ?? match)
@@ -12,6 +12,9 @@ export interface ApiDefinitionInput {
   name: string
   protocol: Protocol
   method?: HttpMethod
+  url?: string
+  headers?: KeyValueItem[]
+  body?: string
 }
 
 interface WorkspaceState {
@@ -83,7 +86,7 @@ const fallbackWorkspace: WorkspaceSnapshot = {
     activeApiId: undefined,
     openApiIds: [],
     theme: 'dark',
-    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000 },
+    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false },
   },
 }
 
@@ -168,9 +171,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   autoSaveEnabled: localStorage.getItem('autoSaveEnabled') !== 'false',
   autoSaveInterval: Number(localStorage.getItem('autoSaveInterval') ?? 60),
   loadWorkspace: async () => {
-    const workspace = window.desktopApi ? await window.desktopApi.loadWorkspace() : fallbackWorkspace
-    if (workspace.preferences.largeModel && !Number.isFinite(workspace.preferences.largeModel.maxContextTokens)) {
-      workspace.preferences.largeModel = { ...workspace.preferences.largeModel, maxContextTokens: 128000 }
+    let workspace = window.desktopApi ? await window.desktopApi.loadWorkspace() : fallbackWorkspace
+    const largeModel = workspace.preferences.largeModel
+    if (largeModel) {
+      const normalizedLargeModel = { ...largeModel, maxContextTokens: Number.isFinite(largeModel.maxContextTokens) ? largeModel.maxContextTokens : 128000, thinkingEnabled: largeModel.thinkingEnabled === true }
+      const needsMigration = normalizedLargeModel.maxContextTokens !== largeModel.maxContextTokens || normalizedLargeModel.thinkingEnabled !== largeModel.thinkingEnabled
+      if (needsMigration) workspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: normalizedLargeModel } }
     }
     set({
       workspace,
@@ -179,6 +185,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       activeApiId: workspace.preferences.activeApiId,
       saveStatus: 'saved',
     })
+    if (largeModel && workspace.preferences.largeModel !== largeModel) saveWorkspace(workspace, set)
   },
   setActiveProtocol: (protocol) => {
     const { activeProtocol, workspace } = get()
@@ -288,7 +295,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const { workspace } = get()
     if (!workspace || !input.name.trim()) return undefined
     const id = `api-${crypto.randomUUID()}`
-    const nextWorkspace = { ...workspace, apiTree: appendTree(workspace.apiTree, parentId, { id, type: 'api', name: input.name.trim(), protocol: input.protocol, method: input.method, parentId }) }
+    const nextWorkspace = { ...workspace, apiTree: appendTree(workspace.apiTree, parentId, { id, type: 'api', name: input.name.trim(), protocol: input.protocol, method: input.method, parentId }), requests: [...workspace.requests, { id, protocol: input.protocol, name: input.name.trim(), method: input.method, url: input.url ?? '', params: [], headers: input.headers ?? [], body: input.body, updatedAt: new Date().toISOString() }] }
     set({ workspace: nextWorkspace, activeApiId: id })
     saveWorkspace(nextWorkspace, set)
     return id
@@ -330,7 +337,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   updateLargeModelConfig: (config) => {
     const { workspace } = get()
     if (!workspace) return
-    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: config } }
+    const normalizedConfig = { ...config, thinkingEnabled: config.thinkingEnabled === true }
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: normalizedConfig } }
     set({ workspace: nextWorkspace })
     saveWorkspace(nextWorkspace, set)
   },

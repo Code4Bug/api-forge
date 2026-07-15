@@ -84,6 +84,7 @@ export interface LargeModelConfig {
   temperature: number
   maxTokens: number
   maxContextTokens: number
+  thinkingEnabled?: boolean
 }
 
 export interface WorkspaceSnapshot {

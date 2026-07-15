@@ -23,12 +23,12 @@ export default function SettingsPage() {
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
   const { workspace, updateLargeModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
-  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000 })
+  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false })
   const [showApiKey, setShowApiKey] = useState(false)
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
-  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000 }) }, [workspace?.preferences.largeModel])
+  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000, thinkingEnabled: workspace.preferences.largeModel.thinkingEnabled ?? false }) }, [workspace?.preferences.largeModel])
   useEffect(() => {
     const handleSaveSettings = () => saveNow()
     window.addEventListener('api-forge:save-settings', handleSaveSettings)
@@ -91,6 +91,7 @@ export default function SettingsPage() {
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大上下文 Token 数</span><input type="number" min="1" max="1000000" step="1" value={modelConfig.maxContextTokens} onChange={(event) => updateModelConfig({ maxContextTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
         </div>
+        <label className="mt-4 flex items-center justify-between gap-4 border-t border-zinc-800 pt-4 text-xs text-zinc-300"><span><span className="block font-medium">开启思考模式</span><span className="mt-1 block text-[11px] text-zinc-500">向接口显式传递思考开关并实时展示推理内容，仅支持推理的模型生效</span></span><input type="checkbox" checked={modelConfig.thinkingEnabled ?? false} onChange={(event) => updateModelConfig({ thinkingEnabled: event.target.checked })} disabled={!modelConfig.enabled} className="h-4 w-4 accent-violet-400" /></label>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Clock3 className="h-4 w-4 text-amber-300" /><h2 className="text-sm font-medium">定时保存</h2></div>
