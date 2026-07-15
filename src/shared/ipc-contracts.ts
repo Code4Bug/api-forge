@@ -74,9 +74,15 @@ export interface UserPreferences {
   theme: 'dark' | 'light' | 'system' | 'dim'
   largeModel?: LargeModelConfig
   lightModel?: LightModelConfig
+  largeModels?: LargeModelConfig[]
+  lightModels?: LightModelConfig[]
+  activeLargeModelId?: string
+  activeLightModelId?: string
 }
 
 export interface LargeModelConfig {
+  id: string
+  name: string
   enabled: boolean
   provider: string
   baseUrl: string
@@ -89,6 +95,8 @@ export interface LargeModelConfig {
 }
 
 export interface LightModelConfig {
+  id: string
+  name: string
   enabled: boolean
   provider: string
   baseUrl: string
@@ -96,6 +104,18 @@ export interface LightModelConfig {
   model: string
   temperature: number
   maxTokens: number
+}
+
+export function getActiveLargeModel(preferences?: UserPreferences): LargeModelConfig | undefined {
+  if (!preferences) return undefined
+  return preferences.largeModels?.find((item) => item.id === preferences.activeLargeModelId)
+    ?? (preferences.largeModel?.enabled ? preferences.largeModel : undefined)
+}
+
+export function getActiveLightModel(preferences?: UserPreferences): LightModelConfig | undefined {
+  if (!preferences) return undefined
+  return preferences.lightModels?.find((item) => item.id === preferences.activeLightModelId)
+    ?? (preferences.lightModel?.enabled ? preferences.lightModel : undefined)
 }
 
 export interface WorkspaceSnapshot {

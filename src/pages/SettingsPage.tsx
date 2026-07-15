@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
@@ -30,8 +30,8 @@ const providerPresets: Record<string, { baseUrl: string; model: string }> = {
   Ollama: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
 }
 
-const defaultLargeModel: LargeModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false }
-const defaultLightModel: LightModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 }
+const defaultLargeModel: LargeModelConfig = { id: '', name: '新大模型', enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false }
+const defaultLightModel: LightModelConfig = { id: '', name: '新小模型', enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 }
 
 type SettingsCategory = 'appearance' | 'model' | 'workspace' | 'application'
 
@@ -45,19 +45,29 @@ const settingsCategories: Array<{ id: SettingsCategory; name: string; descriptio
 export default function SettingsPage() {
   const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
-  const { workspace, updateLargeModelConfig, updateLightModelConfig } = useWorkspaceStore()
+  const { workspace, updateLargeModelConfig, updateLightModelConfig, deleteLargeModelConfig, deleteLightModelConfig, activateLargeModelConfig, activateLightModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
-  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? defaultLargeModel)
-  const [lightModelConfig, setLightModelConfig] = useState<LightModelConfig>(workspace?.preferences.lightModel ?? defaultLightModel)
-  const [showApiKey, setShowApiKey] = useState(false)
+  const [selectedLargeModelId, setSelectedLargeModelId] = useState('')
+  const [selectedLightModelId, setSelectedLightModelId] = useState('')
+  const [showLargeApiKey, setShowLargeApiKey] = useState(false)
+  const [showLightApiKey, setShowLightApiKey] = useState(false)
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
-  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000, thinkingEnabled: workspace.preferences.largeModel.thinkingEnabled ?? false }) }, [workspace?.preferences.largeModel])
-  useEffect(() => { if (workspace?.preferences.lightModel) setLightModelConfig({ ...defaultLightModel, ...workspace.preferences.lightModel }) }, [workspace?.preferences.lightModel])
+  const largeModels = workspace?.preferences.largeModels ?? []
+  const lightModels = workspace?.preferences.lightModels ?? []
+  const modelConfig = largeModels.find((item) => item.id === selectedLargeModelId) ?? largeModels[0] ?? defaultLargeModel
+  const lightModelConfig = lightModels.find((item) => item.id === selectedLightModelId) ?? lightModels[0] ?? defaultLightModel
+
+  useEffect(() => {
+    if (!largeModels.some((item) => item.id === selectedLargeModelId)) setSelectedLargeModelId(largeModels[0]?.id ?? '')
+  }, [largeModels, selectedLargeModelId])
+  useEffect(() => {
+    if (!lightModels.some((item) => item.id === selectedLightModelId)) setSelectedLightModelId(lightModels[0]?.id ?? '')
+  }, [lightModels, selectedLightModelId])
   useEffect(() => {
     void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)
     return window.desktopApi?.onUpdateStatus?.(setUpdateStatus)
@@ -70,14 +80,34 @@ export default function SettingsPage() {
 
   function updateModelConfig(patch: Partial<LargeModelConfig>) {
     const next = { ...modelConfig, ...patch }
-    setModelConfig(next)
     updateLargeModelConfig(next)
   }
 
   function updateLightConfig(patch: Partial<LightModelConfig>) {
     const next = { ...lightModelConfig, ...patch }
-    setLightModelConfig(next)
     updateLightModelConfig(next)
+  }
+
+  function addLargeModel() {
+    const config = { ...defaultLargeModel, id: crypto.randomUUID(), name: `大模型 ${largeModels.length + 1}` }
+    updateLargeModelConfig(config)
+    setSelectedLargeModelId(config.id)
+  }
+
+  function addLightModel() {
+    const config = { ...defaultLightModel, id: crypto.randomUUID(), name: `小模型 ${lightModels.length + 1}` }
+    updateLightModelConfig(config)
+    setSelectedLightModelId(config.id)
+  }
+
+  function removeLargeModel() {
+    if (!modelConfig.id || !window.confirm(`确认删除“${modelConfig.name}”吗？`)) return
+    deleteLargeModelConfig(modelConfig.id)
+  }
+
+  function removeLightModel() {
+    if (!lightModelConfig.id || !window.confirm(`确认删除“${lightModelConfig.name}”吗？`)) return
+    deleteLightModelConfig(lightModelConfig.id)
   }
 
   function selectLargeProvider(provider: string) {
@@ -153,29 +183,38 @@ export default function SettingsPage() {
       </>}
       {activeCategory === 'model' && <>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-4 flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div>
-        <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用大模型</span><span className="mt-1 block text-[11px] text-zinc-500">用于智能生成、分析和辅助调试</span></span><input type="checkbox" checked={modelConfig.enabled} onChange={(event) => updateModelConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-violet-400" /></label>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={modelConfig.provider} onChange={(event) => selectLargeProvider(event.target.value)} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
-          {([['baseUrl', '接口地址', 'https://api.openai.com/v1'], ['model', '模型名称', 'gpt-4o-mini']] as Array<[keyof LargeModelConfig, string, string]>).map(([key, label, placeholder]) => <label key={key} className="text-xs text-zinc-400"><span className="mb-1 block">{label}</span><input value={String(modelConfig[key])} onChange={(event) => updateModelConfig({ [key]: event.target.value })} placeholder={placeholder} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>)}
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-violet-400"><input type={showApiKey ? 'text' : 'password'} value={modelConfig.apiKey} onChange={(event) => updateModelConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!modelConfig.enabled} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showApiKey ? '隐藏 API Key' : '显示 API Key'}>{showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={modelConfig.temperature} onChange={(event) => updateModelConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大上下文 Token 数</span><input type="number" min="1" max="1000000" step="1" value={modelConfig.maxContextTokens} onChange={(event) => updateModelConfig({ maxContextTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+        <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div><button type="button" onClick={addLargeModel} className="flex h-8 items-center gap-1.5 rounded border border-violet-400/50 px-2.5 text-xs text-violet-200 hover:bg-violet-400/10"><Plus className="h-3.5 w-3.5" />新增</button></div>
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          {largeModels.map((config) => { const active = workspace?.preferences.activeLargeModelId === config.id; const selected = modelConfig.id === config.id; return <button key={config.id} type="button" onClick={() => setSelectedLargeModelId(config.id)} className={`flex min-w-32 items-center justify-between gap-2 rounded border px-3 py-2 text-left ${selected ? 'border-violet-400/60 bg-violet-400/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-600'}`}><span className="min-w-0"><span className="block truncate text-xs text-zinc-200">{config.name}</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{config.model}</span></span>{active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}</button> })}
+          {largeModels.length === 0 && <button type="button" onClick={addLargeModel} className="flex h-16 w-full items-center justify-center gap-2 rounded border border-dashed border-zinc-700 text-xs text-zinc-500 hover:border-violet-400 hover:text-violet-200"><Plus className="h-3.5 w-3.5" />添加第一个大模型</button>}
         </div>
-        <label className="mt-4 flex items-center justify-between gap-4 border-t border-zinc-800 pt-4 text-xs text-zinc-300"><span><span className="block font-medium">开启思考模式</span><span className="mt-1 block text-[11px] text-zinc-500">向接口显式传递思考开关并实时展示推理内容，仅支持推理的模型生效</span></span><input type="checkbox" checked={modelConfig.thinkingEnabled ?? false} onChange={(event) => updateModelConfig({ thinkingEnabled: event.target.checked })} disabled={!modelConfig.enabled} className="h-4 w-4 accent-violet-400" /></label>
+        {modelConfig.id && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-4"><span className="text-[11px] text-zinc-500">同一时间仅使用一个大模型配置</span><div className="flex gap-2"><button type="button" onClick={removeLargeModel} className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-xs text-zinc-400 hover:border-rose-400 hover:text-rose-300" title="删除当前配置"><Trash2 className="h-3.5 w-3.5" />删除</button><button type="button" onClick={() => activateLargeModelConfig(modelConfig.id)} disabled={workspace?.preferences.activeLargeModelId === modelConfig.id} className="flex h-8 items-center gap-1.5 rounded bg-violet-400 px-2.5 text-xs font-semibold text-zinc-950 disabled:bg-emerald-400 disabled:opacity-100"><Power className="h-3.5 w-3.5" />{workspace?.preferences.activeLargeModelId === modelConfig.id ? '已激活' : '激活'}</button></div></div>}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">配置名称</span><input value={modelConfig.name} onChange={(event) => updateModelConfig({ name: event.target.value })} placeholder="例如：日常开发" disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={modelConfig.provider} onChange={(event) => selectLargeProvider(event.target.value)} disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
+          {([['baseUrl', '接口地址', 'https://api.openai.com/v1'], ['model', '模型名称', 'gpt-4o-mini']] as Array<[keyof LargeModelConfig, string, string]>).map(([key, label, placeholder]) => <label key={key} className="text-xs text-zinc-400"><span className="mb-1 block">{label}</span><input value={String(modelConfig[key])} onChange={(event) => updateModelConfig({ [key]: event.target.value })} placeholder={placeholder} disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>)}
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-violet-400"><input type={showLargeApiKey ? 'text' : 'password'} value={modelConfig.apiKey} onChange={(event) => updateModelConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!modelConfig.id} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowLargeApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showLargeApiKey ? '隐藏 API Key' : '显示 API Key'}>{showLargeApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={modelConfig.temperature} onChange={(event) => updateModelConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大上下文 Token 数</span><input type="number" min="1" max="1000000" step="1" value={modelConfig.maxContextTokens} onChange={(event) => updateModelConfig({ maxContextTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+        </div>
+        <label className="mt-4 flex items-center justify-between gap-4 border-t border-zinc-800 pt-4 text-xs text-zinc-300"><span><span className="block font-medium">开启思考模式</span><span className="mt-1 block text-[11px] text-zinc-500">向接口显式传递思考开关并实时展示推理内容，仅支持推理的模型生效</span></span><input type="checkbox" checked={modelConfig.thinkingEnabled ?? false} onChange={(event) => updateModelConfig({ thinkingEnabled: event.target.checked })} disabled={!modelConfig.id} className="h-4 w-4 accent-violet-400" /></label>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-1 flex items-center gap-2"><Sparkles className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">轻量级大模型</h2></div>
-        <p className="mb-4 text-[11px] text-zinc-500">用于标题、摘要和内容等轻量生成任务，和 AI 工作台配置相互独立。</p>
-        <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用轻量模型</span><span className="mt-1 block text-[11px] text-zinc-500">优先使用低成本、低延迟模型</span></span><input type="checkbox" checked={lightModelConfig.enabled} onChange={(event) => updateLightConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-emerald-400" /></label>
+        <div className="mb-3 flex items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">小模型配置</h2></div><p className="mt-1 text-[11px] text-zinc-500">用于标题、摘要和内容等低成本、低延迟任务。</p></div><button type="button" onClick={addLightModel} className="flex h-8 items-center gap-1.5 rounded border border-emerald-400/50 px-2.5 text-xs text-emerald-200 hover:bg-emerald-400/10"><Plus className="h-3.5 w-3.5" />新增</button></div>
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          {lightModels.map((config) => { const active = workspace?.preferences.activeLightModelId === config.id; const selected = lightModelConfig.id === config.id; return <button key={config.id} type="button" onClick={() => setSelectedLightModelId(config.id)} className={`flex min-w-32 items-center justify-between gap-2 rounded border px-3 py-2 text-left ${selected ? 'border-emerald-400/60 bg-emerald-400/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-600'}`}><span className="min-w-0"><span className="block truncate text-xs text-zinc-200">{config.name}</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{config.model}</span></span>{active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}</button> })}
+          {lightModels.length === 0 && <button type="button" onClick={addLightModel} className="flex h-16 w-full items-center justify-center gap-2 rounded border border-dashed border-zinc-700 text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-200"><Plus className="h-3.5 w-3.5" />添加第一个小模型</button>}
+        </div>
+        {lightModelConfig.id && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-4"><span className="text-[11px] text-zinc-500">同一时间仅使用一个小模型配置</span><div className="flex gap-2"><button type="button" onClick={removeLightModel} className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-xs text-zinc-400 hover:border-rose-400 hover:text-rose-300" title="删除当前配置"><Trash2 className="h-3.5 w-3.5" />删除</button><button type="button" onClick={() => activateLightModelConfig(lightModelConfig.id)} disabled={workspace?.preferences.activeLightModelId === lightModelConfig.id} className="flex h-8 items-center gap-1.5 rounded bg-emerald-400 px-2.5 text-xs font-semibold text-zinc-950 disabled:opacity-100"><Power className="h-3.5 w-3.5" />{workspace?.preferences.activeLightModelId === lightModelConfig.id ? '已激活' : '激活'}</button></div></div>}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={lightModelConfig.provider} onChange={(event) => selectLightProvider(event.target.value)} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">模型名称</span><input value={lightModelConfig.model} onChange={(event) => updateLightConfig({ model: event.target.value })} placeholder="gpt-4o-mini" disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400 sm:col-span-2"><span className="mb-1 block">接口地址</span><input value={lightModelConfig.baseUrl} onChange={(event) => updateLightConfig({ baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><input type={showApiKey ? 'text' : 'password'} value={lightModelConfig.apiKey} onChange={(event) => updateLightConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={lightModelConfig.temperature} onChange={(event) => updateLightConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
-          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="8192" step="1" value={lightModelConfig.maxTokens} onChange={(event) => updateLightConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">配置名称</span><input value={lightModelConfig.name} onChange={(event) => updateLightConfig({ name: event.target.value })} placeholder="例如：快速摘要" disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={lightModelConfig.provider} onChange={(event) => selectLightProvider(event.target.value)} disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">模型名称</span><input value={lightModelConfig.model} onChange={(event) => updateLightConfig({ model: event.target.value })} placeholder="gpt-4o-mini" disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">接口地址</span><input value={lightModelConfig.baseUrl} onChange={(event) => updateLightConfig({ baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-emerald-400"><input type={showLightApiKey ? 'text' : 'password'} value={lightModelConfig.apiKey} onChange={(event) => updateLightConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!lightModelConfig.id} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowLightApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showLightApiKey ? '隐藏 API Key' : '显示 API Key'}>{showLightApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={lightModelConfig.temperature} onChange={(event) => updateLightConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="8192" step="1" value={lightModelConfig.maxTokens} onChange={(event) => updateLightConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!lightModelConfig.id} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
         </div>
       </section>
       </>}

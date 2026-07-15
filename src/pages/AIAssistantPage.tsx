@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown, ChevronRight, Copy, Download, RotateCcw, Send, Settings2, Sparkles, Square, Wrench } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import type { ApiTreeNode, HttpMethod, LargeModelConfig, Protocol } from '@/shared/ipc-contracts'
+import { getActiveLargeModel, getActiveLightModel, type ApiTreeNode, type HttpMethod, type LargeModelConfig, type Protocol } from '@/shared/ipc-contracts'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 
 type Message = { id: string; role: 'user' | 'assistant' | 'reasoning' | 'tool'; content: string; tool?: string; reasoningDone?: boolean }
@@ -29,6 +29,16 @@ function buildConversationExport(conversations: Conversation[]) {
 function removeDuplicateEmptyConversations(conversations: Conversation[]): Conversation[] {
   const firstEmptyId = conversations.find((conversation) => conversation.messages.length === 0)?.id
   return conversations.filter((conversation) => conversation.messages.length > 0 || conversation.id === firstEmptyId)
+}
+
+function normalizeConversationTitle(value: string, fallback: string) {
+  const normalized = value.trim()
+    .replace(/^标题\s*[:：]\s*/i, '')
+    .replace(/^["'“”‘’《》]+|["'“”‘’《》]+$/g, '')
+    .split(/\r?\n/, 1)[0]
+    .replace(/[。.!！?？]+$/, '')
+    .trim()
+  return (normalized || fallback.replace(/\s+/g, ' ').trim() || '新对话').slice(0, 32)
 }
 
 function limitContext(messages: ModelMessage[], maxTokens: number): ModelMessage[] {
@@ -86,8 +96,9 @@ function MarkdownText({ value }: { value: string }) {
 
 export default function AIAssistantPage() {
   const workspace = useWorkspaceStore((s) => s.workspace)
-  const modelConfig = workspace?.preferences.largeModel
-  const aiReady = Boolean(modelConfig?.enabled && modelConfig.baseUrl.trim() && modelConfig.model.trim())
+  const modelConfig = getActiveLargeModel(workspace?.preferences)
+  const lightModelConfig = getActiveLightModel(workspace?.preferences)
+  const aiReady = Boolean(modelConfig?.baseUrl.trim() && modelConfig.model.trim())
   const createApi = useWorkspaceStore((s) => s.createApi)
   const updateRequest = useWorkspaceStore((s) => s.updateRequest)
   const renameNode = useWorkspaceStore((s) => s.renameNode)
@@ -105,7 +116,7 @@ export default function AIAssistantPage() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const conversationsRef = useRef(conversations)
-  const aiAbortRef = useRef<AbortController>()
+  const aiRequestIdRef = useRef<string>()
   const [toolsEnabled, setToolsEnabled] = useState(true)
   const [copiedMessageId, setCopiedMessageId] = useState<string>()
   const [exportFeedback, setExportFeedback] = useState<'copied' | 'exported'>()
@@ -145,6 +156,14 @@ export default function AIAssistantPage() {
     if (!activeConversation) return
     setConversations((current) => {
       const next = current.map((item) => item.id === activeConversation.id ? { ...item, messages: nextMessages, updatedAt: new Date().toISOString() } : item)
+      conversationsRef.current = next
+      localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
+      return next
+    })
+  }
+  function renameConversationTitle(conversationId: string, title: string) {
+    setConversations((current) => {
+      const next = current.map((item) => item.id === conversationId ? { ...item, title, updatedAt: new Date().toISOString() } : item)
       conversationsRef.current = next
       localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
       return next
@@ -257,15 +276,71 @@ export default function AIAssistantPage() {
   }
 
   async function requestModel(modelMessages: ModelMessage[], onText: (text: string, reasoning?: string) => void) {
+    if (!window.desktopApi?.httpSend) throw new Error('AI 对话需要在 Electron 桌面端运行')
     const requestBody = { model: modelConfig?.model, temperature: modelConfig?.temperature ?? 0.7, max_tokens: modelConfig?.maxTokens ?? 2048, stream: true, ...buildThinkingParams(modelConfig), messages: limitContext(modelMessages, modelConfig?.maxContextTokens ?? 128000), ...(toolsEnabled ? { tools: toolDefinitions, tool_choice: 'auto' } : {}) }
-    const controller = new AbortController(); aiAbortRef.current = controller
-    const response = await fetch(`${modelConfig?.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...(modelConfig?.apiKey ? { Authorization: `Bearer ${modelConfig.apiKey}` } : {}) }, body: JSON.stringify(requestBody), signal: controller.signal })
-    if (!response.ok) throw new Error(`模型请求失败（${response.status}）`)
-    if (!response.body) throw new Error('模型未返回流式响应')
-    const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let content = ''; let reasoning = ''; const calls: NonNullable<ModelMessage['tool_calls']> = []
+    const requestId = crypto.randomUUID(); aiRequestIdRef.current = requestId
+    let buffer = ''; let content = ''; let reasoning = ''; const calls: NonNullable<ModelMessage['tool_calls']> = []
     const consumeLine = (line: string) => { const value = line.trim(); if (!value.startsWith('data:')) return; const data = value.slice(5).trim(); if (!data || data === '[DONE]') return; try { const delta = (JSON.parse(data) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string; reasoning?: string; reasoning_details?: Array<{ text?: string; content?: string }>; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> } }> }).choices?.[0]?.delta; if (!delta) return; const thought = delta.reasoning_content ?? delta.reasoning ?? delta.reasoning_details?.map((item) => item.text ?? item.content ?? '').join('') ?? ''; if (thought) { reasoning += thought; onText('', reasoning) } if (delta.content) { content += delta.content; onText(delta.content, reasoning) } for (const item of delta.tool_calls ?? []) { const call = calls[item.index] ?? { id: item.id ?? crypto.randomUUID(), type: 'function' as const, function: { name: '', arguments: '' } }; call.id = item.id ?? call.id; call.function.name += item.function?.name ?? ''; call.function.arguments += item.function?.arguments ?? ''; calls[item.index] = call } } catch { /* 非完整 JSON 时等待下一次读取 */ } }
-    while (true) { const { value, done } = await reader.read(); buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done }); const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? ''; lines.forEach(consumeLine); if (done) { consumeLine(buffer); break } }
-    return { role: 'assistant' as const, content: content || null, ...(calls.length ? { tool_calls: calls } : {}) }
+    const consumeChunk = (chunk: string, done = false) => { buffer += chunk; const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? ''; lines.forEach(consumeLine); if (done && buffer) { consumeLine(buffer); buffer = '' } }
+    const unsubscribe = window.desktopApi.onHttpChunk?.((payload) => { if (payload.requestId === requestId) consumeChunk(payload.chunk, payload.done) })
+    try {
+      const response = await window.desktopApi.httpSend({ requestId, method: 'POST', url: `${modelConfig?.baseUrl.replace(/\/$/, '')}/chat/completions`, headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...(modelConfig?.apiKey ? { Authorization: `Bearer ${modelConfig.apiKey}` } : {}) }, body: JSON.stringify(requestBody), timeout: 120000 })
+      consumeChunk('', true)
+      if (response.ok === false) {
+        if (response.error.code === 'CANCELED') { const error = new Error(response.error.message); error.name = 'AbortError'; throw error }
+        throw new Error(`模型请求失败：${response.error.message}`)
+      }
+      if (response.status < 200 || response.status >= 300) {
+        let detail = response.body.trim()
+        try { detail = (JSON.parse(response.body) as { error?: { message?: string }; message?: string }).error?.message ?? (JSON.parse(response.body) as { message?: string }).message ?? detail } catch { /* 非 JSON 错误保留原始响应 */ }
+        throw new Error(`模型请求失败（${response.status}）${detail ? `：${detail.slice(0, 300)}` : ''}`)
+      }
+      if (!content && !reasoning && !calls.length) {
+        try {
+          const message = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string | null; reasoning_content?: string; tool_calls?: NonNullable<ModelMessage['tool_calls']> } }> }).choices?.[0]?.message
+          content = message?.content ?? ''
+          reasoning = message?.reasoning_content ?? ''
+          if (reasoning) onText('', reasoning)
+          if (content) onText(content, reasoning)
+          if (message?.tool_calls) calls.push(...message.tool_calls)
+        } catch {
+          const contentType = response.headers['content-type'] ?? ''
+          throw new Error(contentType.includes('text/html') ? '接口返回了网页内容，请确认接口地址包含正确的 API 路径（通常以 /v1 结尾）' : '模型返回内容无法解析')
+        }
+      }
+      return { role: 'assistant' as const, content: content || null, ...(calls.length ? { tool_calls: calls } : {}) }
+    } finally {
+      unsubscribe?.()
+      if (aiRequestIdRef.current === requestId) aiRequestIdRef.current = undefined
+    }
+  }
+
+  async function generateConversationTitle(userText: string) {
+    const fallback = normalizeConversationTitle('', userText)
+    if (!lightModelConfig?.baseUrl.trim() || !lightModelConfig.model.trim() || !window.desktopApi?.httpSend) return fallback
+    try {
+      const response = await window.desktopApi.httpSend({
+        method: 'POST',
+        url: `${lightModelConfig.baseUrl.replace(/\/$/, '')}/chat/completions`,
+        headers: { 'Content-Type': 'application/json', ...(lightModelConfig.apiKey ? { Authorization: `Bearer ${lightModelConfig.apiKey}` } : {}) },
+        body: JSON.stringify({
+          model: lightModelConfig.model,
+          temperature: lightModelConfig.temperature,
+          max_tokens: Math.min(64, Math.max(16, lightModelConfig.maxTokens)),
+          stream: false,
+          messages: [
+            { role: 'system', content: '根据用户问题生成简洁准确的中文会话标题，不超过20个汉字。只输出标题，不加引号、标点或解释。' },
+            { role: 'user', content: userText },
+          ],
+        }),
+        timeout: 30000,
+      })
+      if (response.ok === false || response.status < 200 || response.status >= 300) return fallback
+      const content = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content ?? ''
+      return normalizeConversationTitle(content, fallback)
+    } catch {
+      return fallback
+    }
   }
 
   async function runAgent(userText: string, append: (message: Message) => void) {
@@ -315,13 +390,17 @@ export default function AIAssistantPage() {
     const userMessage = editingIndex >= 0 ? { ...baseMessages[editingIndex], content: text } : { id: crypto.randomUUID(), role: 'user' as const, content: text }
     let transcript = editingIndex >= 0 ? [...baseMessages.slice(0, editingIndex), userMessage] : [...baseMessages, userMessage]
     setEditingMessageId(undefined); persistMessages(transcript); setInput(''); setBusy(true)
-    if (activeConversation.title === '新对话') persist(conversations.map((item) => item.id === activeConversation.id ? { ...item, title: text.slice(0, 32), messages: transcript, updatedAt: new Date().toISOString() } : item))
+    const shouldGenerateTitle = activeConversation.title === '新对话'
+    if (shouldGenerateTitle) renameConversationTitle(activeConversation.id, normalizeConversationTitle('', text))
+    const titleTask = shouldGenerateTitle
+      ? generateConversationTitle(text).then((title) => renameConversationTitle(activeConversation.id, title))
+      : Promise.resolve()
     const append = (message: Message) => { transcript = transcript.some((item) => item.id === message.id) ? transcript.map((item) => item.id === message.id ? message : item) : [...transcript, message]; persistMessages(transcript) }
-    try { await runAgent(text, append) } catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) append({ id: crypto.randomUUID(), role: 'assistant', content: `AI 执行失败：${error instanceof Error ? error.message : '未知错误'}` }) }
-    aiAbortRef.current = undefined
+    try { await Promise.all([runAgent(text, append), titleTask]) } catch (error) { if (!(error instanceof Error && error.name === 'AbortError')) append({ id: crypto.randomUUID(), role: 'assistant', content: `AI 执行失败：${error instanceof Error ? error.message : '未知错误'}` }) }
+    aiRequestIdRef.current = undefined
     setBusy(false)
   }
-  function stopAgent() { aiAbortRef.current?.abort() }
+  function stopAgent() { const requestId = aiRequestIdRef.current; if (requestId) void window.desktopApi?.httpCancel(requestId) }
 
   function editMessage(index: number) {
     if (busy) return

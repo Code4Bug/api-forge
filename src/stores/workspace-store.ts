@@ -47,6 +47,10 @@ interface WorkspaceState {
   setAutoSaveSettings: (enabled: boolean, interval: number) => void
   updateLargeModelConfig: (config: LargeModelConfig) => void
   updateLightModelConfig: (config: LightModelConfig) => void
+  deleteLargeModelConfig: (configId: string) => void
+  deleteLightModelConfig: (configId: string) => void
+  activateLargeModelConfig: (configId: string) => void
+  activateLightModelConfig: (configId: string) => void
 }
 
 const fallbackWorkspace: WorkspaceSnapshot = {
@@ -87,9 +91,36 @@ const fallbackWorkspace: WorkspaceSnapshot = {
     activeApiId: undefined,
     openApiIds: [],
     theme: 'dark',
-    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false },
-    lightModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 },
+    largeModels: [{ id: 'large-default', name: '默认大模型', enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false }],
+    lightModels: [{ id: 'light-default', name: '默认小模型', enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 }],
   },
+}
+
+function createModelId(prefix: 'large' | 'light'): string {
+  return `${prefix}-${crypto.randomUUID()}`
+}
+
+function normalizeModelPreferences(preferences: WorkspaceSnapshot['preferences']): WorkspaceSnapshot['preferences'] {
+  const largeModels = (preferences.largeModels?.length ? preferences.largeModels : preferences.largeModel ? [preferences.largeModel] : []).map((item, index) => ({
+    ...item,
+    id: item.id || createModelId('large'),
+    name: item.name || item.model || `大模型 ${index + 1}`,
+    maxContextTokens: Number.isFinite(item.maxContextTokens) ? item.maxContextTokens : 128000,
+    thinkingEnabled: item.thinkingEnabled === true,
+  }))
+  const lightModels = (preferences.lightModels?.length ? preferences.lightModels : preferences.lightModel ? [preferences.lightModel] : []).map((item, index) => ({
+    ...item,
+    id: item.id || createModelId('light'),
+    name: item.name || item.model || `小模型 ${index + 1}`,
+    maxTokens: Math.max(1, item.maxTokens),
+  }))
+  const activeLargeModelId = largeModels.some((item) => item.id === preferences.activeLargeModelId)
+    ? preferences.activeLargeModelId
+    : preferences.largeModel?.enabled ? largeModels[0]?.id : undefined
+  const activeLightModelId = lightModels.some((item) => item.id === preferences.activeLightModelId)
+    ? preferences.activeLightModelId
+    : preferences.lightModel?.enabled ? lightModels[0]?.id : undefined
+  return { ...preferences, largeModel: undefined, lightModel: undefined, largeModels, lightModels, activeLargeModelId, activeLightModelId }
 }
 
 let saveQueue = Promise.resolve()
@@ -174,12 +205,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   autoSaveInterval: Number(localStorage.getItem('autoSaveInterval') ?? 60),
   loadWorkspace: async () => {
     let workspace = window.desktopApi ? await window.desktopApi.loadWorkspace() : fallbackWorkspace
-    const largeModel = workspace.preferences.largeModel
-    if (largeModel) {
-      const normalizedLargeModel = { ...largeModel, maxContextTokens: Number.isFinite(largeModel.maxContextTokens) ? largeModel.maxContextTokens : 128000, thinkingEnabled: largeModel.thinkingEnabled === true }
-      const needsMigration = normalizedLargeModel.maxContextTokens !== largeModel.maxContextTokens || normalizedLargeModel.thinkingEnabled !== largeModel.thinkingEnabled
-      if (needsMigration) workspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: normalizedLargeModel } }
-    }
+    const originalPreferences = workspace.preferences
+    const normalizedPreferences = normalizeModelPreferences(originalPreferences)
+    workspace = { ...workspace, preferences: normalizedPreferences }
     set({
       workspace,
       activeProtocol: workspace.preferences.activeProtocol,
@@ -187,7 +215,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       activeApiId: workspace.preferences.activeApiId,
       saveStatus: 'saved',
     })
-    if (largeModel && workspace.preferences.largeModel !== largeModel) saveWorkspace(workspace, set)
+    if (JSON.stringify(normalizedPreferences) !== JSON.stringify(originalPreferences)) saveWorkspace(workspace, set)
   },
   setActiveProtocol: (protocol) => {
     const { activeProtocol, workspace } = get()
@@ -340,7 +368,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const { workspace } = get()
     if (!workspace) return
     const normalizedConfig = { ...config, thinkingEnabled: config.thinkingEnabled === true }
-    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModel: normalizedConfig } }
+    const current = workspace.preferences.largeModels ?? []
+    const largeModels = current.some((item) => item.id === config.id) ? current.map((item) => item.id === config.id ? normalizedConfig : item) : [...current, normalizedConfig]
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModels } }
     set({ workspace: nextWorkspace })
     saveWorkspace(nextWorkspace, set)
   },
@@ -348,7 +378,41 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const { workspace } = get()
     if (!workspace) return
     const normalizedConfig = { ...config, maxTokens: Math.max(1, config.maxTokens) }
-    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, lightModel: normalizedConfig } }
+    const current = workspace.preferences.lightModels ?? []
+    const lightModels = current.some((item) => item.id === config.id) ? current.map((item) => item.id === config.id ? normalizedConfig : item) : [...current, normalizedConfig]
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, lightModels } }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  deleteLargeModelConfig: (configId) => {
+    const { workspace } = get()
+    if (!workspace) return
+    const largeModels = (workspace.preferences.largeModels ?? []).filter((item) => item.id !== configId)
+    const activeLargeModelId = workspace.preferences.activeLargeModelId === configId ? undefined : workspace.preferences.activeLargeModelId
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, largeModels, activeLargeModelId } }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  deleteLightModelConfig: (configId) => {
+    const { workspace } = get()
+    if (!workspace) return
+    const lightModels = (workspace.preferences.lightModels ?? []).filter((item) => item.id !== configId)
+    const activeLightModelId = workspace.preferences.activeLightModelId === configId ? undefined : workspace.preferences.activeLightModelId
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, lightModels, activeLightModelId } }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  activateLargeModelConfig: (configId) => {
+    const { workspace } = get()
+    if (!workspace?.preferences.largeModels?.some((item) => item.id === configId)) return
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, activeLargeModelId: configId } }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  activateLightModelConfig: (configId) => {
+    const { workspace } = get()
+    if (!workspace?.preferences.lightModels?.some((item) => item.id === configId)) return
+    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, activeLightModelId: configId } }
     set({ workspace: nextWorkspace })
     saveWorkspace(nextWorkspace, set)
   },

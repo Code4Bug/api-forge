@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
+import { getActiveLargeModel } from '@/shared/ipc-contracts'
 import { useTheme } from '@/hooks/useTheme'
 import AIAssistantPage from '@/pages/AIAssistantPage'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
@@ -200,8 +201,8 @@ export function WorkspaceLayout() {
   const location = useLocation()
   const statusContent = saveStatusContent[saveStatus]
   const SaveStatusIcon = statusContent.icon
-  const modelConfig = workspace?.preferences.largeModel
-  const aiReady = Boolean(modelConfig?.enabled && modelConfig.baseUrl.trim() && modelConfig.model.trim())
+  const modelConfig = getActiveLargeModel(workspace?.preferences)
+  const aiReady = Boolean(modelConfig?.baseUrl.trim() && modelConfig.model.trim())
 
   useEffect(() => {
     void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)

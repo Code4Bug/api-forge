@@ -200,6 +200,8 @@ const defaultWorkspace: WorkspaceSnapshot = {
     openApiIds: [],
     theme: 'dark',
     largeModel: {
+      id: 'large-default',
+      name: '默认大模型',
       enabled: false,
       provider: 'OpenAI 兼容',
       baseUrl: 'https://api.openai.com/v1',
@@ -210,6 +212,8 @@ const defaultWorkspace: WorkspaceSnapshot = {
       maxContextTokens: 128000,
     },
     lightModel: {
+      id: 'light-default',
+      name: '默认小模型',
       enabled: false,
       provider: 'OpenAI 兼容',
       baseUrl: 'https://api.openai.com/v1',
