@@ -4,6 +4,10 @@ API-forge 是一个基于 Electron 的桌面端接口测试与调试工具，面
 
 产品定位：提供一个轻量级、纯本地运行的 API 测试工具。接口请求、环境变量、请求历史和工作区数据均保存在本机，不依赖云端账号或远程项目服务，适合个人开发、内网联调和本地协议验证。
 
+## 产品截图
+
+![API-forge AI 工作台](snapshots/截图01.jpg)
+
 ## 当前能力
 
 - HTTP 请求编辑与发送：GET、POST、PUT、PATCH、DELETE、HEAD、OPTIONS，支持 URL、Params、Headers、Body 和环境变量替换
