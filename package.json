@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "license": "Apache-2.0",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
@@ -12,7 +12,7 @@
   "main": "dist-electron/electron/main/index.js",
   "scripts": {
     "start": "npm run dev",
-    "dev": "concurrently \"vite --host 0.0.0.0 --port 5174\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5174 dist-electron/electron/main/index.js && VITE_DEV_SERVER_URL=http://localhost:5174 electron dist-electron/electron/main/index.js\" ",
+    "dev": "concurrently \"vite --host 0.0.0.0 --port 5174\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5174 dist-electron/electron/main/index.js && node scripts/start-electron.mjs\" ",
     "dev:web": "vite",
     "build": "tsc -b && tsc -p tsconfig.electron.json && vite build",
     "lint": "eslint .",
@@ -43,6 +43,7 @@
     "@types/node": "^22.15.30",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/trusted-types": "^2.0.7",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.21",
     "babel-plugin-react-dev-locator": "^1.0.6",

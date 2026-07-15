@@ -62,6 +62,16 @@ function buildThinkingParams(config: LargeModelConfig | undefined) {
   return { enable_thinking: enabled, chat_template_kwargs: { enable_thinking: enabled } }
 }
 
+function extractReasoning(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(extractReasoning).join('')
+  if (value && typeof value === 'object') {
+    const item = value as Record<string, unknown>
+    return extractReasoning(item.text ?? item.content ?? item.reasoning ?? item.reasoning_content ?? item.thinking ?? item.analysis)
+  }
+  return ''
+}
+
 function MarkdownText({ value }: { value: string }) {
   // 模型常以换行开始，清理首行空白，保留正文和代码块中的换行。
   const normalized = value.replace(/^\s+/, '').replace(/\n{2,}/g, '\n')
@@ -280,7 +290,7 @@ export default function AIAssistantPage() {
     const requestBody = { model: modelConfig?.model, temperature: modelConfig?.temperature ?? 0.7, max_tokens: modelConfig?.maxTokens ?? 2048, stream: true, ...buildThinkingParams(modelConfig), messages: limitContext(modelMessages, modelConfig?.maxContextTokens ?? 128000), ...(toolsEnabled ? { tools: toolDefinitions, tool_choice: 'auto' } : {}) }
     const requestId = crypto.randomUUID(); aiRequestIdRef.current = requestId
     let buffer = ''; let content = ''; let reasoning = ''; const calls: NonNullable<ModelMessage['tool_calls']> = []
-    const consumeLine = (line: string) => { const value = line.trim(); if (!value.startsWith('data:')) return; const data = value.slice(5).trim(); if (!data || data === '[DONE]') return; try { const delta = (JSON.parse(data) as { choices?: Array<{ delta?: { content?: string; reasoning_content?: string; reasoning?: string; reasoning_details?: Array<{ text?: string; content?: string }>; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> } }> }).choices?.[0]?.delta; if (!delta) return; const thought = delta.reasoning_content ?? delta.reasoning ?? delta.reasoning_details?.map((item) => item.text ?? item.content ?? '').join('') ?? ''; if (thought) { reasoning += thought; onText('', reasoning) } if (delta.content) { content += delta.content; onText(delta.content, reasoning) } for (const item of delta.tool_calls ?? []) { const call = calls[item.index] ?? { id: item.id ?? crypto.randomUUID(), type: 'function' as const, function: { name: '', arguments: '' } }; call.id = item.id ?? call.id; call.function.name += item.function?.name ?? ''; call.function.arguments += item.function?.arguments ?? ''; calls[item.index] = call } } catch { /* 非完整 JSON 时等待下一次读取 */ } }
+    const consumeLine = (line: string) => { const value = line.trim(); if (!value.startsWith('data:')) return; const data = value.slice(5).trim(); if (!data || data === '[DONE]') return; try { const delta = (JSON.parse(data) as { choices?: Array<{ delta?: Record<string, unknown> & { content?: string; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> } }> }).choices?.[0]?.delta; if (!delta) return; const thought = extractReasoning(delta.reasoning_content ?? delta.reasoning ?? delta.thinking ?? delta.analysis ?? delta.reasoning_details); if (thought) { reasoning += thought; onText('', reasoning) } if (typeof delta.content === 'string') { content += delta.content; onText(delta.content, reasoning) } for (const item of delta.tool_calls ?? []) { const call = calls[item.index] ?? { id: item.id ?? crypto.randomUUID(), type: 'function' as const, function: { name: '', arguments: '' } }; call.id = item.id ?? call.id; call.function.name += item.function?.name ?? ''; call.function.arguments += item.function?.arguments ?? ''; calls[item.index] = call } } catch { /* 非完整 JSON 时等待下一次读取 */ } }
     const consumeChunk = (chunk: string, done = false) => { buffer += chunk; const lines = buffer.split(/\r?\n/); buffer = lines.pop() ?? ''; lines.forEach(consumeLine); if (done && buffer) { consumeLine(buffer); buffer = '' } }
     const unsubscribe = window.desktopApi.onHttpChunk?.((payload) => { if (payload.requestId === requestId) consumeChunk(payload.chunk, payload.done) })
     try {
@@ -297,9 +307,9 @@ export default function AIAssistantPage() {
       }
       if (!content && !reasoning && !calls.length) {
         try {
-          const message = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string | null; reasoning_content?: string; tool_calls?: NonNullable<ModelMessage['tool_calls']> } }> }).choices?.[0]?.message
-          content = message?.content ?? ''
-          reasoning = message?.reasoning_content ?? ''
+          const message = (JSON.parse(response.body) as { choices?: Array<{ message?: Record<string, unknown> & { content?: string | null; tool_calls?: NonNullable<ModelMessage['tool_calls']> } }> }).choices?.[0]?.message
+          content = typeof message?.content === 'string' ? message.content : ''
+          reasoning = extractReasoning(message?.reasoning_content ?? message?.reasoning ?? message?.thinking ?? message?.analysis ?? message?.reasoning_details)
           if (reasoning) onText('', reasoning)
           if (content) onText(content, reasoning)
           if (message?.tool_calls) calls.push(...message.tool_calls)
