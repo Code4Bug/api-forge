@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { DesktopApi, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+
+const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
