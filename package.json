@@ -11,6 +11,7 @@
     "dev:web": "vite",
     "build": "tsc -b && tsc -p tsconfig.electron.json && vite build",
     "lint": "eslint .",
+    "test": "npm run check",
     "preview": "vite preview",
     "check": "tsc -b --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "build:mac": "npm run build && electron-builder --mac",
