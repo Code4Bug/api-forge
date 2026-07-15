@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import * as net from 'node:net';
 import * as dgram from 'node:dgram';
@@ -24,6 +25,7 @@ function resolveApplicationVersion() {
 }
 app.setName('API-forge');
 app.setAppUserModelId('com.api-test-tools.desktop');
+app.setPath('userData', join(homedir(), '.api-forge'));
 const WORKSPACE_VERSION = 2;
 const originalConsole = {
     log: console.log.bind(console),
@@ -33,8 +35,7 @@ const originalConsole = {
 };
 function runtimeLogPath() {
     const date = new Date().toISOString().slice(0, 10);
-    const homePath = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath('home');
-    return join(homePath, '.api-forge', 'logs', `runtime-${date}.log`);
+    return join(app.getPath('userData'), 'logs', `runtime-${date}.log`);
 }
 function writeRuntimeLog(level, args) {
     try {
@@ -218,16 +219,16 @@ function emitSocket(event, payload) {
     event.sender.send('socket:event', payload);
 }
 function workspacePath() {
-    return join(app.getPath('home'), '.api-forge', 'workspace.json');
+    return join(app.getPath('userData'), 'workspace.json');
 }
 function configPath() {
-    return join(app.getPath('home'), '.api-forge', 'config.json');
+    return join(app.getPath('userData'), 'config.json');
 }
 function historyPath() {
-    return join(app.getPath('home'), '.api-forge', 'history.json');
+    return join(app.getPath('userData'), 'history.json');
 }
 function windowStatePath() {
-    return join(app.getPath('home'), '.api-forge', 'window-state.json');
+    return join(app.getPath('userData'), 'window-state.json');
 }
 function readWindowState() {
     const fallback = { width: 1440, height: 920, isMaximized: false };
@@ -622,7 +623,8 @@ app.on('activate', () => {
     }
 });
 app.on('window-all-closed', () => {
-    app.exit(0);
+    if (process.platform !== 'darwin')
+        app.quit();
 });
 app.on('will-quit', () => {
     for (const window of BrowserWindow.getAllWindows())

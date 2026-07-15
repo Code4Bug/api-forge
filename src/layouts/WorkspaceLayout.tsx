@@ -43,12 +43,13 @@ function escapeHtml(value: string) {
 }
 
 function downloadFile(name: string, content: string, type: string) {
+  const safeName = [...name].map((character) => /[<>:"/\\|?*]/.test(character) || character.charCodeAt(0) < 32 ? '_' : character).join('').replace(/\.+$/, '') || 'api-forge-export'
   const url = URL.createObjectURL(new Blob([content], { type }))
   const link = document.createElement('a')
   link.href = url
-  link.download = name
+  link.download = safeName
   link.click()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 const protocolMethods: Record<Protocol, HttpMethod[]> = {
@@ -80,7 +81,7 @@ function socketType(node: ApiTreeNode) {
 
 function parseCurlCommand(value: string): { name: string; method: HttpMethod; protocol: Protocol; url: string; headers: HttpFieldItem[]; body?: string } | undefined {
   if (!/\bcurl\b/i.test(value)) return undefined
-  const normalized = value.replace(/\\\r?\n/g, ' ').replace(/\r?\n/g, ' ')
+  const normalized = value.replace(/(?:\\|\^)\r?\n/g, ' ').replace(/\r?\n/g, ' ')
   const url = normalized.match(/https?:\/\/[^\s'"\\]+/i)?.[0]
   if (!url) return undefined
   const methodMatch = normalized.match(/(?:-X|--request)\s+['"]?([A-Z]+)['"]?/i)

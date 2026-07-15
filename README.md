@@ -50,6 +50,16 @@ pnpm dev
 
 浏览器预览只加载渲染进程界面，不提供 Electron 主进程的真实 HTTP、SSE、TCP/UDP 能力；完整功能请使用 `pnpm dev` 启动桌面端。
 
+### macOS 无法启动
+
+如果安装后提示应用无法打开或无法验证开发者，可在终端执行以下命令，清除 macOS 为下载应用添加的隔离属性：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/API-forge.app"
+```
+
+执行完成后重新启动 API-forge。请仅对从可信来源获取的应用执行此命令。
+
 ## 本地模拟服务
 
 ```bash
