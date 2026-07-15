@@ -73,6 +73,7 @@ export interface UserPreferences {
   openApiIds?: string[]
   theme: 'dark' | 'light' | 'system' | 'dim'
   largeModel?: LargeModelConfig
+  lightModel?: LightModelConfig
 }
 
 export interface LargeModelConfig {
@@ -85,6 +86,16 @@ export interface LargeModelConfig {
   maxTokens: number
   maxContextTokens: number
   thinkingEnabled?: boolean
+}
+
+export interface LightModelConfig {
+  enabled: boolean
+  provider: string
+  baseUrl: string
+  apiKey: string
+  model: string
+  temperature: number
+  maxTokens: number
 }
 
 export interface WorkspaceSnapshot {

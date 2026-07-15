@@ -84,6 +84,14 @@ jobs:
           \) -exec cp {} release-files/ \;
           test -n "$(find release-files -type f -print -quit)"
 
+          # electron-updater 在 macOS 上固定请求 latest-mac.yml。
+          # 缺少更新清单时继续发布会导致已安装客户端在检查更新时收到 404。
+          test -s release-files/latest-mac.yml
+
+          # 每个构建平台都必须带上自己的更新清单，便于后续诊断发布产物。
+          test -s release-files/latest.yml
+          test -s release-files/latest-linux.yml
+
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:

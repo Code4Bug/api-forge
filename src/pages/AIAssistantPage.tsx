@@ -130,7 +130,7 @@ export default function AIAssistantPage() {
   const contextTone = contextRatio >= 0.9 ? 'danger' : contextRatio >= 0.75 ? 'warning' : 'normal'
   useEffect(() => {
     if (shouldFollowRef.current) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [activeConversationId, messages.length, messages.at(-1)?.content])
+  }, [activeConversationId, messages.length, messages[messages.length - 1]?.content])
   useEffect(() => {
     const reasoning = messages.find((message) => message.role === 'reasoning' && !message.reasoningDone)
     const element = reasoning ? reasoningContentRefs.current[reasoning.id] : undefined

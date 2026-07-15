@@ -200,6 +200,15 @@ const defaultWorkspace = {
             maxTokens: 2048,
             maxContextTokens: 128000,
         },
+        lightModel: {
+            enabled: false,
+            provider: 'OpenAI 兼容',
+            baseUrl: 'https://api.openai.com/v1',
+            apiKey: '',
+            model: 'gpt-4o-mini',
+            temperature: 0.3,
+            maxTokens: 512,
+        },
     },
 };
 const socketConnections = new Map();
@@ -360,6 +369,13 @@ function broadcastUpdateStatus(status) {
     for (const window of BrowserWindow.getAllWindows())
         window.webContents.send('update:status', status);
 }
+function formatUpdateError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/latest(?:-[a-z]+)?\.ya?ml/i.test(message) && /\b404\b|not found/i.test(message)) {
+        return '当前发布包缺少自动更新清单，请前往项目 Release 页面下载最新安装包';
+    }
+    return message || '检查更新失败';
+}
 async function checkForUpdates() {
     if (isDev) {
         broadcastUpdateStatus({ state: 'error', message: '开发模式下不检查更新' });
@@ -371,7 +387,7 @@ async function checkForUpdates() {
         return { ok: true };
     }
     catch (error) {
-        const message = error instanceof Error ? error.message : '检查更新失败';
+        const message = formatUpdateError(error);
         broadcastUpdateStatus({ state: 'error', message });
         return { ok: false, error: message };
     }
@@ -383,7 +399,7 @@ function setupAutoUpdater() {
     autoUpdater.on('update-not-available', () => broadcastUpdateStatus({ state: 'not-available' }));
     autoUpdater.on('download-progress', (progress) => broadcastUpdateStatus({ state: 'downloading', percent: progress.percent, transferred: progress.transferred, total: progress.total, bytesPerSecond: progress.bytesPerSecond }));
     autoUpdater.on('update-downloaded', (info) => broadcastUpdateStatus({ state: 'downloaded', version: info.version, percent: 100 }));
-    autoUpdater.on('error', (error) => broadcastUpdateStatus({ state: 'error', message: error.message }));
+    autoUpdater.on('error', (error) => broadcastUpdateStatus({ state: 'error', message: formatUpdateError(error) }));
 }
 function createWindow() {
     const iconPath = join(__dirname, isDev ? '../../../public/favicon.png' : '../../../dist/favicon.png');

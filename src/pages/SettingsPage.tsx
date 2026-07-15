@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
-import type { LargeModelConfig } from '@/shared/ipc-contracts'
+import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
 import type { UpdateStatus } from '@/shared/ipc-contracts'
 
 const themes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
@@ -19,12 +19,27 @@ const colorThemes: Array<{ id: Theme; name: string; description: string; icon: t
   { id: 'sunset', name: '落日橙', description: '温暖明快的橙色', icon: Sunset },
 ]
 
+const modelProviders = ['OpenAI 兼容', 'OpenAI', '通义千问', '智谱 AI', 'DeepSeek', 'Moonshot AI', 'Ollama', '自定义']
+const providerPresets: Record<string, { baseUrl: string; model: string }> = {
+  'OpenAI 兼容': { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  OpenAI: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  '通义千问': { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo' },
+  '智谱 AI': { baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-flash' },
+  DeepSeek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  'Moonshot AI': { baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+  Ollama: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
+}
+
+const defaultLargeModel: LargeModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false }
+const defaultLightModel: LightModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 }
+
 export default function SettingsPage() {
   const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
-  const { workspace, updateLargeModelConfig } = useWorkspaceStore()
+  const { workspace, updateLargeModelConfig, updateLightModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
-  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false })
+  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? defaultLargeModel)
+  const [lightModelConfig, setLightModelConfig] = useState<LightModelConfig>(workspace?.preferences.lightModel ?? defaultLightModel)
   const [showApiKey, setShowApiKey] = useState(false)
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
   const [appVersion, setAppVersion] = useState('')
@@ -32,6 +47,7 @@ export default function SettingsPage() {
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
   useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000, thinkingEnabled: workspace.preferences.largeModel.thinkingEnabled ?? false }) }, [workspace?.preferences.largeModel])
+  useEffect(() => { if (workspace?.preferences.lightModel) setLightModelConfig({ ...defaultLightModel, ...workspace.preferences.lightModel }) }, [workspace?.preferences.lightModel])
   useEffect(() => {
     void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)
     return window.desktopApi?.onUpdateStatus?.(setUpdateStatus)
@@ -46,6 +62,20 @@ export default function SettingsPage() {
     const next = { ...modelConfig, ...patch }
     setModelConfig(next)
     updateLargeModelConfig(next)
+  }
+
+  function updateLightConfig(patch: Partial<LightModelConfig>) {
+    const next = { ...lightModelConfig, ...patch }
+    setLightModelConfig(next)
+    updateLightModelConfig(next)
+  }
+
+  function selectLargeProvider(provider: string) {
+    updateModelConfig({ provider, ...(providerPresets[provider] ?? {}) })
+  }
+
+  function selectLightProvider(provider: string) {
+    updateLightConfig({ provider, ...(providerPresets[provider] ?? {}) })
   }
 
   function updateCustomColor(key: keyof ThemeConfig, value: string) {
@@ -120,13 +150,27 @@ export default function SettingsPage() {
         <div className="mb-4 flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用大模型</span><span className="mt-1 block text-[11px] text-zinc-500">用于智能生成、分析和辅助调试</span></span><input type="checkbox" checked={modelConfig.enabled} onChange={(event) => updateModelConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-violet-400" /></label>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {([['provider', '服务商', '例如：OpenAI、通义千问'], ['baseUrl', '接口地址', 'https://api.openai.com/v1'], ['model', '模型名称', 'gpt-4o-mini']] as Array<[keyof LargeModelConfig, string, string]>).map(([key, label, placeholder]) => <label key={key} className="text-xs text-zinc-400"><span className="mb-1 block">{label}</span><input value={String(modelConfig[key])} onChange={(event) => updateModelConfig({ [key]: event.target.value })} placeholder={placeholder} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>)}
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={modelConfig.provider} onChange={(event) => selectLargeProvider(event.target.value)} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
+          {([['baseUrl', '接口地址', 'https://api.openai.com/v1'], ['model', '模型名称', 'gpt-4o-mini']] as Array<[keyof LargeModelConfig, string, string]>).map(([key, label, placeholder]) => <label key={key} className="text-xs text-zinc-400"><span className="mb-1 block">{label}</span><input value={String(modelConfig[key])} onChange={(event) => updateModelConfig({ [key]: event.target.value })} placeholder={placeholder} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>)}
           <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-violet-400"><input type={showApiKey ? 'text' : 'password'} value={modelConfig.apiKey} onChange={(event) => updateModelConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!modelConfig.enabled} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showApiKey ? '隐藏 API Key' : '显示 API Key'}>{showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={modelConfig.temperature} onChange={(event) => updateModelConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大上下文 Token 数</span><input type="number" min="1" max="1000000" step="1" value={modelConfig.maxContextTokens} onChange={(event) => updateModelConfig({ maxContextTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
         </div>
         <label className="mt-4 flex items-center justify-between gap-4 border-t border-zinc-800 pt-4 text-xs text-zinc-300"><span><span className="block font-medium">开启思考模式</span><span className="mt-1 block text-[11px] text-zinc-500">向接口显式传递思考开关并实时展示推理内容，仅支持推理的模型生效</span></span><input type="checkbox" checked={modelConfig.thinkingEnabled ?? false} onChange={(event) => updateModelConfig({ thinkingEnabled: event.target.checked })} disabled={!modelConfig.enabled} className="h-4 w-4 accent-violet-400" /></label>
+      </section>
+      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-1 flex items-center gap-2"><Sparkles className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">轻量级大模型</h2></div>
+        <p className="mb-4 text-[11px] text-zinc-500">用于标题、摘要和内容等轻量生成任务，和 AI 工作台配置相互独立。</p>
+        <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用轻量模型</span><span className="mt-1 block text-[11px] text-zinc-500">优先使用低成本、低延迟模型</span></span><input type="checkbox" checked={lightModelConfig.enabled} onChange={(event) => updateLightConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-emerald-400" /></label>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">服务商</span><select value={lightModelConfig.provider} onChange={(event) => selectLightProvider(event.target.value)} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50">{modelProviders.map((provider) => <option key={provider} value={provider}>{provider}</option>)}</select></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">模型名称</span><input value={lightModelConfig.model} onChange={(event) => updateLightConfig({ model: event.target.value })} placeholder="gpt-4o-mini" disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400 sm:col-span-2"><span className="mb-1 block">接口地址</span><input value={lightModelConfig.baseUrl} onChange={(event) => updateLightConfig({ baseUrl: event.target.value })} placeholder="https://api.openai.com/v1" disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><input type={showApiKey ? 'text' : 'password'} value={lightModelConfig.apiKey} onChange={(event) => updateLightConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={lightModelConfig.temperature} onChange={(event) => updateLightConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="8192" step="1" value={lightModelConfig.maxTokens} onChange={(event) => updateLightConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
+        </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Clock3 className="h-4 w-4 text-amber-300" /><h2 className="text-sm font-medium">定时保存</h2></div>
