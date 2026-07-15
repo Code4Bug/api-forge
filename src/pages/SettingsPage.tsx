@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
@@ -33,6 +33,15 @@ const providerPresets: Record<string, { baseUrl: string; model: string }> = {
 const defaultLargeModel: LargeModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false }
 const defaultLightModel: LightModelConfig = { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.3, maxTokens: 512 }
 
+type SettingsCategory = 'appearance' | 'model' | 'workspace' | 'application'
+
+const settingsCategories: Array<{ id: SettingsCategory; name: string; description: string; icon: typeof Palette }> = [
+  { id: 'appearance', name: '外观与交互', description: '主题和视觉效果', icon: Palette },
+  { id: 'model', name: 'AI 模型', description: '大模型与轻量模型', icon: Bot },
+  { id: 'workspace', name: '工作区', description: '自动保存设置', icon: SlidersHorizontal },
+  { id: 'application', name: '应用', description: '版本与更新', icon: Download },
+]
+
 export default function SettingsPage() {
   const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
@@ -44,6 +53,7 @@ export default function SettingsPage() {
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
   useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000, thinkingEnabled: workspace.preferences.largeModel.thinkingEnabled ?? false }) }, [workspace?.preferences.largeModel])
@@ -101,12 +111,21 @@ export default function SettingsPage() {
     await window.desktopApi?.installUpdate()
   }
 
-  return <div className="flex h-full flex-col overflow-auto bg-[var(--app-bg)]">
+  return <div className="flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
     <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-4">
       <div><h1 className="text-sm font-semibold">系统设置</h1><p className="text-xs text-zinc-500">调整界面外观和工作区保存行为</p></div>
       <button onClick={saveNow} className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950"><Save className="h-3.5 w-3.5" />立即保存</button>
     </div>
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-5">
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <nav className="w-full shrink-0 border-b border-zinc-800 bg-zinc-950/20 p-2.5 md:w-44 md:border-b-0 md:border-r md:p-3" aria-label="设置分类">
+        <div className="mb-2 px-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">设置分类</div>
+        <div className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+          {settingsCategories.map(({ id, name, description, icon: Icon }) => <button key={id} type="button" onClick={() => setActiveCategory(id)} className={`flex min-w-[130px] items-center gap-2 rounded border px-2.5 py-2 text-left transition-colors md:min-w-0 ${activeCategory === id ? 'border-cyan-400/40 bg-cyan-400/10 text-zinc-100' : 'border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900/60 hover:text-zinc-200'}`}><Icon className={`h-3.5 w-3.5 shrink-0 ${activeCategory === id ? 'text-cyan-300' : 'text-zinc-500'}`} /><span className="min-w-0"><span className="block text-[11px] font-medium">{name}</span><span className="mt-0.5 block truncate text-[9px] text-zinc-500">{description}</span></span></button>)}
+        </div>
+      </nav>
+      <main className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-4xl space-y-6 p-5">
+      {activeCategory === 'appearance' && <>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Palette className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">主题设置</h2></div>
         <div className="mb-3 text-xs font-medium text-zinc-300">默认主题</div>
@@ -128,24 +147,11 @@ export default function SettingsPage() {
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-4 flex items-center gap-2"><Download className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">应用更新</h2></div>
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-300">
-          <span>当前版本 <strong className="ml-1 text-zinc-100">{appVersion ? `v${appVersion}` : '读取中'}</strong></span>
-          <button onClick={checkForUpdates} disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'} className="flex h-8 items-center gap-2 rounded border border-zinc-700 px-3 hover:border-cyan-400 hover:text-cyan-200 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${updateStatus.state === 'checking' ? 'animate-spin' : ''}`} />检查新版本</button>
-        </div>
-        <div className="mt-3 text-xs text-zinc-500">
-          {updateStatus.state === 'checking' && '正在检查更新...'}
-          {updateStatus.state === 'not-available' && <span className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />当前已是最新版本</span>}
-          {updateStatus.state === 'available' && <div className="flex flex-wrap items-center justify-between gap-3"><span>发现新版本 v{updateStatus.version}</span><button onClick={downloadUpdate} className="flex h-8 items-center gap-2 rounded bg-cyan-400 px-3 font-semibold text-zinc-950"><Download className="h-3.5 w-3.5" />下载更新</button></div>}
-          {updateStatus.state === 'downloading' && <div><div className="mb-2 flex justify-between"><span>正在下载更新</span><span>{Math.round(updateStatus.percent ?? 0)}%</span></div><div className="h-2 overflow-hidden rounded bg-zinc-800"><div className="h-full bg-cyan-400 transition-[width]" style={{ width: `${Math.min(100, Math.max(0, updateStatus.percent ?? 0))}%` }} /></div></div>}
-          {updateStatus.state === 'downloaded' && <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-emerald-300">更新已下载，重启后安装</span><button onClick={installUpdate} className="flex h-8 items-center gap-2 rounded bg-emerald-400 px-3 font-semibold text-zinc-950">立即安装</button></div>}
-          {updateStatus.state === 'error' && <span className="flex items-center gap-2 text-rose-300"><AlertCircle className="h-3.5 w-3.5" />{updateStatus.message ?? '更新失败'}</span>}
-        </div>
-      </section>
-      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-4 flex items-center gap-2"><Sparkles className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">交互效果</h2></div>
+        <div className="mb-4 flex items-center gap-2"><MousePointer2 className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">交互效果</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用光标马赛克光晕</span><span className="mt-1 block text-[11px] text-zinc-500">在光标附近显示跟随移动的像素光晕</span></span><input type="checkbox" checked={cursorGlowEnabled} onChange={(event) => updateCursorGlow(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label>
       </section>
+      </>}
+      {activeCategory === 'model' && <>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用大模型</span><span className="mt-1 block text-[11px] text-zinc-500">用于智能生成、分析和辅助调试</span></span><input type="checkbox" checked={modelConfig.enabled} onChange={(event) => updateModelConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-violet-400" /></label>
@@ -172,11 +178,19 @@ export default function SettingsPage() {
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="8192" step="1" value={lightModelConfig.maxTokens} onChange={(event) => updateLightConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!lightModelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-50" /></label>
         </div>
       </section>
-      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+      </>}
+      {activeCategory === 'workspace' && <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Clock3 className="h-4 w-4 text-amber-300" /><h2 className="text-sm font-medium">定时保存</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">自动保存工作区</span><span className="mt-1 block text-[11px] text-zinc-500">按固定间隔保存接口、环境变量和历史记录</span></span><input type="checkbox" checked={autoSaveEnabled} onChange={(event) => setAutoSaveSettings(event.target.checked, autoSaveInterval)} className="h-4 w-4 accent-cyan-400" /></label>
         <label className="mt-4 flex items-center justify-between gap-4 text-xs text-zinc-400">保存间隔<select disabled={!autoSaveEnabled} value={autoSaveInterval} onChange={(event) => setAutoSaveSettings(autoSaveEnabled, Number(event.target.value))} className="h-9 w-36 rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200"><option value={30}>每 30 秒</option><option value={60}>每 1 分钟</option><option value={300}>每 5 分钟</option><option value={900}>每 15 分钟</option></select></label>
-      </section>
+      </section>}
+      {activeCategory === 'application' && <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-4 flex items-center gap-2"><Download className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">应用更新</h2></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-300"><span>当前版本 <strong className="ml-1 text-zinc-100">{appVersion ? `v${appVersion}` : '读取中'}</strong></span><button onClick={checkForUpdates} disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'} className="flex h-8 items-center gap-2 rounded border border-zinc-700 px-3 hover:border-cyan-400 hover:text-cyan-200 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${updateStatus.state === 'checking' ? 'animate-spin' : ''}`} />检查新版本</button></div>
+        <div className="mt-3 text-xs text-zinc-500">{updateStatus.state === 'checking' && '正在检查更新...'}{updateStatus.state === 'not-available' && <span className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />当前已是最新版本</span>}{updateStatus.state === 'available' && <div className="flex flex-wrap items-center justify-between gap-3"><span>发现新版本 v{updateStatus.version}</span><button onClick={downloadUpdate} className="flex h-8 items-center gap-2 rounded bg-cyan-400 px-3 font-semibold text-zinc-950"><Download className="h-3.5 w-3.5" />下载更新</button></div>}{updateStatus.state === 'downloading' && <div><div className="mb-2 flex justify-between"><span>正在下载更新</span><span>{Math.round(updateStatus.percent ?? 0)}%</span></div><div className="h-2 overflow-hidden rounded bg-zinc-800"><div className="h-full bg-cyan-400 transition-[width]" style={{ width: `${Math.min(100, Math.max(0, updateStatus.percent ?? 0))}%` }} /></div></div>}{updateStatus.state === 'downloaded' && <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-emerald-300">更新已下载，重启后安装</span><button onClick={installUpdate} className="flex h-8 items-center gap-2 rounded bg-emerald-400 px-3 font-semibold text-zinc-950">立即安装</button></div>}{updateStatus.state === 'error' && <span className="flex items-center gap-2 text-rose-300"><AlertCircle className="h-3.5 w-3.5" />{updateStatus.message ?? '更新失败'}</span>}</div>
+      </section>}
+        </div>
+      </main>
     </div>
   </div>
 }

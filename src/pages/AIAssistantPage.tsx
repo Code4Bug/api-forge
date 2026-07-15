@@ -6,11 +6,11 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 
 type Message = { id: string; role: 'user' | 'assistant' | 'reasoning' | 'tool'; content: string; tool?: string; reasoningDone?: boolean }
 type Conversation = { id: string; title: string; messages: Message[]; updatedAt: string }
-type ToolName = 'list_directories' | 'get_directory' | 'create_directory' | 'edit_directory' | 'delete_directory' | 'list_apis' | 'create_api' | 'edit_api' | 'delete_api' | 'get_app_version' | 'get_usage_help'
+type ToolName = 'list_directories' | 'get_directory' | 'create_directory' | 'edit_directory' | 'delete_directory' | 'list_apis' | 'get_api_details' | 'create_api' | 'edit_api' | 'delete_api' | 'get_app_version' | 'get_usage_help'
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>; tool_call_id?: string; name?: string }
 
-const toolLabels: Record<ToolName, string> = { list_directories: '列出目录', get_directory: '查询目录', create_directory: '新增目录', edit_directory: '修改目录', delete_directory: '删除目录', list_apis: '列出接口', create_api: '新增接口', edit_api: '编辑接口', delete_api: '删除接口', get_app_version: '获取应用版本', get_usage_help: '获取使用说明' }
-const toolDefinitions = Object.entries(toolLabels).map(([name, description]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties: name === 'create_directory' ? { name: { type: 'string' }, parentId: { type: 'string' } } : name === 'edit_directory' ? { id: { type: 'string' }, name: { type: 'string' } } : name === 'create_api' ? { name: { type: 'string' }, parentId: { type: 'string' }, protocol: { type: 'string', enum: ['http', 'websocket', 'socket'] }, method: { type: 'string' }, url: { type: 'string' }, headers: { type: 'array' }, body: { type: 'string' } } : name === 'edit_api' ? { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, method: { type: 'string' }, body: { type: 'string' } } : name === 'delete_api' || name === 'list_directories' || name === 'get_directory' || name === 'delete_directory' || name === 'list_apis' ? { id: { type: 'string' } } : {}, required: name === 'create_directory' || name === 'create_api' ? ['name'] : name === 'get_directory' || name === 'edit_directory' || name === 'delete_directory' ? ['id'] : [] } } }))
+const toolLabels: Record<ToolName, string> = { list_directories: '列出目录', get_directory: '查询目录', create_directory: '新增目录', edit_directory: '修改目录', delete_directory: '删除目录', list_apis: '列出接口', get_api_details: '查看接口详情', create_api: '新增接口', edit_api: '编辑接口', delete_api: '删除接口', get_app_version: '获取应用版本', get_usage_help: '获取使用说明' }
+const toolDefinitions = Object.entries(toolLabels).map(([name, description]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties: name === 'create_directory' ? { name: { type: 'string' }, parentId: { type: 'string' } } : name === 'edit_directory' ? { id: { type: 'string' }, name: { type: 'string' } } : name === 'create_api' ? { name: { type: 'string' }, parentId: { type: 'string' }, protocol: { type: 'string', enum: ['http', 'websocket', 'socket'] }, method: { type: 'string' }, url: { type: 'string' }, headers: { type: 'array' }, body: { type: 'string' } } : name === 'edit_api' ? { id: { type: 'string' }, name: { type: 'string' }, url: { type: 'string' }, method: { type: 'string' }, body: { type: 'string' } } : name === 'delete_api' || name === 'list_directories' || name === 'get_directory' || name === 'delete_directory' || name === 'list_apis' || name === 'get_api_details' ? { id: { type: 'string' } } : {}, required: name === 'create_directory' || name === 'create_api' ? ['name'] : name === 'get_directory' || name === 'edit_directory' || name === 'delete_directory' || name === 'get_api_details' ? ['id'] : [] } } }))
 
 function flatten(nodes: ApiTreeNode[]): ApiTreeNode[] { return nodes.flatMap((node) => [node, ...(node.children ? flatten(node.children) : [])]) }
 function json(value: unknown) { return JSON.stringify(value, null, 2) }
@@ -178,7 +178,7 @@ export default function AIAssistantPage() {
 - WebSocket：打开 WebSocket 接口后连接、发送消息并查看帧日志。
 - TCP/UDP：在 Socket 页面填写主机和端口，连接后发送文本或 Hex 报文。
 - 请求历史：底部或历史页面可查看请求结果，并恢复请求配置。
-- AI 工具：可查询、新增、修改和删除目录，也可列出、创建或编辑接口；删除操作必须先征得用户确认。
+- AI 工具：可查询、新增、修改和删除目录，也可列出、查看详情、创建或编辑接口；删除操作必须先征得用户确认。
 - 应用更新：系统设置中检查、下载并安装新版本。`
     if (!workspace) return '工作区尚未加载'
     if (name === 'list_directories') return json(nodes.filter((n) => n.type === 'folder').map(({ id, name, parentId, children }) => ({ id, name, parentId, childCount: children?.length ?? 0 })))
@@ -214,6 +214,27 @@ export default function AIAssistantPage() {
       return `已删除目录 ${directory.name}`
     }
     if (name === 'list_apis') return json(nodes.filter((n) => n.type === 'api').map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })))
+    if (name === 'get_api_details') {
+      const id = String(args.id || '')
+      const api = nodes.find((item) => item.id === id && item.type === 'api')
+      if (!api) return `未找到接口 ${id}`
+      const request = workspace.requests.find((item) => item.id === id)
+      return json({
+        id: api.id,
+        name: api.name,
+        parentId: api.parentId,
+        protocol: request?.protocol ?? api.protocol,
+        method: request?.method ?? api.method,
+        description: request?.description,
+        url: request?.url ?? '',
+        params: request?.params ?? [],
+        headers: request?.headers ?? [],
+        body: request?.body,
+        bodyType: request?.bodyType,
+        formFields: request?.formFields,
+        updatedAt: request?.updatedAt,
+      })
+    }
     if (name === 'create_api') {
       const rawHeaders = args.headers && typeof args.headers === 'object' ? args.headers : {}
       const headers = Array.isArray(rawHeaders)
