@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
     "name": "Code4Bug",
