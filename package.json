@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
     "name": "Code4Bug",
@@ -18,12 +18,12 @@
     "test": "npm run check",
     "preview": "vite preview",
     "check": "tsc -b --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "build:mac": "npm run build && electron-builder --mac",
-    "build:win": "npm run build && electron-builder --win --x64",
-    "build:win:x64": "npm run build && electron-builder --win --x64",
-    "build:linux": "npm run build && electron-builder --linux --x64",
-    "build:linux:x64": "npm run build && electron-builder --linux --x64",
-    "build:all": "npm run build && electron-builder --mac --win --linux"
+    "build:mac": "npm run build && electron-builder --mac --publish never",
+    "build:win": "npm run build && electron-builder --win --x64 --publish never",
+    "build:win:x64": "npm run build && electron-builder --win --x64 --publish never",
+    "build:linux": "npm run build && electron-builder --linux --x64 --publish never",
+    "build:linux:x64": "npm run build && electron-builder --linux --x64 --publish never",
+    "build:all": "npm run build && electron-builder --mac --win --linux --publish never"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
