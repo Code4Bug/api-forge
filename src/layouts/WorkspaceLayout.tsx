@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette } from 'lucide-react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
@@ -175,8 +175,11 @@ export function WorkspaceLayout() {
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const statusContent = saveStatusContent[saveStatus]
   const SaveStatusIcon = statusContent.icon
+  const modelConfig = workspace?.preferences.largeModel
+  const aiReady = Boolean(modelConfig?.enabled && modelConfig.baseUrl.trim() && modelConfig.model.trim())
 
   useEffect(() => {
     localStorage.setItem('sidebarWidth', String(sidebarWidth))
@@ -232,11 +235,18 @@ export function WorkspaceLayout() {
     function handleShortcut(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
+        if (location.pathname === '/settings') {
+          window.dispatchEvent(new CustomEvent('api-forge:save-settings'))
+          return
+        }
+        const isApiDetail = ['/http', '/websocket', '/socket'].includes(location.pathname)
         const activeNode = findApiNode(workspace?.apiTree ?? [], activeApiId)
-        if (activeNode?.type === 'api' && activeNode.name.trim()) {
+        if (isApiDetail && activeNode?.type === 'api' && activeNode.name.trim()) {
           window.dispatchEvent(new CustomEvent('api-forge:save-request'))
-        } else {
+        } else if (isApiDetail) {
           openDialog({ mode: 'api', parentId: activeNode?.parentId })
+        } else {
+          saveNow()
         }
       }
     }
@@ -254,7 +264,7 @@ export function WorkspaceLayout() {
       window.removeEventListener('keydown', handleShortcut)
       window.removeEventListener('api-forge:new-api', handleNewApi)
     }
-  }, [activeApiId, workspace])
+  }, [activeApiId, location.pathname, saveNow, workspace])
 
   const apiNodes = workspace ? flattenApiNodes(workspace.apiTree) : []
   const openApis = apiNodes.filter((node) => openApiIds.includes(node.id))
@@ -387,12 +397,12 @@ export function WorkspaceLayout() {
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-[#0b0f14] text-zinc-100">
       <aside className={`relative flex shrink-0 flex-col border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? 'select-none' : 'transition-[width] duration-150'}`} style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}>
-        <div className={`flex h-14 items-center border-b border-zinc-800 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
-          {!sidebarCollapsed && <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-cyan-400/15">
+        <div className={`api-forge-brand flex h-14 items-center border-b border-zinc-800 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
+          {!sidebarCollapsed && <div className="api-forge-brand-mark flex h-8 w-8 shrink-0 items-center justify-center rounded bg-cyan-400/15">
             <img src={isDark ? lightLogo : logo} alt="API-forge" className="h-6 w-6" />
           </div>}
           {!sidebarCollapsed && <div className="min-w-0">
-            <div className="text-sm font-semibold">API-forge</div>
+            <div className="api-forge-brand-name text-sm font-semibold">API-forge</div>
             <div className="text-[11px] text-zinc-500">Local API Workspace</div>
           </div>}
           <button onClick={() => setSidebarCollapsed((value) => !value)} className={sidebarCollapsed ? 'rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100' : 'ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}>
@@ -473,6 +483,9 @@ export function WorkspaceLayout() {
             </div>
             <NavLink to="/history" className="flex h-9 w-10 items-center justify-center rounded px-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="历史">
               <History className="h-3.5 w-3.5" />
+            </NavLink>
+            <NavLink to={aiReady ? '/ai' : '/settings'} aria-disabled={!aiReady} onClick={(event) => { if (!aiReady) event.preventDefault() }} className={`flex h-9 w-10 items-center justify-center rounded px-2 ${aiReady ? 'text-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-200' : 'cursor-not-allowed text-zinc-600'}`} title={aiReady ? 'AI 助手' : 'AI 助手未配置，请先完成大模型配置'}>
+              <Sparkles className="h-3.5 w-3.5" />
             </NavLink>
           </div>
         </header>

@@ -83,7 +83,7 @@ const fallbackWorkspace: WorkspaceSnapshot = {
     activeApiId: undefined,
     openApiIds: [],
     theme: 'dark',
-    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048 },
+    largeModel: { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000 },
   },
 }
 
@@ -169,6 +169,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   autoSaveInterval: Number(localStorage.getItem('autoSaveInterval') ?? 60),
   loadWorkspace: async () => {
     const workspace = window.desktopApi ? await window.desktopApi.loadWorkspace() : fallbackWorkspace
+    if (workspace.preferences.largeModel && !Number.isFinite(workspace.preferences.largeModel.maxContextTokens)) {
+      workspace.preferences.largeModel = { ...workspace.preferences.largeModel, maxContextTokens: 128000 }
+    }
     set({
       workspace,
       activeProtocol: workspace.preferences.activeProtocol,

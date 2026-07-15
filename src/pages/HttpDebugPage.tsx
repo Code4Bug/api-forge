@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { Check, Copy, LoaderCircle, Plus, Save, Send, Trash2 } from 'lucide-react'
+import { Check, Copy, LoaderCircle, Plus, Save, Send, Square, Trash2 } from 'lucide-react'
 import { StatusPill } from '@/components/common/StatusPill'
 import { VariableInput } from '@/components/common/VariableInput'
 import { replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
@@ -434,17 +434,20 @@ export default function HttpDebugPage() {
     setStreamBody('')
     setStreamSse(false)
     setSseDisplayMode('stream')
-    requestIdRef.current = crypto.randomUUID()
+    const requestId = crypto.randomUUID()
+    requestIdRef.current = requestId
     try {
       const response = await window.desktopApi.httpSend({
-        requestId: requestIdRef.current,
+        requestId,
         method,
         url: nextUrl.toString().replace('http://localhost', ''),
         params: activeParams,
         headers,
         body: method === 'GET' || method === 'HEAD' ? undefined : buildRequestBody(),
       })
+      if (requestIdRef.current !== requestId) return
       setResult(response)
+      if (response.ok === false && response.error.code === 'CANCELED') return
       if (assertion.trim()) {
         const expression = replaceEnvironmentVariables(assertion.trim(), variables)
         try {
@@ -482,6 +485,15 @@ export default function HttpDebugPage() {
     }
   }
 
+  function stopRequest() {
+    const requestId = requestIdRef.current
+    if (!requestId) return
+    requestIdRef.current = ''
+    setLoading(false)
+    setInputError('请求已中断')
+    void window.desktopApi?.httpCancel(requestId)
+  }
+
   const responseBody = streamBody || (result && result.ok ? result.body : result && 'error' in result ? result.error.message : undefined)
   const errorCode = result && 'error' in result ? result.error.code : undefined
   const responseContentType = result?.ok ? (result.headers['content-type'] ?? '') : ''
@@ -504,9 +516,9 @@ export default function HttpDebugPage() {
           <div className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-[180px]">
             <VariableInput value={url} variables={variables} onChange={setUrl} placeholder="输入请求地址，例如 {{base_url}}/api" className="h-9 w-full rounded border border-zinc-700 bg-transparent px-3 text-sm text-zinc-100 caret-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/60" />
           </div>
-          <button onClick={sendRequest} disabled={loading} className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-60">
-            {loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            {loading ? '发送中' : '发送'}
+          <button onClick={loading ? stopRequest : sendRequest} disabled={!loading && !available} className={`flex h-9 items-center gap-2 rounded px-4 text-xs font-semibold text-zinc-950 disabled:opacity-60 ${loading ? 'bg-rose-400 hover:bg-rose-300' : 'bg-cyan-400 hover:bg-cyan-300'}`}>
+            {loading ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
+            {loading ? '停止' : '发送'}
           </button>
           <button onClick={saveCurrentRequest} disabled={!activeApiId} title={activeApiId ? '保存当前 API' : '请先从左侧打开一个 API'} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"><Save className="h-3.5 w-3.5" />{saveMessage || '保存'}</button>
         </div>

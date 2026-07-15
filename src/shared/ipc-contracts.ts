@@ -83,6 +83,7 @@ export interface LargeModelConfig {
   model: string
   temperature: number
   maxTokens: number
+  maxContextTokens: number
 }
 
 export interface WorkspaceSnapshot {
@@ -129,7 +130,7 @@ export interface HttpSendResponse {
 export interface HttpSendError {
   ok: false
   error: {
-    code: 'NETWORK_ERROR' | 'TIMEOUT' | 'INVALID_REQUEST' | 'UNKNOWN_ERROR'
+    code: 'NETWORK_ERROR' | 'TIMEOUT' | 'CANCELED' | 'INVALID_REQUEST' | 'UNKNOWN_ERROR'
     message: string
   }
 }
@@ -160,6 +161,7 @@ export interface DesktopApi {
   saveWorkspace: (workspace: WorkspaceSnapshot) => Promise<{ ok: true }>
   saveHistory: (history: RequestHistoryItem[]) => Promise<{ ok: true }>
   httpSend: (request: HttpSendRequest) => Promise<HttpSendResult>
+  httpCancel: (requestId: string) => Promise<{ ok: true }>
   socketConnect: (request: SocketConnectRequest) => Promise<SocketResult>
   socketSend: (request: SocketSendRequest) => Promise<SocketResult>
   socketClose: (connectionId: string) => Promise<SocketResult>

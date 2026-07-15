@@ -192,11 +192,14 @@ const defaultWorkspace: WorkspaceSnapshot = {
       model: 'gpt-4o-mini',
       temperature: 0.7,
       maxTokens: 2048,
+      maxContextTokens: 128000,
     },
   },
 }
 
 const socketConnections = new Map<string, net.Socket | dgram.Socket>()
+const httpControllers = new Map<string, AbortController>()
+const canceledHttpRequests = new Set<string>()
 function emitSocket(event: Electron.IpcMainInvokeEvent, payload: { connectionId: string; type: 'open' | 'data' | 'close' | 'error'; data?: string; hex?: string; error?: string }) {
   event.sender.send('socket:event', payload)
 }
@@ -456,6 +459,10 @@ ipcMain.handle('http:send', async (event, request) => {
   }
 
   const controller = new AbortController()
+  if (request.requestId) {
+    httpControllers.set(request.requestId, controller)
+    if (canceledHttpRequests.has(request.requestId)) controller.abort()
+  }
   const timer = setTimeout(() => controller.abort(), timeout)
 
   try {
@@ -471,6 +478,7 @@ ipcMain.handle('http:send', async (event, request) => {
     let body = ''
     if (response.body) {
       const reader = response.body.getReader()
+      controller.signal.addEventListener('abort', () => { void reader.cancel().catch(() => undefined) }, { once: true })
       const decoder = new TextDecoder()
       while (true) {
         const { done, value } = await reader.read()
@@ -495,18 +503,22 @@ ipcMain.handle('http:send', async (event, request) => {
       sizeBytes,
     }
   } catch (error) {
-    const isTimeout = controller.signal.aborted
+    const isCanceled = Boolean(request.requestId && canceledHttpRequests.has(request.requestId))
+    const isTimeout = controller.signal.aborted && !isCanceled
+    if (request.requestId) canceledHttpRequests.delete(request.requestId)
     return {
       ok: false,
       error: {
-        code: isTimeout ? 'TIMEOUT' : error instanceof TypeError ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR',
-        message: isTimeout ? `Request timed out after ${timeout}ms` : error instanceof Error ? error.message : 'HTTP request failed',
+        code: isCanceled ? 'CANCELED' : isTimeout ? 'TIMEOUT' : error instanceof TypeError ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR',
+        message: isCanceled ? '请求已中断' : isTimeout ? `Request timed out after ${timeout}ms` : error instanceof Error ? error.message : 'HTTP request failed',
       },
     }
   } finally {
     clearTimeout(timer)
+    if (request.requestId) httpControllers.delete(request.requestId)
   }
 })
+ipcMain.handle('http:cancel', (_event, requestId: string) => { canceledHttpRequests.add(requestId); httpControllers.get(requestId)?.abort(); return { ok: true } })
 
 app.whenReady().then(() => {
   app.setName('API-forge')

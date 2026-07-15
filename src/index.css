@@ -2,6 +2,173 @@
 @tailwind components;
 @tailwind utilities;
 
+.ai-message {
+  width: fit-content;
+  max-width: min(82vw, 760px);
+  border: 1px solid var(--app-border);
+  border-radius: .5rem;
+  padding: .75rem 1rem;
+  font-size: .75rem;
+  line-height: 1.25rem;
+}
+
+.ai-message-user {
+  border-color: rgba(8, 145, 178, .42);
+  background: rgba(207, 250, 254, .85);
+  color: #164e63;
+}
+
+.ai-message-assistant {
+  border-color: var(--app-border);
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+.ai-message-tool {
+  border-color: rgba(245, 158, 11, .3);
+  background: rgba(245, 158, 11, .06);
+  color: #b45309;
+}
+
+html:not(.light) .ai-message-user { color: #cffafe; background: rgba(34, 211, 238, .1); }
+html:not(.light) .ai-message-tool { color: #fcd34d; }
+.ai-markdown { color: inherit; }
+
+.ai-tool-panel {
+  width: fit-content;
+  max-width: min(82vw, 760px);
+  overflow: hidden;
+  border: 1px solid rgba(245, 158, 11, .35);
+  border-radius: .5rem;
+  background: rgba(245, 158, 11, .05);
+}
+
+.ai-tool-toggle {
+  display: flex;
+  width: 100%;
+  min-width: 190px;
+  align-items: center;
+  gap: .5rem;
+  padding: .65rem .85rem;
+  color: #fbbf24;
+  font-size: .75rem;
+  text-align: left;
+}
+
+.ai-tool-toggle:hover { background: rgba(245, 158, 11, .1); }
+.ai-tool-detail {
+  max-height: 18rem;
+  overflow: auto;
+  border-top: 1px solid rgba(245, 158, 11, .25);
+  background: rgba(0, 0, 0, .2);
+  padding: .75rem .85rem;
+  color: #fcd34d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .6875rem;
+  line-height: 1.35rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+html.light .ai-tool-panel { background: rgba(255, 247, 237, .9); border-color: rgba(217, 119, 6, .32); }
+html.light .ai-tool-toggle { color: #92400e; }
+html.light .ai-tool-detail { background: rgba(255, 251, 235, .96); color: #92400e; border-color: rgba(217, 119, 6, .25); }
+
+/* 光标附近的像素化光晕，仅作为背景反馈，不参与交互。 */
+.cursor-mosaic-glow {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 240px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(calc(var(--cursor-x) - 120px), calc(var(--cursor-y) - 120px), 0);
+  transition: opacity 260ms ease;
+  background-image:
+    radial-gradient(circle at center, rgba(50, 240, 140, .13) 0 9%, rgba(66, 217, 255, .08) 24%, transparent 66%),
+    linear-gradient(rgba(66, 217, 255, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(50, 240, 140, .06) 1px, transparent 1px);
+  background-size: 100% 100%, 12px 12px, 12px 12px;
+  mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
+  -webkit-mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
+  mix-blend-mode: screen;
+}
+
+.cursor-mosaic-glow[data-visible="true"] {
+  opacity: 1;
+}
+
+/* 浅色背景改用深色青蓝光，避免 screen 混合后与白底失去对比。 */
+html.light .cursor-mosaic-glow {
+  background-image:
+    radial-gradient(circle at center, rgba(8, 145, 178, .2) 0 9%, rgba(37, 99, 235, .12) 24%, transparent 66%),
+    linear-gradient(rgba(8, 145, 178, .14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, .12) 1px, transparent 1px);
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor-mosaic-glow {
+    display: none;
+  }
+}
+
+/* 品牌区轻量反馈：悬停时扫过一次，保持工具界面的克制感。 */
+.api-forge-brand {
+  position: relative;
+  overflow: hidden;
+}
+
+.api-forge-brand::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -36%;
+  width: 22%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(66, 217, 255, .16), rgba(50, 240, 140, .2), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+}
+
+.api-forge-brand:hover::after {
+  animation: api-forge-scan 720ms cubic-bezier(.22, .61, .36, 1) both;
+}
+
+.api-forge-brand-mark {
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.api-forge-brand:hover .api-forge-brand-mark {
+  filter: drop-shadow(0 0 7px rgba(50, 240, 140, .3));
+  transform: translateY(-1px);
+}
+
+@keyframes api-forge-scan {
+  0% { left: -36%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 122%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .api-forge-brand:hover::after {
+    animation: none;
+  }
+
+  .api-forge-brand-mark {
+    transition: none;
+  }
+
+  .api-forge-brand:hover .api-forge-brand-mark {
+    filter: none;
+    transform: none;
+  }
+}
+
 :root {
   --app-bg: #050505;
   --app-surface: #0b0b0b;

@@ -7,6 +7,7 @@ const desktopApi: DesktopApi = {
   saveWorkspace: (workspace: WorkspaceSnapshot) => ipcRenderer.invoke('workspace:save', workspace),
   saveHistory: (history: RequestHistoryItem[]) => ipcRenderer.invoke('history:save', history),
   httpSend: (request: HttpSendRequest) => ipcRenderer.invoke('http:send', request),
+  httpCancel: (requestId: string) => ipcRenderer.invoke('http:cancel', requestId),
   socketConnect: (request: SocketConnectRequest) => ipcRenderer.invoke('socket:connect', request),
   socketSend: (request: SocketSendRequest) => ipcRenderer.invoke('socket:send', request),
   socketClose: (connectionId: string) => ipcRenderer.invoke('socket:close', connectionId),

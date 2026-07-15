@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig } from '@/shared/ipc-contracts'
@@ -23,11 +23,17 @@ export default function SettingsPage() {
   const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
   const { workspace, updateLargeModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
-  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048 })
+  const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000 })
   const [showApiKey, setShowApiKey] = useState(false)
+  const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
-  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig(workspace.preferences.largeModel) }, [workspace?.preferences.largeModel])
+  useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000 }) }, [workspace?.preferences.largeModel])
+  useEffect(() => {
+    const handleSaveSettings = () => saveNow()
+    window.addEventListener('api-forge:save-settings', handleSaveSettings)
+    return () => window.removeEventListener('api-forge:save-settings', handleSaveSettings)
+  }, [saveNow])
 
   function updateModelConfig(patch: Partial<LargeModelConfig>) {
     const next = { ...modelConfig, ...patch }
@@ -37,6 +43,12 @@ export default function SettingsPage() {
 
   function updateCustomColor(key: keyof ThemeConfig, value: string) {
     setCustomColors((current) => ({ ...current, [key]: value }))
+  }
+
+  function updateCursorGlow(enabled: boolean) {
+    setCursorGlowEnabled(enabled)
+    localStorage.setItem('cursorMosaicGlow', String(enabled))
+    window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
   }
 
   return <div className="flex h-full flex-col overflow-auto bg-[var(--app-bg)]">
@@ -66,6 +78,10 @@ export default function SettingsPage() {
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-4 flex items-center gap-2"><Sparkles className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">交互效果</h2></div>
+        <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用光标马赛克光晕</span><span className="mt-1 block text-[11px] text-zinc-500">在光标附近显示跟随移动的像素光晕</span></span><input type="checkbox" checked={cursorGlowEnabled} onChange={(event) => updateCursorGlow(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label>
+      </section>
+      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用大模型</span><span className="mt-1 block text-[11px] text-zinc-500">用于智能生成、分析和辅助调试</span></span><input type="checkbox" checked={modelConfig.enabled} onChange={(event) => updateModelConfig({ enabled: event.target.checked })} className="h-4 w-4 accent-violet-400" /></label>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -73,6 +89,7 @@ export default function SettingsPage() {
           <label className="text-xs text-zinc-400"><span className="mb-1 block">API Key</span><span className="flex h-9 items-center rounded border border-zinc-700 bg-zinc-950 focus-within:border-violet-400"><input type={showApiKey ? 'text' : 'password'} value={modelConfig.apiKey} onChange={(event) => updateModelConfig({ apiKey: event.target.value })} placeholder="sk-..." disabled={!modelConfig.enabled} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-zinc-200 outline-none disabled:opacity-50" /><button type="button" onClick={() => setShowApiKey((value) => !value)} className="p-2 text-zinc-500 hover:text-zinc-200" title={showApiKey ? '隐藏 API Key' : '显示 API Key'}>{showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button></span></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">温度（0-2）</span><input type="number" min="0" max="2" step="0.1" value={modelConfig.temperature} onChange={(event) => updateModelConfig({ temperature: Math.min(2, Math.max(0, Number(event.target.value))) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
           <label className="text-xs text-zinc-400"><span className="mb-1 block">最大 Token 数</span><input type="number" min="1" max="128000" step="1" value={modelConfig.maxTokens} onChange={(event) => updateModelConfig({ maxTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">最大上下文 Token 数</span><input type="number" min="1" max="1000000" step="1" value={modelConfig.maxContextTokens} onChange={(event) => updateModelConfig({ maxContextTokens: Math.max(1, Number(event.target.value)) })} disabled={!modelConfig.enabled} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-violet-400 disabled:opacity-50" /></label>
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
