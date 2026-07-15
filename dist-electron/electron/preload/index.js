@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 const desktopApi = {
     getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+    checkForUpdates: () => ipcRenderer.invoke('update:check'),
+    downloadUpdate: () => ipcRenderer.invoke('update:download'),
+    installUpdate: () => ipcRenderer.invoke('update:install'),
+    onUpdateStatus: (listener) => {
+        const handler = (_event, status) => listener(status);
+        ipcRenderer.on('update:status', handler);
+        return () => ipcRenderer.removeListener('update:status', handler);
+    },
     loadWorkspace: () => ipcRenderer.invoke('workspace:load'),
     saveWorkspace: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
     saveHistory: (history) => ipcRenderer.invoke('history:save', history),

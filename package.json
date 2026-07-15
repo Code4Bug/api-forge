@@ -28,6 +28,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.511.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -64,7 +65,11 @@
     "directories": {
       "output": "release"
     },
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "Code4Bug",
+      "repo": "api-forge"
+    },
     "icon": "public/favicon.png",
     "files": [
       "dist/**/*",

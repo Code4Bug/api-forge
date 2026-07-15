@@ -79,6 +79,8 @@ jobs:
             -iname '*.exe' -o \
             -iname '*.appimage' -o \
             -iname '*.deb' \
+            -o -iname 'latest*.yml' -o \
+            -iname 'latest*.yaml' \
           \) -exec cp {} release-files/ \;
           test -n "$(find release-files -type f -print -quit)"
 

@@ -102,6 +102,16 @@ export interface AppInfo {
   platform: string
 }
 
+export interface UpdateStatus {
+  state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  percent?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
+  message?: string
+}
+
 export interface HttpFieldItem {
   id?: string
   key: string
@@ -158,6 +168,10 @@ export type SocketResult = { ok: true } | { ok: false; error: string }
 
 export interface DesktopApi {
   getAppInfo: () => Promise<AppInfo>
+  checkForUpdates: () => Promise<{ ok: true } | { ok: false; error: string }>
+  downloadUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>
+  installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>
+  onUpdateStatus?: (listener: (status: UpdateStatus) => void) => () => void
   loadWorkspace: () => Promise<WorkspaceSnapshot>
   saveWorkspace: (workspace: WorkspaceSnapshot) => Promise<{ ok: true }>
   saveHistory: (history: RequestHistoryItem[]) => Promise<{ ok: true }>

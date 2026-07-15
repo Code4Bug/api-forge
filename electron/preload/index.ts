@@ -1,8 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest } from '../../src/shared/ipc-contracts.js'
+import type { DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
 
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status)
+    ipcRenderer.on('update:status', handler)
+    return () => ipcRenderer.removeListener('update:status', handler)
+  },
   loadWorkspace: () => ipcRenderer.invoke('workspace:load'),
   saveWorkspace: (workspace: WorkspaceSnapshot) => ipcRenderer.invoke('workspace:save', workspace),
   saveHistory: (history: RequestHistoryItem[]) => ipcRenderer.invoke('history:save', history),

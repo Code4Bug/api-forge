@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -6,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
-import type { RequestHistoryItem, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import type { DesktopApi, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
@@ -356,10 +357,44 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
     },
     {
       label: '帮助',
-      submenu: [{ label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') }],
+      submenu: [
+        { label: '检查新版本', click: () => { void checkForUpdates() } },
+        { type: 'separator' },
+        { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },
+      ],
     },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+function broadcastUpdateStatus(status: UpdateStatus) {
+  for (const window of BrowserWindow.getAllWindows()) window.webContents.send('update:status', status)
+}
+
+async function checkForUpdates() {
+  if (isDev) {
+    broadcastUpdateStatus({ state: 'error', message: '开发模式下不检查更新' })
+    return { ok: false as const, error: '开发模式下不检查更新' }
+  }
+  broadcastUpdateStatus({ state: 'checking' })
+  try {
+    await autoUpdater.checkForUpdates()
+    return { ok: true as const }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '检查更新失败'
+    broadcastUpdateStatus({ state: 'error', message })
+    return { ok: false as const, error: message }
+  }
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.on('update-available', (info) => broadcastUpdateStatus({ state: 'available', version: info.version }))
+  autoUpdater.on('update-not-available', () => broadcastUpdateStatus({ state: 'not-available' }))
+  autoUpdater.on('download-progress', (progress) => broadcastUpdateStatus({ state: 'downloading', percent: progress.percent, transferred: progress.transferred, total: progress.total, bytesPerSecond: progress.bytesPerSecond }))
+  autoUpdater.on('update-downloaded', (info) => broadcastUpdateStatus({ state: 'downloaded', version: info.version, percent: 100 }))
+  autoUpdater.on('error', (error) => broadcastUpdateStatus({ state: 'error', message: error.message }))
 }
 
 function createWindow() {
@@ -425,6 +460,14 @@ ipcMain.handle('app:get-info', () => ({
   version: app.getVersion(),
   platform: process.platform,
 }))
+ipcMain.handle('update:check', checkForUpdates)
+ipcMain.handle('update:download', async () => {
+  try { await autoUpdater.downloadUpdate(); return { ok: true as const } } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : '下载更新失败' } }
+})
+ipcMain.handle('update:install', () => {
+  if (!isDev) autoUpdater.quitAndInstall()
+  return { ok: true as const }
+})
 
 ipcMain.handle('workspace:load', readWorkspace)
 ipcMain.handle('workspace:save', (_event, workspace: WorkspaceSnapshot) => writeWorkspace(workspace))
@@ -538,7 +581,9 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: 'API-forge', applicationVersion: app.getVersion() })
   }
+  setupAutoUpdater()
   createWindow()
+  if (!isDev) setTimeout(() => { void checkForUpdates() }, 5000)
 })
 
 app.on('activate', () => {

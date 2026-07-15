@@ -175,12 +175,17 @@ export function WorkspaceLayout() {
   const apiTabsRef = useRef<HTMLDivElement>(null)
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
   const navigate = useNavigate()
   const location = useLocation()
   const statusContent = saveStatusContent[saveStatus]
   const SaveStatusIcon = statusContent.icon
   const modelConfig = workspace?.preferences.largeModel
   const aiReady = Boolean(modelConfig?.enabled && modelConfig.baseUrl.trim() && modelConfig.model.trim())
+
+  useEffect(() => {
+    void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('sidebarWidth', String(sidebarWidth))
@@ -403,7 +408,7 @@ export function WorkspaceLayout() {
             <img src={isDark ? lightLogo : logo} alt="API-forge" className="h-6 w-6" />
           </div>}
           {!sidebarCollapsed && <div className="min-w-0">
-            <div className="api-forge-brand-name text-sm font-semibold">API-forge</div>
+            <div className="flex items-center gap-2"><div className="api-forge-brand-name text-sm font-semibold">API-forge</div>{appVersion && <span className="text-[10px] text-zinc-500">v{appVersion}</span>}</div>
             <div className="text-[11px] text-zinc-500">Local API Workspace</div>
           </div>}
           <button onClick={() => setSidebarCollapsed((value) => !value)} className={sidebarCollapsed ? 'rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100' : 'ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}>

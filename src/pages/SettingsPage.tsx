@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig } from '@/shared/ipc-contracts'
+import type { UpdateStatus } from '@/shared/ipc-contracts'
 
 const themes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
   { id: 'dark', name: '深色', description: '适合低光环境', icon: Moon },
@@ -26,9 +27,15 @@ export default function SettingsPage() {
   const [modelConfig, setModelConfig] = useState<LargeModelConfig>(workspace?.preferences.largeModel ?? { enabled: false, provider: 'OpenAI 兼容', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-4o-mini', temperature: 0.7, maxTokens: 2048, maxContextTokens: 128000, thinkingEnabled: false })
   const [showApiKey, setShowApiKey] = useState(false)
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
+  const [appVersion, setAppVersion] = useState('')
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
   useEffect(() => { if (workspace?.preferences.largeModel) setModelConfig({ ...workspace.preferences.largeModel, maxContextTokens: workspace.preferences.largeModel.maxContextTokens ?? 128000, thinkingEnabled: workspace.preferences.largeModel.thinkingEnabled ?? false }) }, [workspace?.preferences.largeModel])
+  useEffect(() => {
+    void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)
+    return window.desktopApi?.onUpdateStatus?.(setUpdateStatus)
+  }, [])
   useEffect(() => {
     const handleSaveSettings = () => saveNow()
     window.addEventListener('api-forge:save-settings', handleSaveSettings)
@@ -49,6 +56,19 @@ export default function SettingsPage() {
     setCursorGlowEnabled(enabled)
     localStorage.setItem('cursorMosaicGlow', String(enabled))
     window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
+  }
+
+  async function checkForUpdates() {
+    setUpdateStatus({ state: 'checking' })
+    await window.desktopApi?.checkForUpdates()
+  }
+
+  async function downloadUpdate() {
+    await window.desktopApi?.downloadUpdate()
+  }
+
+  async function installUpdate() {
+    await window.desktopApi?.installUpdate()
   }
 
   return <div className="flex h-full flex-col overflow-auto bg-[var(--app-bg)]">
@@ -75,6 +95,21 @@ export default function SettingsPage() {
           </div>
           <button onClick={() => saveCustomTheme(customColors)} className="mt-4 flex h-9 items-center gap-2 rounded border border-cyan-400/50 px-3 text-xs text-cyan-200 hover:bg-cyan-400/10"><Palette className="h-3.5 w-3.5" />保存并应用自定义主题</button>
         </div>
+        </div>
+      </section>
+      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-4 flex items-center gap-2"><Download className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">应用更新</h2></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-300">
+          <span>当前版本 <strong className="ml-1 text-zinc-100">{appVersion ? `v${appVersion}` : '读取中'}</strong></span>
+          <button onClick={checkForUpdates} disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'} className="flex h-8 items-center gap-2 rounded border border-zinc-700 px-3 hover:border-cyan-400 hover:text-cyan-200 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${updateStatus.state === 'checking' ? 'animate-spin' : ''}`} />检查新版本</button>
+        </div>
+        <div className="mt-3 text-xs text-zinc-500">
+          {updateStatus.state === 'checking' && '正在检查更新...'}
+          {updateStatus.state === 'not-available' && <span className="flex items-center gap-2 text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />当前已是最新版本</span>}
+          {updateStatus.state === 'available' && <div className="flex flex-wrap items-center justify-between gap-3"><span>发现新版本 v{updateStatus.version}</span><button onClick={downloadUpdate} className="flex h-8 items-center gap-2 rounded bg-cyan-400 px-3 font-semibold text-zinc-950"><Download className="h-3.5 w-3.5" />下载更新</button></div>}
+          {updateStatus.state === 'downloading' && <div><div className="mb-2 flex justify-between"><span>正在下载更新</span><span>{Math.round(updateStatus.percent ?? 0)}%</span></div><div className="h-2 overflow-hidden rounded bg-zinc-800"><div className="h-full bg-cyan-400 transition-[width]" style={{ width: `${Math.min(100, Math.max(0, updateStatus.percent ?? 0))}%` }} /></div></div>}
+          {updateStatus.state === 'downloaded' && <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-emerald-300">更新已下载，重启后安装</span><button onClick={installUpdate} className="flex h-8 items-center gap-2 rounded bg-emerald-400 px-3 font-semibold text-zinc-950">立即安装</button></div>}
+          {updateStatus.state === 'error' && <span className="flex items-center gap-2 text-rose-300"><AlertCircle className="h-3.5 w-3.5" />{updateStatus.message ?? '更新失败'}</span>}
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
