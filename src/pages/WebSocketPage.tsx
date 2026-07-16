@@ -10,8 +10,7 @@ type Frame = { direction: 'IN' | 'OUT' | 'ERROR' | 'SYSTEM'; type: string; body:
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
 
 export default function WebSocketPage() {
-  const { theme } = useTheme()
-  const editorTheme = theme === 'light' || theme === 'lightBlue' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'vs-dark'
+  const { monacoTheme: editorTheme } = useTheme()
   const workspace = useWorkspaceStore((state) => state.workspace)
   const variables = useMemo(() => getWorkspaceVariables(workspace, workspace?.preferences.activeEnvironmentId ?? ''), [workspace])
   const editorVariables = useMemo(() => ({

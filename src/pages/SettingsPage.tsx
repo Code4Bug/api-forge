@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle } from 'lucide-react'
-import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
+import { getThemeMode, themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
 import type { UpdateStatus } from '@/shared/ipc-contracts'
@@ -29,7 +29,29 @@ function ThemeColorPreview({ id }: { id: Theme }) {
   }
   const preset = themePresets[id as keyof typeof themePresets]
   if (!preset) return null
-  return <span aria-hidden="true" className="relative h-8 w-11 shrink-0 overflow-hidden rounded border" style={{ backgroundColor: preset.background, borderColor: preset.border }}><span className="absolute inset-x-1 top-1 h-4 rounded-sm" style={{ backgroundColor: preset.surface }} /><span className="absolute bottom-1 left-1 h-1 w-5 rounded-sm" style={{ backgroundColor: preset.accent }} /></span>
+  return <ThemeConfigPreview config={preset} />
+}
+
+function ThemeConfigPreview({ config }: { config: ThemeConfig }) {
+  return <span aria-hidden="true" className="relative h-8 w-11 shrink-0 overflow-hidden rounded border" style={{ backgroundColor: config.background, borderColor: config.border }}><span className="absolute inset-x-1 top-1 h-4 rounded-sm" style={{ backgroundColor: config.surface }} /><span className="absolute bottom-1 left-1 h-1 w-5 rounded-sm" style={{ backgroundColor: config.accent }} /></span>
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number) {
+  const s = saturation / 100
+  const l = lightness / 100
+  const chroma = (1 - Math.abs(2 * l - 1)) * s
+  const x = chroma * (1 - Math.abs((hue / 60) % 2 - 1))
+  const match = l - chroma / 2
+  const [red, green, blue] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : hue < 240 ? [0, x, chroma] : hue < 300 ? [x, 0, chroma] : [chroma, 0, x]
+  return `#${[red, green, blue].map((value) => Math.round((value + match) * 255).toString(16).padStart(2, '0')).join('')}`
+}
+
+function createRandomTheme(): ThemeConfig {
+  const hue = Math.floor(Math.random() * 360)
+  const light = Math.random() > 0.5
+  return light
+    ? { background: hslToHex(hue, 24, 96), surface: '#ffffff', raised: hslToHex(hue, 20, 91), border: hslToHex(hue, 18, 78), text: hslToHex(hue, 24, 14), muted: hslToHex(hue, 12, 42), accent: hslToHex(hue, 72, 42) }
+    : { background: hslToHex(hue, 28, 7), surface: hslToHex(hue, 25, 11), raised: hslToHex(hue, 22, 16), border: hslToHex(hue, 18, 28), text: hslToHex(hue, 18, 94), muted: hslToHex(hue, 12, 66), accent: hslToHex(hue, 76, 62) }
 }
 
 const modelProviders = ['OpenAI 兼容', 'OpenAI', '通义千问', '智谱 AI', 'DeepSeek', 'Moonshot AI', 'Ollama', '自定义']
@@ -56,10 +78,11 @@ const settingsCategories: Array<{ id: SettingsCategory; name: string; descriptio
 ]
 
 export default function SettingsPage() {
-  const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
+  const { theme, setTheme, customTheme, savedCustomThemes, activeCustomThemeId, saveCustomTheme, activateCustomTheme, deleteCustomTheme } = useTheme()
   const { autoSaveEnabled, autoSaveInterval, saveStatus, setAutoSaveSettings, saveNow } = useWorkspaceStore()
   const { workspace, updateLargeModelConfig, updateLightModelConfig, deleteLargeModelConfig, deleteLightModelConfig, activateLargeModelConfig, activateLightModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
+  const [customThemeName, setCustomThemeName] = useState('')
   const [selectedLargeModelId, setSelectedLargeModelId] = useState('')
   const [selectedLightModelId, setSelectedLightModelId] = useState('')
   const [showLargeApiKey, setShowLargeApiKey] = useState(false)
@@ -71,6 +94,7 @@ export default function SettingsPage() {
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
+  const customColorMode = getThemeMode(customColors)
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
   const largeModels = workspace?.preferences.largeModels ?? []
@@ -152,6 +176,21 @@ export default function SettingsPage() {
     setCustomColors((current) => ({ ...current, [key]: value }))
   }
 
+  function resetCustomColors() {
+    if (theme === 'custom') setCustomColors(customTheme)
+    else if (theme === 'system') setCustomColors(window.matchMedia('(prefers-color-scheme: dark)').matches ? themePresets.dark : themePresets.light)
+    else setCustomColors(themePresets[theme as keyof typeof themePresets] ?? themePresets.dark)
+  }
+
+  function saveCurrentCustomTheme() {
+    saveCustomTheme(customColors, customThemeName, customColorMode)
+    setCustomThemeName('')
+  }
+
+  function removeCustomTheme(id: string, name: string) {
+    if (window.confirm(`确认删除自定义主题“${name}”吗？`)) deleteCustomTheme(id)
+  }
+
   function updateCursorGlow(enabled: boolean) {
     setCursorGlowEnabled(enabled)
     localStorage.setItem('cursorMosaicGlow', String(enabled))
@@ -218,11 +257,12 @@ export default function SettingsPage() {
             {colorThemes.map(({ id, name, description, icon: Icon }) => <button key={id} onClick={() => setTheme(id)} className={`flex h-full min-w-0 items-center gap-3 rounded border p-3 text-left ${theme === id ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-zinc-800 hover:border-zinc-600'}`}><ThemeColorPreview id={id} /><span className="min-w-0 flex-1"><span className="block break-words text-xs font-medium">{name}</span><span className="mt-1 block break-words text-[11px] text-zinc-500">{description}</span></span><span className="flex shrink-0 items-center gap-1"><Icon className="h-4 w-4 text-zinc-400" />{theme === id && <Check className="h-4 w-4 text-cyan-300" />}</span></button>)}
           </div>
           <div className="mt-5 border-t border-zinc-800 pt-4">
-            <div className="mb-3 text-xs font-medium text-zinc-300">自定义主题色</div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-medium text-zinc-300"><span>自定义主题色</span><span className={`inline-flex h-6 items-center gap-1 rounded border px-2 text-[10px] ${customColorMode === 'light' ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : 'border-sky-400/40 bg-sky-400/10 text-sky-300'}`}>{customColorMode === 'light' ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}{customColorMode === 'light' ? '浅色主题' : '深色主题'}</span></div><div className="flex items-center gap-2"><button type="button" onClick={resetCustomColors} className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-[11px] text-zinc-400 hover:text-zinc-200" title="恢复当前已应用主题的颜色"><RotateCcw className="h-3.5 w-3.5" />复位</button><button type="button" onClick={() => setCustomColors(createRandomTheme())} className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-[11px] text-zinc-400 hover:text-zinc-200" title="生成一套可读性良好的随机配色"><Shuffle className="h-3.5 w-3.5" />随机颜色</button></div></div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3">
-            {([['background', '背景色'], ['surface', '面板色'], ['raised', '高亮面板'], ['border', '边框色'], ['text', '文字色'], ['accent', '强调色']] as Array<[keyof ThemeConfig, string]>).map(([key, label]) => <label key={key} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400"><span className="shrink-0">{label}</span><span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2"><input type="color" value={customColors[key]} onChange={(event) => updateCustomColor(key, event.target.value)} className="h-8 w-10 shrink-0 cursor-pointer rounded border border-zinc-700 bg-transparent p-0.5" /><code className="min-w-0 break-all text-right text-[10px] text-zinc-500">{customColors[key]}</code></span></label>)}
+            {([['background', '背景色'], ['surface', '面板色'], ['raised', '高亮面板'], ['border', '边框色'], ['text', '文字色'], ['muted', '次要文字'], ['accent', '强调色']] as Array<[keyof ThemeConfig, string]>).map(([key, label]) => <label key={key} className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded border border-zinc-800 bg-zinc-950/40 p-3 text-xs text-zinc-400"><span className="shrink-0">{label}</span><span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2"><input type="color" value={customColors[key]} onChange={(event) => updateCustomColor(key, event.target.value)} className="h-8 w-10 shrink-0 cursor-pointer rounded border border-zinc-700 bg-transparent p-0.5" /><code className="min-w-0 break-all text-right text-[10px] text-zinc-500">{customColors[key]}</code></span></label>)}
           </div>
-          <button onClick={() => saveCustomTheme(customColors)} className="mt-4 flex min-h-9 w-full items-center justify-center gap-2 rounded border border-cyan-400/50 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-400/10 sm:w-auto"><Palette className="h-3.5 w-3.5 shrink-0" />保存并应用自定义主题</button>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={customThemeName} onChange={(event) => setCustomThemeName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentCustomTheme() }} placeholder={`自定义主题 ${savedCustomThemes.length + 1}`} maxLength={24} className="h-9 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-cyan-400" /><button type="button" onClick={saveCurrentCustomTheme} className="flex min-h-9 items-center justify-center gap-2 rounded border border-cyan-400/50 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-400/10"><Save className="h-3.5 w-3.5 shrink-0" />保存为新主题</button></div>
+          {savedCustomThemes.length > 0 && <div className="mt-5 border-t border-zinc-800 pt-4"><div className="mb-3 text-xs font-medium text-zinc-300">已保存主题</div><div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3">{savedCustomThemes.map((item) => <div key={item.id} className={`flex min-w-0 items-center gap-2 rounded border p-2 ${theme === 'custom' && activeCustomThemeId === item.id ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-zinc-800'}`}><button type="button" onClick={() => activateCustomTheme(item.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded p-1 text-left"><ThemeConfigPreview config={item.config} /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-zinc-200">{item.name}</span><span className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">{item.mode === 'light' ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}{item.mode === 'light' ? '浅色' : '深色'} · {theme === 'custom' && activeCustomThemeId === item.id ? '当前使用' : '点击切换'}</span></span>{theme === 'custom' && activeCustomThemeId === item.id && <Check className="h-4 w-4 shrink-0 text-cyan-300" />}</button><button type="button" onClick={() => removeCustomTheme(item.id, item.name)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-rose-400/10 hover:text-rose-300" title={`删除 ${item.name}`} aria-label={`删除 ${item.name}`}><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div></div>}
         </div>
         </div>
       </section>

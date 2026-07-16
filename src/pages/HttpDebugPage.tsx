@@ -215,9 +215,8 @@ function MarkdownText({ value }: { value: string }) {
 }
 
 export default function HttpDebugPage() {
-  const { theme } = useTheme()
+  const { monacoTheme: editorTheme } = useTheme()
   const addHistory = useWorkspaceStore((state) => state.addHistory)
-  const editorTheme = theme === 'light' || theme === 'lightBlue' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'vs-dark'
   const workspace = useWorkspaceStore((state) => state.workspace)
   const activeEnvironmentId = useWorkspaceStore((state) => state.activeEnvironmentId)
   const activeApiId = useWorkspaceStore((state) => state.activeApiId)
