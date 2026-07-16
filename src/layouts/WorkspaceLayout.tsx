@@ -178,16 +178,16 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
           {socketType(node) && <span className={`mr-1 inline-flex h-5 min-w-10 items-center justify-center rounded border px-1.5 text-[10px] font-semibold ${socketType(node) === 'UDP' ? 'border-violet-500/40 bg-violet-400/10 text-violet-200' : 'border-amber-500/40 bg-amber-400/10 text-amber-200'}`}>{socketType(node)}</span>}
         </div>
         <div className={`mr-1 flex shrink-0 items-center gap-0.5 transition-opacity ${moreOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-          {isFolder && <><button onClick={(event) => { event.stopPropagation(); onCreateFolder(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新增目录"><Plus className="h-3 w-3" /></button><button onClick={(event) => { event.stopPropagation(); onCreateApi(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新增 API"><FilePlus2 className="h-3 w-3" /></button></>}
-          <button onClick={(event) => { event.stopPropagation(); onRename(node) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="重命名"><Pencil className="h-3 w-3" /></button>
+          {isFolder && <><button onClick={(event) => { event.stopPropagation(); onCreateFolder(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增目录"><Plus className="h-3 w-3" /></button><button onClick={(event) => { event.stopPropagation(); onCreateApi(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增 API"><FilePlus2 className="h-3 w-3" /></button></>}
+          <button onClick={(event) => { event.stopPropagation(); onRename(node) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="重命名"><Pencil className="h-3 w-3" /></button>
           <button onClick={(event) => { event.stopPropagation(); onDelete(node) }} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20 hover:text-rose-200" title="删除"><Trash2 className="h-3 w-3" /></button>
           <div ref={moreMenuRef} className="relative">
-            <button ref={moreButtonRef} onClick={(event) => { event.stopPropagation(); const rect = moreButtonRef.current?.getBoundingClientRect(); if (rect) setMorePosition({ top: rect.bottom - 8, left: rect.right - 12 }); setMoreOpen((value) => !value) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="更多操作" aria-label="更多操作" aria-expanded={moreOpen}><MoreVertical className="h-3 w-3" /></button>
+            <button ref={moreButtonRef} onClick={(event) => { event.stopPropagation(); const rect = moreButtonRef.current?.getBoundingClientRect(); if (rect) setMorePosition({ top: rect.bottom - 8, left: rect.right - 12 }); setMoreOpen((value) => !value) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="更多操作" aria-label="更多操作" aria-expanded={moreOpen}><MoreVertical className="h-3 w-3" /></button>
           </div>
         </div>
       </div>
       {moreOpen && morePosition && createPortal(<div ref={morePortalRef} className="fixed z-[9998] w-48 rounded border border-zinc-700 bg-[#111821] p-1 shadow-2xl" style={{ top: morePosition.top, left: morePosition.left }} onClick={(event) => event.stopPropagation()}>
-        {isFolder && <button ref={exportButtonRef} onClick={() => { const rect = exportButtonRef.current?.getBoundingClientRect(); if (rect) setExportPosition({ top: rect.top, left: rect.right + 4 }); setExportOpen((value) => !value) }} className="flex h-8 w-full items-center justify-between gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><span className="flex items-center gap-2"><Download className="h-3.5 w-3.5" />导出 API 文档</span><ChevronRight className="h-3.5 w-3.5 text-zinc-500" /></button>}
+        <button ref={exportButtonRef} onClick={() => { const rect = exportButtonRef.current?.getBoundingClientRect(); if (rect) setExportPosition({ top: rect.top, left: rect.right + 4 }); setExportOpen((value) => !value) }} className="flex h-8 w-full items-center justify-between gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><span className="flex items-center gap-2"><Download className="h-3.5 w-3.5" />导出 API 文档</span><ChevronRight className="h-3.5 w-3.5 text-zinc-500" /></button>
         {!isFolder && <button onClick={() => { setMoreOpen(false); onCopyCurl(node) }} className="flex h-8 w-full items-center gap-2 whitespace-nowrap rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Copy className="h-3.5 w-3.5 shrink-0" />复制为 cURL 命令</button>}
         <button onClick={() => { setMoreOpen(false); onCopyName(node) }} className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Copy className="h-3.5 w-3.5" />复制名称</button>
       </div>, document.body)}
@@ -198,6 +198,7 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
 }
 
 const saveStatusContent = {
+  unsaved: { label: '有未保存修改', icon: CircleAlert, className: 'text-amber-300' },
   saving: { label: '正在保存', icon: LoaderCircle, className: 'text-zinc-400' },
   saved: { label: '已保存', icon: CheckCircle2, className: 'text-emerald-400' },
   error: { label: '保存失败', icon: CircleAlert, className: 'text-red-400' },
@@ -576,12 +577,12 @@ export function WorkspaceLayout() {
           </div>
         </div>
         </>}
-        {!sidebarCollapsed && <button onPointerDown={(event) => { event.preventDefault(); setResizingSidebar(true) }} className={`group absolute right-0 top-0 z-10 flex h-full w-px translate-x-1/2 cursor-col-resize items-center justify-center bg-transparent transition-[width,background-color] hover:w-3 ${resizingSidebar ? 'w-3 bg-cyan-400/10' : 'hover:bg-cyan-400/10'}`} title="调整侧栏宽度" aria-label="调整侧栏宽度">
-          <span className={`relative h-full w-px transition-[width,background-color] ${resizingSidebar ? 'w-0.5 bg-cyan-400' : 'bg-zinc-700 group-hover:w-0.5 group-hover:bg-cyan-400/70'}`}>
-            <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-full bg-[#0f141b] px-1 py-1 shadow-sm transition-opacity ${resizingSidebar ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-              <span className="h-0.5 w-0.5 rounded-full bg-zinc-400" />
-              <span className="h-0.5 w-0.5 rounded-full bg-zinc-400" />
-              <span className="h-0.5 w-0.5 rounded-full bg-zinc-400" />
+        {!sidebarCollapsed && <button onPointerDown={(event) => { event.preventDefault(); setResizingSidebar(true) }} className="group absolute right-0 top-0 z-10 flex h-full w-3 translate-x-1/2 items-center justify-center bg-transparent" style={{ cursor: 'col-resize' }} title="调整侧栏宽度" aria-label="调整侧栏宽度">
+          <span className={`relative h-full transition-[width,background-image,box-shadow] duration-150 ${resizingSidebar ? 'w-0.5 bg-gradient-to-b from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_rgba(34,211,238,0.35)]' : 'w-px bg-zinc-700 group-hover:w-0.5 group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-cyan-400/80 group-hover:to-transparent group-hover:shadow-[0_0_8px_rgba(34,211,238,0.25)]'}`}>
+            <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1.5 py-2 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${resizingSidebar ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
+              <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
+              <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
+              <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
             </span>
           </span>
         </button>}
@@ -592,9 +593,9 @@ export function WorkspaceLayout() {
           <div className="relative min-w-0 max-w-[70%] flex-1">
             <div ref={apiTabsRef} onScroll={updateApiTabsOverflow} className="scrollbar-hidden flex min-w-0 items-center gap-1 overflow-x-auto px-7">
               {openApis.map((api) => (
-                <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { setActiveApiId(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100' : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}>
+                <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { setActiveApiId(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
                   <span className="truncate">{api.name}</span>
-                  <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100"><X className="h-3 w-3" /></span>
+                  <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
                 </NavLink>
               ))}
               <button className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增标签"><Plus className="h-3.5 w-3.5" /></button>
@@ -617,8 +618,8 @@ export function WorkspaceLayout() {
             <NavLink to="/history" className="flex h-9 w-10 items-center justify-center rounded px-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="历史">
               <History className="h-3.5 w-3.5" />
             </NavLink>
-            <NavLink to={aiReady ? '/ai' : '/settings'} aria-disabled={!aiReady} onClick={(event) => { if (!aiReady) event.preventDefault() }} className={`flex h-9 w-10 items-center justify-center rounded px-2 ${aiReady ? 'text-cyan-300 hover:bg-cyan-400/10 hover:text-cyan-200' : 'cursor-not-allowed text-zinc-600'}`} title={aiReady ? 'AI 助手' : 'AI 助手未配置，请先完成大模型配置'}>
-              <Sparkles className="h-3.5 w-3.5" />
+            <NavLink to={aiReady ? '/ai' : '/settings'} aria-disabled={!aiReady} onClick={(event) => { if (!aiReady) event.preventDefault() }} className={({ isActive }) => `ai-entry-button flex h-9 w-10 items-center justify-center rounded px-2 ${isActive && aiReady ? 'is-active' : ''} ${!aiReady ? 'is-disabled cursor-not-allowed' : ''}`} title={aiReady ? 'AI 助手' : 'AI 助手未配置，请先完成大模型配置'}>
+              <Sparkles className="ai-entry-icon h-3.5 w-3.5" />
             </NavLink>
           </div>
         </header>

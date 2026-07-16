@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power } from 'lucide-react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle } from 'lucide-react'
 import { themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
@@ -46,7 +46,7 @@ const settingsCategories: Array<{ id: SettingsCategory; name: string; descriptio
 
 export default function SettingsPage() {
   const { theme, setTheme, customTheme, saveCustomTheme } = useTheme()
-  const { autoSaveEnabled, autoSaveInterval, setAutoSaveSettings, saveNow } = useWorkspaceStore()
+  const { autoSaveEnabled, autoSaveInterval, saveStatus, setAutoSaveSettings, saveNow } = useWorkspaceStore()
   const { workspace, updateLargeModelConfig, updateLightModelConfig, deleteLargeModelConfig, deleteLightModelConfig, activateLargeModelConfig, activateLightModelConfig } = useWorkspaceStore()
   const [customColors, setCustomColors] = useState<ThemeConfig>(customTheme)
   const [selectedLargeModelId, setSelectedLargeModelId] = useState('')
@@ -64,15 +64,29 @@ export default function SettingsPage() {
   useEffect(() => setCustomColors(customTheme), [customTheme])
   const largeModels = workspace?.preferences.largeModels ?? []
   const lightModels = workspace?.preferences.lightModels ?? []
-  const modelConfig = largeModels.find((item) => item.id === selectedLargeModelId) ?? largeModels[0] ?? defaultLargeModel
-  const lightModelConfig = lightModels.find((item) => item.id === selectedLightModelId) ?? lightModels[0] ?? defaultLightModel
+  const modelConfig = largeModels.find((item) => item.id === selectedLargeModelId)
+    ?? largeModels.find((item) => item.id === workspace?.preferences.activeLargeModelId)
+    ?? largeModels[0]
+    ?? defaultLargeModel
+  const lightModelConfig = lightModels.find((item) => item.id === selectedLightModelId)
+    ?? lightModels.find((item) => item.id === workspace?.preferences.activeLightModelId)
+    ?? lightModels[0]
+    ?? defaultLightModel
 
   useEffect(() => {
-    if (!largeModels.some((item) => item.id === selectedLargeModelId)) setSelectedLargeModelId(largeModels[0]?.id ?? '')
-  }, [largeModels, selectedLargeModelId])
+    if (!largeModels.some((item) => item.id === selectedLargeModelId)) {
+      setSelectedLargeModelId(workspace?.preferences.activeLargeModelId && largeModels.some((item) => item.id === workspace.preferences.activeLargeModelId)
+        ? workspace.preferences.activeLargeModelId
+        : largeModels[0]?.id ?? '')
+    }
+  }, [largeModels, selectedLargeModelId, workspace?.preferences.activeLargeModelId])
   useEffect(() => {
-    if (!lightModels.some((item) => item.id === selectedLightModelId)) setSelectedLightModelId(lightModels[0]?.id ?? '')
-  }, [lightModels, selectedLightModelId])
+    if (!lightModels.some((item) => item.id === selectedLightModelId)) {
+      setSelectedLightModelId(workspace?.preferences.activeLightModelId && lightModels.some((item) => item.id === workspace.preferences.activeLightModelId)
+        ? workspace.preferences.activeLightModelId
+        : lightModels[0]?.id ?? '')
+    }
+  }, [lightModels, selectedLightModelId, workspace?.preferences.activeLightModelId])
   useEffect(() => {
     void window.desktopApi?.getAppInfo().then((info) => setAppVersion(info.version)).catch(() => undefined)
     return window.desktopApi?.onUpdateStatus?.(setUpdateStatus)
@@ -162,7 +176,14 @@ export default function SettingsPage() {
   return <div className="flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
     <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-4">
       <div><h1 className="text-sm font-semibold">系统设置</h1><p className="text-xs text-zinc-500">调整界面外观和工作区保存行为</p></div>
-      <button onClick={saveNow} className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950"><Save className="h-3.5 w-3.5" />立即保存</button>
+      <button
+        onClick={saveNow}
+        disabled={saveStatus === 'saving'}
+        className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950 transition-colors hover:bg-cyan-300 active:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+      >
+        {saveStatus === 'saving' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : saveStatus === 'error' ? <AlertCircle className="h-3.5 w-3.5" /> : saveStatus === 'saved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+        {saveStatus === 'saving' ? '保存中...' : saveStatus === 'error' ? '保存失败' : saveStatus === 'saved' ? '已保存' : '立即保存'}
+      </button>
     </div>
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
       <nav className="w-full shrink-0 border-b border-zinc-800 bg-zinc-950/20 p-2.5 md:w-44 md:border-b-0 md:border-r md:p-3" aria-label="设置分类">
@@ -206,7 +227,7 @@ export default function SettingsPage() {
       </>}
       {activeCategory === 'model' && <>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div><button type="button" onClick={addLargeModel} className="flex h-8 items-center gap-1.5 rounded border border-violet-400/50 px-2.5 text-xs text-violet-200 hover:bg-violet-400/10"><Plus className="h-3.5 w-3.5" />新增</button></div>
+        <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div><button type="button" onClick={addLargeModel} title="新增大模型配置" className="model-add-button model-add-button-large group flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors"><Plus className="h-4 w-4 text-current transition-transform group-hover:rotate-90" />新增配置</button></div>
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {largeModels.map((config) => { const active = workspace?.preferences.activeLargeModelId === config.id; const selected = modelConfig.id === config.id; return <button key={config.id} type="button" onClick={() => setSelectedLargeModelId(config.id)} className={`flex min-w-32 items-center justify-between gap-2 rounded border px-3 py-2 text-left ${selected ? 'border-violet-400/60 bg-violet-400/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-600'}`}><span className="min-w-0"><span className="block truncate text-xs text-zinc-200">{config.name}</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{config.model}</span></span>{active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}</button> })}
           {largeModels.length === 0 && <button type="button" onClick={addLargeModel} className="flex h-16 w-full items-center justify-center gap-2 rounded border border-dashed border-zinc-700 text-xs text-zinc-500 hover:border-violet-400 hover:text-violet-200"><Plus className="h-3.5 w-3.5" />添加第一个大模型</button>}
@@ -224,7 +245,7 @@ export default function SettingsPage() {
         <label className="mt-4 flex items-center justify-between gap-4 border-t border-zinc-800 pt-4 text-xs text-zinc-300"><span><span className="block font-medium">开启思考模式</span><span className="mt-1 block text-[11px] text-zinc-500">向接口显式传递思考开关并实时展示推理内容，仅支持推理的模型生效</span></span><input type="checkbox" checked={modelConfig.thinkingEnabled ?? false} onChange={(event) => updateModelConfig({ thinkingEnabled: event.target.checked })} disabled={!modelConfig.id} className="h-4 w-4 accent-violet-400" /></label>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">小模型配置</h2></div><p className="mt-1 text-[11px] text-zinc-500">用于标题、摘要和内容等低成本、低延迟任务。</p></div><button type="button" onClick={addLightModel} className="flex h-8 items-center gap-1.5 rounded border border-emerald-400/50 px-2.5 text-xs text-emerald-200 hover:bg-emerald-400/10"><Plus className="h-3.5 w-3.5" />新增</button></div>
+        <div className="mb-3 flex items-center justify-between gap-3"><div><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-emerald-300" /><h2 className="text-sm font-medium">小模型配置</h2></div><p className="mt-1 text-[11px] text-zinc-500">用于标题、摘要和内容等低成本、低延迟任务。</p></div><button type="button" onClick={addLightModel} title="新增小模型配置" className="model-add-button model-add-button-light group flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors"><Plus className="h-4 w-4 text-current transition-transform group-hover:rotate-90" />新增配置</button></div>
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {lightModels.map((config) => { const active = workspace?.preferences.activeLightModelId === config.id; const selected = lightModelConfig.id === config.id; return <button key={config.id} type="button" onClick={() => setSelectedLightModelId(config.id)} className={`flex min-w-32 items-center justify-between gap-2 rounded border px-3 py-2 text-left ${selected ? 'border-emerald-400/60 bg-emerald-400/10' : 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-600'}`}><span className="min-w-0"><span className="block truncate text-xs text-zinc-200">{config.name}</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{config.model}</span></span>{active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}</button> })}
           {lightModels.length === 0 && <button type="button" onClick={addLightModel} className="flex h-16 w-full items-center justify-center gap-2 rounded border border-dashed border-zinc-700 text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-200"><Plus className="h-3.5 w-3.5" />添加第一个小模型</button>}

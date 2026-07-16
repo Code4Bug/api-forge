@@ -170,6 +170,7 @@ const defaultWorkspace = {
             globalHeaders: [],
         },
     ],
+    processVariables: [],
     requests: [],
     history: [
         {

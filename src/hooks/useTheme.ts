@@ -56,7 +56,11 @@ function applyTheme(theme: Theme) {
   root.style.setProperty('--app-accent-soft', `color-mix(in srgb, ${config.accent} 14%, transparent)`)
   root.style.setProperty('--app-accent-border', `color-mix(in srgb, ${config.accent} 52%, ${config.border})`)
   root.style.setProperty('--app-input', `color-mix(in srgb, ${config.surface} 72%, ${config.raised})`)
-  root.style.setProperty('--app-hover', `color-mix(in srgb, ${config.raised} 78%, ${config.text})`)
+  // 浅色主题的菜单 hover 使用更接近表面的浅色，避免混入深色文字后对比过重。
+  const hoverColor = actualTheme === 'light' || actualTheme === 'lightBlue'
+    ? `color-mix(in srgb, ${config.surface} 88%, ${config.accent})`
+    : `color-mix(in srgb, ${config.raised} 78%, ${config.text})`
+  root.style.setProperty('--app-hover', hoverColor)
   root.style.setProperty('--app-selection', `color-mix(in srgb, ${config.accent} 28%, transparent)`)
   const glowStrength = actualTheme === 'lightBlue' ? [42, 24, 18] : [24, 14, 10]
   root.style.setProperty('--app-glow-primary', `color-mix(in srgb, ${config.accent} ${glowStrength[0]}%, transparent)`)

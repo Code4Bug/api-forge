@@ -2,7 +2,7 @@ import { Radio, Send, Server, Unplug } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { StatusPill } from '@/components/common/StatusPill'
 import { VariableInput } from '@/components/common/VariableInput'
-import { useWorkspaceStore } from '@/stores/workspace-store'
+import { getWorkspaceVariables, useWorkspaceStore } from '@/stores/workspace-store'
 import type { ApiTreeNode } from '@/shared/ipc-contracts'
 
 type Log = { direction: 'IN' | 'OUT' | 'ERROR' | 'SYSTEM'; hex: string; text: string; time: string }
@@ -17,7 +17,7 @@ export default function SocketPage() {
   const activeRequest = useMemo(() => workspace?.requests.find((request) => request.id === activeApiId) ?? workspace?.requests.find((request) => request.name === activeNode?.name), [workspace?.requests, activeApiId, activeNode?.name])
   const protocol = activeRequest?.url?.startsWith('udp://') || activeNode?.name.toLowerCase().includes('udp') ? 'udp' : 'tcp'
   const target = useMemo(() => { const value = activeRequest?.url?.replace(/^\w+:\/\//, '') ?? ''; const [host, port] = value.split(':'); return { host: host || '127.0.0.1', port: port || (protocol === 'udp' ? '18081' : '18080') } }, [activeRequest?.url, protocol])
-  const variables = useMemo(() => Object.fromEntries(workspace?.environments.find((env) => env.id === workspace.preferences.activeEnvironmentId)?.variables.map((item) => [item.key, item.value]) ?? []), [workspace])
+  const variables = useMemo(() => getWorkspaceVariables(workspace, workspace?.preferences.activeEnvironmentId ?? ''), [workspace])
   const [host, setHost] = useState(target.host); const [port, setPort] = useState(target.port); const [timeout, setTimeoutMs] = useState('3000'); const [encoding, setEncoding] = useState<'utf8' | 'hex'>('utf8'); const [payload, setPayload] = useState(activeRequest?.body || 'PING'); const [connected, setConnected] = useState(false); const [logs, setLogs] = useState<Log[]>([])
   const connectionId = `socket-${activeApiId ?? 'page'}`
   const add = (direction: Log['direction'], text: string, hex = toHex(text)) => setLogs((items) => [{ direction, text, hex, time: now() }, ...items])

@@ -1,11 +1,21 @@
 import { create } from 'zustand'
-import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, KeyValueItem, LargeModelConfig, LightModelConfig, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
+import type { ApiTreeNode, Environment, EnvironmentVariable, HttpMethod, KeyValueItem, LargeModelConfig, LightModelConfig, ProcessVariable, Protocol, RequestDefinition, RequestHistoryItem, WorkspaceSnapshot } from '@/shared/ipc-contracts'
+import { extractJsonPath, stringifyProcessVariableValue } from '@/utils/json-path'
 
 export function replaceEnvironmentVariables(value: string, variables: Record<string, string>): string {
   return value.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) => variables[key] ?? match)
 }
 
-export type WorkspaceSaveStatus = 'saving' | 'saved' | 'error'
+export function getWorkspaceVariables(workspace: WorkspaceSnapshot | undefined, environmentId: string): Record<string, string> {
+  const environmentVariables = workspace?.environments.find((item) => item.id === environmentId)?.variables ?? []
+  const processVariables = workspace?.processVariables?.filter((item) => item.currentValue !== undefined) ?? []
+  return Object.fromEntries([
+    ...environmentVariables.map((item) => [item.key, item.value] as const),
+    ...processVariables.map((item) => [item.key, item.currentValue!] as const),
+  ])
+}
+
+export type WorkspaceSaveStatus = 'unsaved' | 'saving' | 'saved' | 'error'
 export type ThemeMode = 'dark' | 'light' | 'system' | 'dim'
 
 export interface ApiDefinitionInput {
@@ -33,6 +43,9 @@ interface WorkspaceState {
   deleteEnvironment: (environmentId: string) => void
   updateEnvironmentVariable: (environmentId: string, variable: EnvironmentVariable) => void
   deleteEnvironmentVariable: (environmentId: string, variableId: string) => void
+  updateProcessVariable: (variable: ProcessVariable) => void
+  deleteProcessVariable: (variableId: string) => void
+  captureProcessVariables: (sourceRequestId: string, responseBody: string) => void
   setActiveApiId: (apiId?: string) => void
   setOpenApiIds: (apiIds: string[]) => void
   updateRequest: (request: RequestDefinition) => void
@@ -44,6 +57,7 @@ interface WorkspaceState {
   renameNode: (nodeId: string, name: string) => void
   deleteNode: (nodeId: string) => void
   saveNow: () => void
+  markUnsaved: () => void
   setAutoSaveSettings: (enabled: boolean, interval: number) => void
   updateLargeModelConfig: (config: LargeModelConfig) => void
   updateLightModelConfig: (config: LightModelConfig) => void
@@ -79,6 +93,7 @@ const fallbackWorkspace: WorkspaceSnapshot = {
     ],
     globalHeaders: [],
   }],
+  processVariables: [],
   requests: [
     { id: 'api-orders', protocol: 'http', name: '订单列表', method: 'GET', url: '{{base_url}}/api/orders', params: [{ id: 'page', key: 'page', value: '1', enabled: true }, { id: 'size', key: 'size', value: '20', enabled: true }], headers: [{ id: 'content-type', key: 'Content-Type', value: 'application/json', enabled: true }], updatedAt: new Date().toISOString() },
     { id: 'api-order-detail', protocol: 'http', name: '订单详情', method: 'GET', url: '{{base_url}}/api/orders/1001', params: [], headers: [], updatedAt: new Date().toISOString() },
@@ -126,7 +141,7 @@ function normalizeModelPreferences(preferences: WorkspaceSnapshot['preferences']
 let saveQueue = Promise.resolve()
 let saveRevision = 0
 
-function saveWorkspace(workspace: WorkspaceSnapshot, set: (state: Partial<WorkspaceState>) => void) {
+function persistWorkspace(workspace: WorkspaceSnapshot, set: (state: Partial<WorkspaceState>) => void) {
   const desktopApi = window.desktopApi
   if (!desktopApi) {
     set({ saveStatus: 'saved' })
@@ -144,6 +159,10 @@ function saveWorkspace(workspace: WorkspaceSnapshot, set: (state: Partial<Worksp
     .catch(() => {
       if (revision === saveRevision) set({ saveStatus: 'error' })
     })
+}
+
+function saveWorkspace(_workspace: WorkspaceSnapshot, set: (state: Partial<WorkspaceState>) => void) {
+  set({ saveStatus: 'unsaved' })
 }
 
 function saveHistory(history: RequestHistoryItem[], set: (state: Partial<WorkspaceState>) => void) {
@@ -207,7 +226,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     let workspace = window.desktopApi ? await window.desktopApi.loadWorkspace() : fallbackWorkspace
     const originalPreferences = workspace.preferences
     const normalizedPreferences = normalizeModelPreferences(originalPreferences)
-    workspace = { ...workspace, preferences: normalizedPreferences }
+    workspace = { ...workspace, processVariables: workspace.processVariables ?? [], preferences: normalizedPreferences }
     set({
       workspace,
       activeProtocol: workspace.preferences.activeProtocol,
@@ -215,7 +234,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       activeApiId: workspace.preferences.activeApiId,
       saveStatus: 'saved',
     })
-    if (JSON.stringify(normalizedPreferences) !== JSON.stringify(originalPreferences)) saveWorkspace(workspace, set)
+    if (JSON.stringify(normalizedPreferences) !== JSON.stringify(originalPreferences)) persistWorkspace(workspace, set)
   },
   setActiveProtocol: (protocol) => {
     const { activeProtocol, workspace } = get()
@@ -271,6 +290,60 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const { workspace } = get()
     if (!workspace) return
     const nextWorkspace = { ...workspace, environments: workspace.environments.map((env) => env.id === environmentId ? { ...env, variables: env.variables.filter((item) => item.id !== variableId) } : env) }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  updateProcessVariable: (variable) => {
+    const { workspace } = get()
+    if (!workspace || !variable.key.trim() || !variable.sourceRequestId || !variable.jsonPath.trim()) return
+    const current = workspace.processVariables ?? []
+    const previous = current.find((item) => item.id === variable.id)
+    const sourceChanged = previous && (previous.sourceRequestId !== variable.sourceRequestId || previous.jsonPath !== variable.jsonPath.trim())
+    const normalized = {
+      ...variable,
+      key: variable.key.trim(),
+      jsonPath: variable.jsonPath.trim(),
+      currentValue: sourceChanged ? undefined : variable.currentValue,
+      updatedAt: sourceChanged ? undefined : variable.updatedAt,
+      lastError: undefined,
+    }
+    const processVariables = current.some((item) => item.id === variable.id)
+      ? current.map((item) => item.id === variable.id ? normalized : item)
+      : [...current, normalized]
+    const nextWorkspace = { ...workspace, processVariables }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  deleteProcessVariable: (variableId) => {
+    const { workspace } = get()
+    if (!workspace) return
+    const nextWorkspace = { ...workspace, processVariables: (workspace.processVariables ?? []).filter((item) => item.id !== variableId) }
+    set({ workspace: nextWorkspace })
+    saveWorkspace(nextWorkspace, set)
+  },
+  captureProcessVariables: (sourceRequestId, responseBody) => {
+    const { workspace } = get()
+    if (!workspace || !(workspace.processVariables ?? []).some((item) => item.sourceRequestId === sourceRequestId)) return
+    let responseData: unknown
+    try {
+      responseData = JSON.parse(responseBody)
+    } catch {
+      const processVariables = (workspace.processVariables ?? []).map((item) => item.sourceRequestId === sourceRequestId
+        ? { ...item, currentValue: undefined, lastError: '接口响应不是有效的 JSON', updatedAt: new Date().toISOString() }
+        : item)
+      const nextWorkspace = { ...workspace, processVariables }
+      set({ workspace: nextWorkspace })
+      saveWorkspace(nextWorkspace, set)
+      return
+    }
+    const updatedAt = new Date().toISOString()
+    const processVariables = (workspace.processVariables ?? []).map((item) => {
+      if (item.sourceRequestId !== sourceRequestId) return item
+      const result = extractJsonPath(responseData, item.jsonPath)
+      if (result.ok === false) return { ...item, currentValue: undefined, lastError: result.error, updatedAt }
+      return { ...item, currentValue: stringifyProcessVariableValue(result.value), lastError: undefined, updatedAt }
+    })
+    const nextWorkspace = { ...workspace, processVariables }
     set({ workspace: nextWorkspace })
     saveWorkspace(nextWorkspace, set)
   },
@@ -357,8 +430,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   saveNow: () => {
     const { workspace } = get()
-    if (workspace) saveWorkspace(workspace, set)
+    if (workspace) persistWorkspace(workspace, set)
   },
+  markUnsaved: () => set({ saveStatus: 'unsaved' }),
   setAutoSaveSettings: (enabled, interval) => {
     localStorage.setItem('autoSaveEnabled', String(enabled))
     localStorage.setItem('autoSaveInterval', String(interval))

@@ -178,6 +178,7 @@ const defaultWorkspace: WorkspaceSnapshot = {
       globalHeaders: [],
     },
   ],
+  processVariables: [],
   requests: [],
   history: [
     {

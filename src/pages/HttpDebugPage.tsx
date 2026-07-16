@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import Editor from '@monaco-editor/react'
 import { Check, Copy, LoaderCircle, Plus, Save, Send, Square, Trash2 } from 'lucide-react'
 import { StatusPill } from '@/components/common/StatusPill'
 import { VariableInput } from '@/components/common/VariableInput'
-import { replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
+import { VariableEditor } from '@/components/common/VariableEditor'
+import { getWorkspaceVariables, replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
-import type { ApiTreeNode, HttpFieldItem, HttpMethod, HttpSendResult, RequestDefinition } from '@/shared/ipc-contracts'
+import type { ApiTreeNode, HttpFieldItem, HttpMethod, HttpSendResult, ProcessVariable, RequestDefinition } from '@/shared/ipc-contracts'
 
 const initialParams: HttpFieldItem[] = [
   { id: 'param-page', key: 'page', value: '1', enabled: true },
@@ -86,6 +87,28 @@ function findApiNode(nodes: ApiTreeNode[], apiId?: string): ApiTreeNode | undefi
     if (child) return child
   }
   return undefined
+}
+
+function findJsonPath(root: unknown, selectedText: string, path: string[] = []): string | undefined {
+  const selected = selectedText.trim().replace(/^['"]|['"]$/g, '')
+  if (selected.length === 0) return undefined
+  if (Array.isArray(root)) {
+    for (let index = 0; index < root.length; index += 1) {
+      const found = findJsonPath(root[index], selected, [...path, `[${index}]`])
+      if (found) return found
+    }
+    return undefined
+  }
+  if (root && typeof root === 'object') {
+    for (const [key, value] of Object.entries(root)) {
+      const nextPath = [...path, key]
+      if (key === selected) return `$.${nextPath.join('.').replace(/\.\[/g, '[')}`
+      const found = findJsonPath(value, selected, nextPath)
+      if (found) return found
+    }
+    return undefined
+  }
+  return String(root) === selected ? `$.${path.join('.').replace(/\.\[/g, '[')}` : undefined
 }
 
 function parseSseEvents(value: string) {
@@ -194,11 +217,14 @@ function MarkdownText({ value }: { value: string }) {
 export default function HttpDebugPage() {
   const { theme } = useTheme()
   const addHistory = useWorkspaceStore((state) => state.addHistory)
-  const editorTheme = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'vs-dark'
+  const editorTheme = theme === 'light' || theme === 'lightBlue' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'vs-dark'
   const workspace = useWorkspaceStore((state) => state.workspace)
   const activeEnvironmentId = useWorkspaceStore((state) => state.activeEnvironmentId)
   const activeApiId = useWorkspaceStore((state) => state.activeApiId)
   const updateRequest = useWorkspaceStore((state) => state.updateRequest)
+  const markUnsaved = useWorkspaceStore((state) => state.markUnsaved)
+  const updateProcessVariable = useWorkspaceStore((state) => state.updateProcessVariable)
+  const captureProcessVariables = useWorkspaceStore((state) => state.captureProcessVariables)
   const [method, setMethod] = useState<HttpMethod>('GET')
   const [url, setUrl] = useState('{{base_url}}/v1/orders')
   const [params, setParams] = useState<HttpFieldItem[]>(initialParams)
@@ -222,12 +248,62 @@ export default function HttpDebugPage() {
   const [description, setDescription] = useState('')
   const [assertionResult, setAssertionResult] = useState<{ ok: boolean; message: string }>()
   const [saveMessage, setSaveMessage] = useState('')
+  const [processVariableDialog, setProcessVariableDialog] = useState<ProcessVariable>()
+  const [processVariableError, setProcessVariableError] = useState('')
+  const [processVariableNotice, setProcessVariableNotice] = useState('')
   const saveRequestRef = useRef<() => void>(() => undefined)
+  const splitContainerRef = useRef<HTMLDivElement>(null)
+  const [splitRatio, setSplitRatio] = useState(() => {
+    const saved = Number(localStorage.getItem('httpDebugSplitRatio'))
+    return Number.isFinite(saved) && saved >= 0.35 && saved <= 0.65 ? saved : 0.54
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const resizePointerOffsetRef = useRef(0)
 
-  const environment = useMemo(() => workspace?.environments.find((item) => item.id === activeEnvironmentId), [workspace, activeEnvironmentId])
-  const variables = useMemo(() => Object.fromEntries(environment?.variables.map((item) => [item.key, item.value]) ?? []), [environment])
+  useEffect(() => {
+    if (!isResizing) return undefined
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = splitContainerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const minRequest = 520
+      const minResponse = 420
+      const available = rect.width
+      const minRatio = minRequest / available
+      const maxRatio = 1 - minResponse / available
+      const pointerX = event.clientX - resizePointerOffsetRef.current
+      const nextRatio = Math.min(Math.max((pointerX - rect.left) / available, Math.max(0.35, minRatio)), Math.min(0.65, maxRatio))
+      setSplitRatio(nextRatio)
+    }
+    const handlePointerUp = () => setIsResizing(false)
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [isResizing])
+
+  useEffect(() => {
+    localStorage.setItem('httpDebugSplitRatio', String(splitRatio))
+  }, [splitRatio])
+  const draftSyncKeyRef = useRef('')
+
+  useEffect(() => {
+    if (!processVariableNotice) return undefined
+    const timer = window.setTimeout(() => setProcessVariableNotice(''), 3000)
+    return () => window.clearTimeout(timer)
+  }, [processVariableNotice])
+
+  const variables = useMemo(() => getWorkspaceVariables(workspace, activeEnvironmentId), [workspace, activeEnvironmentId])
+  const editorVariables = useMemo(() => ({
+    ...variables,
+    ...Object.fromEntries((workspace?.processVariables ?? []).map((item) => [item.key, item.currentValue ?? '待获取'])),
+  }), [variables, workspace?.processVariables])
   const activeApiNode = useMemo(() => findApiNode(workspace?.apiTree ?? [], activeApiId), [workspace?.apiTree, activeApiId])
   const activeRequest = useMemo(() => workspace?.requests.find((request) => request.id === activeApiId) ?? workspace?.requests.find((request) => request.name === activeApiNode?.name), [workspace?.requests, activeApiId, activeApiNode?.name])
+  const draftSignature = useMemo(() => JSON.stringify({ method, url, params, headers, body, bodyType, formFields, description }), [method, url, params, headers, body, bodyType, formFields, description])
+  const savedSignature = useMemo(() => activeRequest ? JSON.stringify({ method: activeRequest.method, url: activeRequest.url, params: activeRequest.params, headers: activeRequest.headers, body: activeRequest.body ?? '', bodyType: activeRequest.bodyType ?? 'json', formFields: activeRequest.formFields ?? [], description: activeRequest.description ?? '' }) : '', [activeRequest])
   const requestTabs = useMemo(() => {
     if (activeApiNode && activeApiNode.protocol !== 'http') return ['Info'] as const
     return method === 'GET' || method === 'HEAD'
@@ -283,7 +359,17 @@ export default function HttpDebugPage() {
   }, [])
 
   useEffect(() => {
+    setResult(undefined)
+    setStreamBody('')
+    setStreamSse(false)
+    setAssertionResult(undefined)
+    setInputError('')
+    setProcessVariableDialog(undefined)
+  }, [activeApiId])
+
+  useEffect(() => {
     if (!activeApiId) {
+      draftSyncKeyRef.current = ''
       setMethod('GET')
       setUrl('')
       setParams([])
@@ -292,14 +378,12 @@ export default function HttpDebugPage() {
       setBodyType('json')
       setFormFields([])
       setBearerToken('')
-      setResult(undefined)
-      setAssertionResult(undefined)
-      setInputError('')
       setAssertion('')
       setDescription('')
       setSaveMessage('')
       return
     }
+    draftSyncKeyRef.current = ''
     const request = activeRequest as RequestDefinition | undefined
     setMethod(request?.method ?? activeApiNode?.method ?? 'GET')
     setUrl(request?.url ?? '')
@@ -313,10 +397,16 @@ export default function HttpDebugPage() {
     const authorization = request?.headers?.find((item) => item.key.toLowerCase() === 'authorization')?.value ?? ''
     setBearerToken(authorization.replace(/^Bearer\s+/i, ''))
     setDescription(request?.description ?? '')
-    setResult(undefined)
-    setAssertionResult(undefined)
-    setInputError('')
   }, [activeApiId, activeApiNode?.method, activeRequest])
+
+  useEffect(() => {
+    if (!activeRequest) return
+    if (draftSyncKeyRef.current !== activeRequest.id) {
+      draftSyncKeyRef.current = activeRequest.id
+      return
+    }
+    if (draftSignature !== savedSignature) markUnsaved()
+  }, [activeRequest, draftSignature, savedSignature, markUnsaved])
 
   useEffect(() => {
     const handleSaveRequest = () => saveRequestRef.current()
@@ -409,6 +499,29 @@ export default function HttpDebugPage() {
     }
   }
 
+  function openProcessVariableDialog(selectedText: string) {
+    if (!activeApiId) return
+    const selected = selectedText.trim().replace(/^['"]|['"]$/g, '')
+    let parsedResponse: unknown
+    try { parsedResponse = JSON.parse(responseBody ?? '') } catch { parsedResponse = undefined }
+    const jsonPath = selected.startsWith('$')
+      ? selected
+      : findJsonPath(parsedResponse, selected) ?? `$.${selected.replace(/\s+/g, '')}`
+    setProcessVariableError('')
+    setProcessVariableNotice('')
+    setProcessVariableDialog({ id: `process-${crypto.randomUUID()}`, key: selected.split('.').pop() || 'response_value', sourceRequestId: activeApiId, jsonPath })
+  }
+
+  function submitProcessVariable() {
+    if (!processVariableDialog?.key.trim()) return setProcessVariableError('请输入变量名')
+    if (!processVariableDialog.jsonPath.trim().startsWith('$')) return setProcessVariableError('JSONPath 必须以 $ 开头')
+    updateProcessVariable(processVariableDialog)
+    const insertedKey = processVariableDialog.key.trim()
+    setProcessVariableDialog(undefined)
+    setProcessVariableError('')
+    setProcessVariableNotice(`过程变量已保存：{{${insertedKey}}}`)
+  }
+
   async function sendRequest() {
     if (!window.desktopApi?.httpSend) {
       setInputError('当前为浏览器预览环境，HTTP 调试需要在 Electron 桌面端运行。')
@@ -422,7 +535,7 @@ export default function HttpDebugPage() {
     const resolvedUrl = replaceEnvironmentVariables(url, variables)
     const unresolvedVariable = resolvedUrl.match(/\{\{[^{}]+\}\}/)?.[0]
     if (unresolvedVariable) {
-      setInputError(`环境变量未解析：${unresolvedVariable}。请切换到包含该变量的环境。`)
+      setInputError(`变量未解析：${unresolvedVariable}。请检查当前环境或先调用过程变量的来源接口。`)
       return
     }
     const nextUrl = new URL(resolvedUrl, 'http://localhost')
@@ -448,6 +561,7 @@ export default function HttpDebugPage() {
       if (requestIdRef.current !== requestId) return
       setResult(response)
       if (response.ok === false && response.error.code === 'CANCELED') return
+      if (response.ok && activeApiId) captureProcessVariables(activeApiId, response.body)
       if (assertion.trim()) {
         const expression = replaceEnvironmentVariables(assertion.trim(), variables)
         try {
@@ -507,7 +621,7 @@ export default function HttpDebugPage() {
   const streamText = normalizeStreamText(sseEvents.map((item) => item.streamData).join(''))
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-auto lg:grid-cols-[minmax(520px,1fr)_minmax(420px,0.9fr)] lg:grid-rows-1 lg:overflow-hidden">
+    <div ref={splitContainerRef} className={`relative grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-auto lg:grid-cols-[var(--http-split-ratio)_minmax(0,1fr)] lg:grid-rows-1 lg:overflow-hidden ${isResizing ? 'select-none' : ''}`} style={{ '--http-split-ratio': `${splitRatio * 100}%` } as CSSProperties}>
       <section className="flex min-h-0 min-w-0 flex-col border-b border-zinc-800 bg-[#0b0f14] lg:border-b-0 lg:border-r">
         <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-4 py-2">
           <select value={method} onChange={(event) => setMethod(event.target.value as HttpMethod)} className={`h-9 rounded border px-3 text-xs font-semibold outline-none ${methodColorClasses[method]}`}>
@@ -608,7 +722,7 @@ export default function HttpDebugPage() {
                 </div>
               ) : (
                 <div className="min-h-[240px] flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]">
-                  <Editor height="100%" language={bodyType === 'json' ? 'json' : bodyType} theme={editorTheme} value={body} onChange={(value) => setBody(value ?? '')} options={{ minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} />
+                  <VariableEditor height="100%" language={bodyType === 'json' ? 'json' : bodyType} theme={editorTheme} variables={editorVariables} value={body} onChange={(value) => setBody(value ?? '')} options={{ minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} />
                 </div>
               )}
             </div>
@@ -649,7 +763,22 @@ export default function HttpDebugPage() {
           {!available && <p className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">当前环境不可用：请启动 Electron 桌面端后发送真实 HTTP 请求。</p>}
         </div>
       </section>
-      <section className="flex min-h-0 min-w-0 flex-col bg-[#0f141b]">
+      <button type="button" aria-label="调整请求和响应区域宽度" title="拖动调整请求和响应区域宽度" onPointerDown={(event) => {
+        event.preventDefault()
+        const handle = event.currentTarget.getBoundingClientRect()
+        resizePointerOffsetRef.current = event.clientX - (handle.left + handle.width / 2)
+        setIsResizing(true)
+      }} className="group absolute inset-y-0 left-[var(--http-split-ratio)] z-20 hidden w-3 -translate-x-1/2 items-center justify-center bg-transparent lg:flex" style={{ cursor: 'col-resize' }}>
+        <span className={`relative h-full transition-[width,background-image,box-shadow] duration-150 ${isResizing ? 'w-0.5 bg-gradient-to-b from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_rgba(34,211,238,0.35)]' : 'w-px bg-zinc-700 group-hover:w-0.5 group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-cyan-400/80 group-hover:to-transparent group-hover:shadow-[0_0_8px_rgba(34,211,238,0.25)]'}`}>
+          <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1.5 py-2 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${isResizing ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
+          <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
+          <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
+          <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
+          </span>
+        </span>
+      </button>
+      <section className="relative flex min-h-0 min-w-0 flex-col bg-[#0f141b]">
+        {processVariableNotice && <div role="status" className="process-variable-notice absolute right-4 top-4 z-40 rounded border px-3 py-2 text-xs shadow-xl backdrop-blur">{processVariableNotice}</div>}
         <div className="flex h-14 items-center justify-between border-b border-zinc-800 px-4">
           <div className="flex items-center gap-2">
             {result?.ok && <StatusPill tone={result.status < 400 ? 'green' : 'red'}>{result.status}</StatusPill>}
@@ -668,11 +797,12 @@ export default function HttpDebugPage() {
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
           {!result && !loading && <p className="rounded border border-dashed border-zinc-800 p-6 text-center text-xs text-zinc-600">发送请求后显示真实响应</p>}
-          {activeResponseTab === 'Body' && responseBody && (streamSse ? <div className="flex min-h-0 min-w-0 flex-1 flex-col"><div className="mb-3 flex shrink-0 items-center"><div className="inline-flex rounded border border-zinc-700 bg-zinc-950 p-1"><button onClick={() => setSseDisplayMode('stream')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'stream' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>流式</button><button onClick={() => setSseDisplayMode('raw')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'raw' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>原始 JSON</button></div></div>{sseDisplayMode === 'stream' ? <div className="min-h-0 flex-1 overflow-y-auto rounded border border-cyan-400/20 bg-zinc-950 p-4 text-zinc-200"><MarkdownText value={streamText} /></div> : <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">{sseEvents.map((item) => <div key={item.key} className="min-w-0 overflow-hidden rounded border border-cyan-400/20 bg-zinc-950 p-3"><div className="mb-1 flex gap-3 text-[11px] text-cyan-300"><span>{item.event}</span>{item.id && <span className="text-zinc-600">#{item.id}</span>}</div><pre className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-xs leading-5 text-zinc-300">{item.rawData}</pre></div>)}</div>}</div> : isJsonResponse ? <div className="min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]"><Editor height="100%" language="json" theme={editorTheme} value={formattedResponseBody ?? ''} options={{ readOnly: true, minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} /></div> : <pre className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border p-4 font-mono text-xs leading-6 ${result?.ok ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>{responseBody}</pre>)}
+          {activeResponseTab === 'Body' && responseBody && (streamSse ? <div className="flex min-h-0 min-w-0 flex-1 flex-col"><div className="mb-3 flex shrink-0 items-center"><div className="inline-flex rounded border border-zinc-700 bg-zinc-950 p-1"><button onClick={() => setSseDisplayMode('stream')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'stream' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>流式</button><button onClick={() => setSseDisplayMode('raw')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'raw' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>原始 JSON</button></div></div>{sseDisplayMode === 'stream' ? <div className="min-h-0 flex-1 overflow-y-auto rounded border border-cyan-400/20 bg-zinc-950 p-4 text-zinc-200"><MarkdownText value={streamText} /></div> : <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">{sseEvents.map((item) => <div key={item.key} className="min-w-0 overflow-hidden rounded border border-cyan-400/20 bg-zinc-950 p-3"><div className="mb-1 flex gap-3 text-[11px] text-cyan-300"><span>{item.event}</span>{item.id && <span className="text-zinc-600">#{item.id}</span>}</div><pre className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-xs leading-5 text-zinc-300">{item.rawData}</pre></div>)}</div>}</div> : isJsonResponse ? <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]"><VariableEditor height="100%" language="json" theme={editorTheme} variables={{}} value={formattedResponseBody ?? ''} onInsertProcessVariable={openProcessVariableDialog} options={{ readOnly: true, minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} /></div> : <pre className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border p-4 font-mono text-xs leading-6 ${result?.ok ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>{responseBody}</pre>)}
           {activeResponseTab === 'Headers' && result?.ok && <pre className="whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-500">{JSON.stringify(result.headers, null, 2)}</pre>}
           {activeResponseTab === 'Cookies' && <div className="rounded border border-dashed border-zinc-800 bg-zinc-950 p-5 text-xs text-zinc-600">当前响应未提供可解析的 Cookie。</div>}
           {activeResponseTab === '日志' && <div className="rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-6 text-zinc-500">{loading ? 'request: sending' : result ? `request: ${result.ok ? 'completed' : 'failed'}` : 'request: idle'}</div>}
         </div>
+        {processVariableDialog && <form onSubmit={(event) => { event.preventDefault(); submitProcessVariable() }} className="absolute bottom-4 left-4 right-4 z-30 rounded border border-cyan-400/30 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur"><div className="mb-2 flex items-center justify-between text-xs font-semibold text-zinc-200"><span>插入过程变量</span><button type="button" onClick={() => setProcessVariableDialog(undefined)} className="text-zinc-500 hover:text-zinc-200">关闭</button></div><div className="grid grid-cols-1 gap-2 md:grid-cols-3"><label className="text-[11px] text-zinc-400">变量名<input autoFocus value={processVariableDialog.key} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, key: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" /></label><label className="text-[11px] text-zinc-400">JSONPath<input value={processVariableDialog.jsonPath} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, jsonPath: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 font-mono text-xs text-zinc-100" /></label><label className="text-[11px] text-zinc-400">描述<input value={processVariableDialog.description ?? ''} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, description: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" /></label></div>{processVariableError && <div className="mt-2 text-[11px] text-rose-300">{processVariableError}</div>}<button className="mt-3 flex h-8 items-center justify-center rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950">保存并插入</button></form>}
       </section>
     </div>
   )

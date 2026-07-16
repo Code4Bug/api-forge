@@ -261,6 +261,18 @@ html.light .context-gauge {
 
 html.light .context-gauge-warning { --context-color: #d97706; }
 html.light .context-gauge-danger { --context-color: #e11d48; }
+
+.model-add-button {
+  border: 1px solid color-mix(in srgb, var(--model-color) 58%, var(--app-border));
+  background: color-mix(in srgb, var(--model-color) 12%, var(--app-surface));
+  color: color-mix(in srgb, var(--model-color) 72%, var(--app-text));
+}
+.model-add-button:hover { border-color: var(--model-color); background: color-mix(in srgb, var(--model-color) 24%, var(--app-surface)); }
+.model-add-button:active { background: color-mix(in srgb, var(--model-color) 34%, var(--app-surface)); }
+.model-add-button-large { --model-color: #8b5cf6; }
+.model-add-button-light { --model-color: #10b981; }
+html.light .model-add-button-large { --model-color: #6d28d9; }
+html.light .model-add-button-light { --model-color: #047857; }
 html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14); }
 
 /* 光标附近的像素化光晕，仅作为背景反馈，不参与交互。 */
@@ -272,6 +284,10 @@ html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14)
   left: 0;
   width: 240px;
   height: 240px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  outline: 0;
   pointer-events: none;
   opacity: 0;
   transform: translate3d(calc(var(--cursor-x) - 120px), calc(var(--cursor-y) - 120px), 0);
@@ -282,6 +298,9 @@ html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14)
   display: block;
   width: 100%;
   height: 100%;
+  border: 0;
+  border-radius: inherit;
+  outline: 0;
   transform-origin: center;
   background-image:
     radial-gradient(circle at center, var(--app-glow-primary) 0 9%, var(--app-glow-secondary) 24%, transparent 66%),
@@ -351,10 +370,6 @@ html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14)
 
 /* 浅色背景改用正片叠底，避免 screen 混合后与白底失去对比。 */
 html.light .cursor-mosaic-glow {
-  background-image:
-    radial-gradient(circle at center, var(--app-glow-primary) 0 9%, var(--app-glow-secondary) 24%, transparent 66%),
-    linear-gradient(var(--app-glow-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-glow-secondary) 1px, transparent 1px);
   mix-blend-mode: multiply;
 }
 
@@ -446,6 +461,12 @@ html[data-theme="lightBlue"] .cursor-mosaic-glow {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.process-variable-notice {
+  background: color-mix(in srgb, #10b981 12%, var(--app-surface));
+  border-color: color-mix(in srgb, #10b981 48%, var(--app-border));
+  color: color-mix(in srgb, #10b981 72%, var(--app-text));
 }
 
 html.light {
@@ -564,6 +585,80 @@ html[data-theme] #root {
   color: var(--app-text);
 }
 
+/* 所有按钮统一提供主题色驱动的悬停、按下和键盘聚焦反馈。 */
+html[data-theme] button {
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 100ms ease, box-shadow 160ms ease;
+}
+
+html[data-theme] button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+html[data-theme] button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(.98);
+}
+
+html[data-theme] button:focus-visible {
+  outline: 2px solid var(--app-accent-border);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+html[data-theme] button:disabled {
+  cursor: not-allowed;
+}
+
+/* 顶栏 AI 入口使用主题表面承载强调色，避免亮色图标在深色背景上显得突兀。 */
+.ai-entry-button {
+  border: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-raised) 82%, var(--app-bg));
+  color: color-mix(in srgb, var(--app-accent) 86%, var(--app-text));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-text) 7%, transparent);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 100ms ease;
+}
+
+@keyframes ai-entry-breathe {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: .88; }
+  50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+}
+
+.ai-entry-icon {
+  animation: ai-entry-breathe 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.ai-entry-button:hover:not(.is-disabled) {
+  border-color: var(--app-accent-border);
+  background: var(--app-hover);
+  color: var(--app-text);
+  box-shadow: 0 0 0 3px var(--app-accent-soft), inset 0 1px 0 color-mix(in srgb, var(--app-text) 9%, transparent);
+}
+
+.ai-entry-button:hover:not(.is-disabled) .ai-entry-icon {
+  animation: ai-entry-breathe 720ms ease-in-out infinite;
+}
+
+.ai-entry-button.is-active {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+.ai-entry-button.is-disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-entry-icon,
+  .ai-entry-button:hover:not(.is-disabled) .ai-entry-icon {
+    animation: none;
+  }
+}
+
 /* 主题通用控件层：避免页面内的固定 zinc 色值破坏主题层次。 */
 html[data-theme] input:not([type="checkbox"]):not([type="radio"]),
 html[data-theme] select,
@@ -610,6 +705,23 @@ html[data-theme] [class~="bg-cyan-400"] {
   background-color: var(--app-accent) !important;
 }
 
+html[data-theme] [class~="bg-emerald-400"],
+html[data-theme] [class~="bg-violet-400"] {
+  background-color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="hover:bg-cyan-300"]:hover,
+html[data-theme] [class*="hover:bg-emerald-300"]:hover,
+html[data-theme] [class*="hover:bg-violet-300"]:hover {
+  background-color: color-mix(in srgb, var(--app-accent) 86%, white) !important;
+}
+
+html[data-theme] [class*="hover:bg-cyan-400"]:hover,
+html[data-theme] [class*="hover:bg-emerald-400"]:hover,
+html[data-theme] [class*="hover:bg-violet-400"]:hover {
+  background-color: color-mix(in srgb, var(--app-accent) 86%, white) !important;
+}
+
 html[data-theme] [class*="bg-cyan-400/"] {
   background-color: color-mix(in srgb, var(--app-accent) 15%, transparent) !important;
 }
@@ -624,10 +736,26 @@ html[data-theme] [class*="border-cyan-400"] {
   border-color: color-mix(in srgb, var(--app-accent) 70%, transparent) !important;
 }
 
+html[data-theme] [class*="border-emerald-400"],
+html[data-theme] [class*="border-violet-400"] {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, transparent) !important;
+}
+
+html[data-theme] [class*="hover:border-cyan-400"]:hover,
+html[data-theme] [class*="hover:border-emerald-400"]:hover,
+html[data-theme] [class*="hover:border-violet-400"]:hover {
+  border-color: var(--app-accent) !important;
+}
+
 html[data-theme] [class*="text-cyan-300"],
 html[data-theme] [class*="text-cyan-200"],
 html[data-theme] [class*="text-cyan-100"] {
   color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="bg-emerald-400"][class*="text-zinc-950"],
+html[data-theme] [class*="bg-violet-400"][class*="text-zinc-950"] {
+  color: var(--app-bg) !important;
 }
 
 html[data-theme] [class*="bg-cyan-400/"][class*="text-cyan-100"],

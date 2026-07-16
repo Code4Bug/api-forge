@@ -26,6 +26,17 @@ export interface Environment {
   globalHeaders: KeyValueItem[]
 }
 
+export interface ProcessVariable {
+  id: string
+  key: string
+  sourceRequestId: string
+  jsonPath: string
+  currentValue?: string
+  description?: string
+  updatedAt?: string
+  lastError?: string
+}
+
 export interface ApiTreeNode {
   id: string
   type: 'folder' | 'api'
@@ -122,6 +133,7 @@ export interface WorkspaceSnapshot {
   version?: number
   apiTree: ApiTreeNode[]
   environments: Environment[]
+  processVariables?: ProcessVariable[]
   requests: RequestDefinition[]
   history: RequestHistoryItem[]
   preferences: UserPreferences
