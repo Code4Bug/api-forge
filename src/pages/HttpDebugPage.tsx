@@ -156,6 +156,14 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(precision).replace(/\.0+$|(?<=\.\d)0+$/, '')} ${units[unitIndex]}`
 }
 
+function maskHeaderValue(key: string, value: string) {
+  if (/authorization|cookie|token|api[-_]?key|secret/i.test(key)) {
+    if (value.length <= 8) return '********'
+    return `${value.slice(0, 4)}***${value.slice(-4)}`
+  }
+  return value
+}
+
 function renderInlineMarkdown(value: string) {
   return value.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index} className="font-semibold text-zinc-100">{part.slice(2, -2)}</strong>
@@ -234,6 +242,7 @@ export default function HttpDebugPage() {
   const [formFields, setFormFields] = useState<NonNullable<RequestDefinition['formFields']>>([{ id: 'form-0', key: '', value: '', kind: 'text', enabled: true }])
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<HttpSendResult | undefined>()
+  const [requestLogs, setRequestLogs] = useState<Array<{ time: string; level: 'info' | 'success' | 'error'; message: string }>>([])
   const [streamBody, setStreamBody] = useState('')
   const [streamSse, setStreamSse] = useState(false)
   const [sseDisplayMode, setSseDisplayMode] = useState<'raw' | 'stream'>('stream')
@@ -349,6 +358,10 @@ export default function HttpDebugPage() {
   const activeParams = useMemo(() => params.filter((item) => item.enabled && item.key.trim()), [params])
   const activeHeaders = useMemo(() => headers.filter((item) => item.enabled && item.key.trim()), [headers])
 
+  function appendRequestLog(message: string, level: 'info' | 'success' | 'error' = 'info') {
+    setRequestLogs((current) => [...current, { time: new Date().toLocaleTimeString(), level, message }].slice(-100))
+  }
+
   useEffect(() => {
     const unsubscribe = window.desktopApi?.onHttpChunk?.((payload) => {
       if (payload.requestId !== requestIdRef.current) return
@@ -360,6 +373,7 @@ export default function HttpDebugPage() {
 
   useEffect(() => {
     setResult(undefined)
+    setRequestLogs([])
     setStreamBody('')
     setStreamSse(false)
     setAssertionResult(undefined)
@@ -545,11 +559,16 @@ export default function HttpDebugPage() {
     setInputError('')
     setLoading(true)
     setResult(undefined)
+    setRequestLogs([])
     setStreamBody('')
     setStreamSse(false)
     setSseDisplayMode('stream')
     const requestId = crypto.randomUUID()
     requestIdRef.current = requestId
+    const requestBody = method === 'GET' || method === 'HEAD' ? undefined : buildRequestBody()
+    appendRequestLog(`${method} ${nextUrl.toString()}，参数 ${activeParams.length} 个，请求头 ${activeHeaders.length} 个`)
+    appendRequestLog(`请求体 ${requestBody ? formatBytes(new TextEncoder().encode(requestBody).length) : '无'}，超时 ${timeout} ms`)
+    appendRequestLog(`请求头：${activeHeaders.map((item) => `${item.key}: ${maskHeaderValue(item.key, headers[item.key] ?? item.value)}`).join('；') || '无'}`)
     try {
       const response = await window.desktopApi.httpSend({
         requestId,
@@ -557,10 +576,18 @@ export default function HttpDebugPage() {
         url: nextUrl.toString().replace('http://localhost', ''),
         params: activeParams,
         headers,
-        body: method === 'GET' || method === 'HEAD' ? undefined : buildRequestBody(),
+        body: requestBody,
+        timeout,
       })
       if (requestIdRef.current !== requestId) return
       setResult(response)
+      if (response.ok === true) {
+        const contentType = response.headers['content-type'] ?? '未知'
+        appendRequestLog(`响应 ${response.status}，${response.durationMs} ms，${formatBytes(response.sizeBytes)}，${contentType}`, response.status < 400 ? 'success' : 'error')
+        appendRequestLog(`响应头 ${Object.keys(response.headers).length} 个：${Object.entries(response.headers).slice(0, 8).map(([key, value]) => `${key}: ${maskHeaderValue(key, value)}`).join('；') || '无'}`)
+      } else if (response.ok === false) {
+        appendRequestLog(`请求失败 [${response.error.code}]：${response.error.message}`, 'error')
+      }
       if (response.ok === false && response.error.code === 'CANCELED') return
       if (response.ok && activeApiId) captureProcessVariables(activeApiId, response.body)
       if (assertion.trim()) {
@@ -572,8 +599,10 @@ export default function HttpDebugPage() {
           const evaluate = new Function('status', 'headers', 'body', `return Boolean(${expression})`) as (status: number | undefined, headers: Record<string, string>, body: unknown) => boolean
           const passed = evaluate(response.ok ? response.status : undefined, response.ok ? response.headers : {}, parsedBody)
           setAssertionResult({ ok: passed, message: passed ? '断言通过' : '断言未通过' })
+          appendRequestLog(passed ? '断言通过' : '断言未通过', passed ? 'success' : 'error')
         } catch (error) {
           setAssertionResult({ ok: false, message: `断言表达式无效：${error instanceof Error ? error.message : '无法执行'}` })
+          appendRequestLog(`断言表达式无效：${error instanceof Error ? error.message : '无法执行'}`, 'error')
         }
       } else {
         setAssertionResult(undefined)
@@ -594,6 +623,7 @@ export default function HttpDebugPage() {
     } catch (error) {
       const failure = { ok: false as const, error: { code: 'UNKNOWN_ERROR' as const, message: error instanceof Error ? error.message : '请求失败' } }
       setResult(failure)
+      appendRequestLog(`请求异常：${failure.error.message}`, 'error')
       addHistory({ id: `history-${crypto.randomUUID()}`, protocol: 'http', method, url: nextUrl.toString(), environmentId: activeEnvironmentId, createdAt: new Date().toISOString(), requestSnapshot: { apiId: activeApiId, request: { method, url, params, headers, body, bodyType, formFields } }, responseSnapshot: failure })
     } finally {
       setLoading(false)
@@ -606,6 +636,7 @@ export default function HttpDebugPage() {
     requestIdRef.current = ''
     setLoading(false)
     setInputError('请求已中断')
+    appendRequestLog('请求已中断', 'error')
     void window.desktopApi?.httpCancel(requestId)
   }
 
@@ -812,7 +843,9 @@ export default function HttpDebugPage() {
           {activeResponseTab === 'Body' && responseBody && (streamSse ? <div className="flex min-h-0 min-w-0 flex-1 flex-col"><div className="mb-3 flex shrink-0 items-center"><div className="inline-flex rounded border border-zinc-700 bg-zinc-950 p-1"><button onClick={() => setSseDisplayMode('stream')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'stream' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>流式</button><button onClick={() => setSseDisplayMode('raw')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'raw' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>原始 JSON</button></div></div>{sseDisplayMode === 'stream' ? <div className="min-h-0 flex-1 overflow-y-auto rounded border border-cyan-400/20 bg-zinc-950 p-4 text-zinc-200"><MarkdownText value={streamText} /></div> : <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">{sseEvents.map((item) => <div key={item.key} className="min-w-0 overflow-hidden rounded border border-cyan-400/20 bg-zinc-950 p-3"><div className="mb-1 flex gap-3 text-[11px] text-cyan-300"><span>{item.event}</span>{item.id && <span className="text-zinc-600">#{item.id}</span>}</div><pre className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-xs leading-5 text-zinc-300">{item.rawData}</pre></div>)}</div>}</div> : isJsonResponse ? <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]"><VariableEditor height="100%" language="json" theme={editorTheme} variables={{}} value={formattedResponseBody ?? ''} onInsertProcessVariable={openProcessVariableDialog} options={{ readOnly: true, minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} /></div> : <pre className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border p-4 font-mono text-xs leading-6 ${result?.ok ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>{responseBody}</pre>)}
           {activeResponseTab === 'Headers' && result?.ok && <pre className="whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-500">{JSON.stringify(result.headers, null, 2)}</pre>}
           {activeResponseTab === 'Cookies' && <div className="rounded border border-dashed border-zinc-800 bg-zinc-950 p-5 text-xs text-zinc-600">当前响应未提供可解析的 Cookie。</div>}
-          {activeResponseTab === '日志' && <div className="rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-6 text-zinc-500">{loading ? 'request: sending' : result ? `request: ${result.ok ? 'completed' : 'failed'}` : 'request: idle'}</div>}
+          {activeResponseTab === '日志' && <div className="min-h-0 flex-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs leading-6">
+            {requestLogs.length === 0 ? <div className="text-zinc-600">发送请求后显示详细日志</div> : <div className="space-y-1.5">{requestLogs.map((item, index) => <div key={`${item.time}-${index}`} className="flex gap-3 break-words [overflow-wrap:anywhere]"><span className="shrink-0 text-zinc-600">{item.time}</span><span className={item.level === 'error' ? 'text-rose-300' : item.level === 'success' ? 'text-emerald-300' : 'text-zinc-300'}>{item.message}</span></div>)}</div>}
+          </div>}
         </div>
         {processVariableDialog && <form onSubmit={(event) => { event.preventDefault(); submitProcessVariable() }} className="absolute bottom-4 left-4 right-4 z-30 rounded border border-cyan-400/30 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur"><div className="mb-2 flex items-center justify-between text-xs font-semibold text-zinc-200"><span>插入过程变量</span><button type="button" onClick={() => setProcessVariableDialog(undefined)} className="text-zinc-500 hover:text-zinc-200">关闭</button></div><div className="grid grid-cols-1 gap-2 md:grid-cols-3"><label className="text-[11px] text-zinc-400">变量名<input autoFocus value={processVariableDialog.key} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, key: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" /></label><label className="text-[11px] text-zinc-400">JSONPath<input value={processVariableDialog.jsonPath} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, jsonPath: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 font-mono text-xs text-zinc-100" /></label><label className="text-[11px] text-zinc-400">描述<input value={processVariableDialog.description ?? ''} onChange={(event) => setProcessVariableDialog({ ...processVariableDialog, description: event.target.value })} className="mt-1 h-8 w-full rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100" /></label></div>{processVariableError && <div className="mt-2 text-[11px] text-rose-300">{processVariableError}</div>}<button className="mt-3 flex h-8 items-center justify-center rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950">保存并插入</button></form>}
       </section>
