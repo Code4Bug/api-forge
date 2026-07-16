@@ -651,6 +651,18 @@ export default function HttpDebugPage() {
     : responseBody
   const sseEvents = parseSseEvents(streamBody)
   const streamText = normalizeStreamText(sseEvents.map((item) => item.streamData).join(''))
+  const responseCookies = result?.ok ? (result.headers['set-cookie'] ?? '') : ''
+  const activeResponseCopyContent = activeResponseTab === 'Body'
+    ? streamSse
+      ? sseDisplayMode === 'stream'
+        ? streamText
+        : sseEvents.map((item) => item.rawData).join('\n\n')
+      : formattedResponseBody ?? responseBody ?? ''
+    : activeResponseTab === 'Headers'
+      ? result?.ok ? JSON.stringify(result.headers, null, 2) : ''
+      : activeResponseTab === 'Cookies'
+        ? responseCookies
+        : requestLogs.map((item) => `${item.time} [${item.level.toUpperCase()}] ${item.message}`).join('\n')
 
   return (
     <div ref={splitContainerRef} className={`relative grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-auto lg:grid-cols-[var(--http-split-ratio)_minmax(0,1fr)] lg:grid-rows-1 lg:overflow-hidden ${isResizing ? 'select-none' : ''}`} style={{ '--http-split-ratio': `${splitRatio * 100}%` } as CSSProperties}>
@@ -836,13 +848,13 @@ export default function HttpDebugPage() {
               <button key={tab} onClick={() => setActiveResponseTab(tab)} className={`border-b-2 pb-3 transition-colors ${activeResponseTab === tab ? 'border-cyan-400 text-zinc-100' : 'border-transparent hover:text-zinc-300'}`}>{tab}</button>
             ))}
           </div>
-          <button onClick={() => result?.ok && navigator.clipboard.writeText(result.body)} disabled={!result?.ok} className="mb-1 rounded p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30" title="复制响应"><Copy className="h-4 w-4" /></button>
+          <button onClick={() => void navigator.clipboard.writeText(activeResponseCopyContent)} disabled={!activeResponseCopyContent} className="mb-1 rounded p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30" title={`复制${activeResponseTab}内容`}><Copy className="h-4 w-4" /></button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
           {!result && !loading && <p className="rounded border border-dashed border-zinc-800 p-6 text-center text-xs text-zinc-600">发送请求后显示真实响应</p>}
           {activeResponseTab === 'Body' && responseBody && (streamSse ? <div className="flex min-h-0 min-w-0 flex-1 flex-col"><div className="mb-3 flex shrink-0 items-center"><div className="inline-flex rounded border border-zinc-700 bg-zinc-950 p-1"><button onClick={() => setSseDisplayMode('stream')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'stream' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>流式</button><button onClick={() => setSseDisplayMode('raw')} className={`rounded px-3 py-1.5 text-xs ${sseDisplayMode === 'raw' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}>原始 JSON</button></div></div>{sseDisplayMode === 'stream' ? <div className="min-h-0 flex-1 overflow-y-auto rounded border border-cyan-400/20 bg-zinc-950 p-4 text-zinc-200"><MarkdownText value={streamText} /></div> : <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto pr-1">{sseEvents.map((item) => <div key={item.key} className="min-w-0 overflow-hidden rounded border border-cyan-400/20 bg-zinc-950 p-3"><div className="mb-1 flex gap-3 text-[11px] text-cyan-300"><span>{item.event}</span>{item.id && <span className="text-zinc-600">#{item.id}</span>}</div><pre className="m-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] font-mono text-xs leading-5 text-zinc-300">{item.rawData}</pre></div>)}</div>}</div> : isJsonResponse ? <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]"><VariableEditor height="100%" language="json" theme={editorTheme} variables={{}} value={formattedResponseBody ?? ''} onInsertProcessVariable={openProcessVariableDialog} options={{ readOnly: true, minimap: { enabled: false }, lineNumbers: 'on', tabSize: 2, wordWrap: 'on', padding: { top: 12, bottom: 12 }, fontSize: 12 }} /></div> : <pre className={`whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded border p-4 font-mono text-xs leading-6 ${result?.ok ? 'border-zinc-800 bg-zinc-950 text-zinc-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>{responseBody}</pre>)}
           {activeResponseTab === 'Headers' && result?.ok && <pre className="whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-500">{JSON.stringify(result.headers, null, 2)}</pre>}
-          {activeResponseTab === 'Cookies' && <div className="rounded border border-dashed border-zinc-800 bg-zinc-950 p-5 text-xs text-zinc-600">当前响应未提供可解析的 Cookie。</div>}
+          {activeResponseTab === 'Cookies' && (responseCookies ? <pre className="whitespace-pre-wrap break-words rounded border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs leading-5 text-zinc-500">{responseCookies}</pre> : <div className="rounded border border-dashed border-zinc-800 bg-zinc-950 p-5 text-xs text-zinc-600">当前响应未提供可解析的 Cookie。</div>)}
           {activeResponseTab === '日志' && <div className="min-h-0 flex-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs leading-6">
             {requestLogs.length === 0 ? <div className="text-zinc-600">发送请求后显示详细日志</div> : <div className="space-y-1.5">{requestLogs.map((item, index) => <div key={`${item.time}-${index}`} className="flex gap-3 break-words [overflow-wrap:anywhere]"><span className="shrink-0 text-zinc-600">{item.time}</span><span className={item.level === 'error' ? 'text-rose-300' : item.level === 'success' ? 'text-emerald-300' : 'text-zinc-300'}>{item.message}</span></div>)}</div>}
           </div>}
