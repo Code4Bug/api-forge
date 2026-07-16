@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Palette, Sparkles } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { getActiveLargeModel } from '@/shared/ipc-contracts'
-import { useTheme } from '@/hooks/useTheme'
+import { themePresets, useTheme, type Theme } from '@/hooks/useTheme'
 import AIAssistantPage from '@/pages/AIAssistantPage'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
 import logo from '@/assets/icons/favicon.svg'
@@ -96,13 +97,22 @@ function parseCurlCommand(value: string): { name: string; method: HttpMethod; pr
   return { name: `${method} ${parsed.pathname || '/'}`, method, protocol: 'http', url, headers, body: bodyMatch?.[2] }
 }
 
-function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateFolder, onCreateApi, onRename, onDelete, onMoveApi, onCopyName, onExportFolder }: { node: ApiTreeNode; depth?: number; index?: number; query?: string; onOpenApi: (node: ApiTreeNode) => void; onCreateFolder: (parentId: string) => void; onCreateApi: (parentId?: string) => void; onRename: (node: ApiTreeNode) => void; onDelete: (node: ApiTreeNode) => void; onMoveApi: (apiId: string, parentId?: string, index?: number) => void; onCopyName: (node: ApiTreeNode) => void; onExportFolder: (node: ApiTreeNode) => void }) {
+function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateFolder, onCreateApi, onRename, onDelete, onMoveApi, onCopyName, onCopyCurl, onExportFolder }: { node: ApiTreeNode; depth?: number; index?: number; query?: string; onOpenApi: (node: ApiTreeNode) => void; onCreateFolder: (parentId: string) => void; onCreateApi: (parentId?: string) => void; onRename: (node: ApiTreeNode) => void; onDelete: (node: ApiTreeNode) => void; onMoveApi: (apiId: string, parentId?: string, index?: number) => void; onCopyName: (node: ApiTreeNode) => void; onCopyCurl: (node: ApiTreeNode) => void; onExportFolder: (node: ApiTreeNode, format: 'markdown' | 'html') => void }) {
   const isFolder = node.type === 'folder'
   const { activeApiId } = useWorkspaceStore()
   const isActive = activeApiId === node.id
   const [expanded, setExpanded] = useState(true)
   const [isDragOver, setIsDragOver] = useState(false)
   const [isDropTarget, setIsDropTarget] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [morePosition, setMorePosition] = useState<{ top: number; left: number }>()
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportPosition, setExportPosition] = useState<{ top: number; left: number }>()
+  const moreMenuRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const morePortalRef = useRef<HTMLDivElement>(null)
+  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
   const matches = !query || node.name.toLowerCase().includes(query.toLowerCase()) || node.children?.some((child) => child.name.toLowerCase().includes(query.toLowerCase()))
   useEffect(() => {
     const clear = () => {
@@ -117,6 +127,18 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
       window.removeEventListener('drop', clear, true)
     }
   }, [])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const close = (event: MouseEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node) && !morePortalRef.current?.contains(event.target as Node) && !exportMenuRef.current?.contains(event.target as Node)) {
+        setMoreOpen(false)
+        setExportOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [moreOpen])
 
   if (!matches) return null
 
@@ -155,14 +177,22 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
           {node.method && <span className={`mr-1 inline-flex h-5 min-w-11 items-center justify-center rounded border px-1.5 text-[10px] font-semibold ${methodClass(node.method)}`}>{node.method}</span>}
           {socketType(node) && <span className={`mr-1 inline-flex h-5 min-w-10 items-center justify-center rounded border px-1.5 text-[10px] font-semibold ${socketType(node) === 'UDP' ? 'border-violet-500/40 bg-violet-400/10 text-violet-200' : 'border-amber-500/40 bg-amber-400/10 text-amber-200'}`}>{socketType(node)}</span>}
         </div>
-        <div className="mr-1 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-          {isFolder && <><button onClick={(event) => { event.stopPropagation(); onCreateFolder(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新建子目录"><Plus className="h-3 w-3" /></button><button onClick={(event) => { event.stopPropagation(); onCreateApi(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新建 API"><FilePlus2 className="h-3 w-3" /></button><button onClick={(event) => { event.stopPropagation(); onExportFolder(node) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="导出 API 文档"><Download className="h-3 w-3" /></button></>}
-          <button onClick={(event) => { event.stopPropagation(); onCopyName(node) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="复制名称"><Copy className="h-3 w-3" /></button>
+        <div className={`mr-1 flex shrink-0 items-center gap-0.5 transition-opacity ${moreOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          {isFolder && <><button onClick={(event) => { event.stopPropagation(); onCreateFolder(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新增目录"><Plus className="h-3 w-3" /></button><button onClick={(event) => { event.stopPropagation(); onCreateApi(node.id) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="新增 API"><FilePlus2 className="h-3 w-3" /></button></>}
           <button onClick={(event) => { event.stopPropagation(); onRename(node) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="重命名"><Pencil className="h-3 w-3" /></button>
           <button onClick={(event) => { event.stopPropagation(); onDelete(node) }} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20 hover:text-rose-200" title="删除"><Trash2 className="h-3 w-3" /></button>
+          <div ref={moreMenuRef} className="relative">
+            <button ref={moreButtonRef} onClick={(event) => { event.stopPropagation(); const rect = moreButtonRef.current?.getBoundingClientRect(); if (rect) setMorePosition({ top: rect.bottom - 8, left: rect.right - 12 }); setMoreOpen((value) => !value) }} className="rounded p-1 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-100" title="更多操作" aria-label="更多操作" aria-expanded={moreOpen}><MoreVertical className="h-3 w-3" /></button>
+          </div>
         </div>
       </div>
-      {isFolder && expanded && <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }} onDragLeave={clearDragState} onDrop={handleDrop} className={isDragOver ? 'rounded bg-cyan-400/5' : ''}>{node.children?.map((child, childIndex) => <TreeNode key={child.id} node={child} index={childIndex} depth={depth + 1} query={query} onOpenApi={onOpenApi} onCreateFolder={onCreateFolder} onCreateApi={onCreateApi} onRename={onRename} onDelete={onDelete} onMoveApi={onMoveApi} onCopyName={onCopyName} onExportFolder={onExportFolder} />)}</div>}
+      {moreOpen && morePosition && createPortal(<div ref={morePortalRef} className="fixed z-[9998] w-48 rounded border border-zinc-700 bg-[#111821] p-1 shadow-2xl" style={{ top: morePosition.top, left: morePosition.left }} onClick={(event) => event.stopPropagation()}>
+        {isFolder && <button ref={exportButtonRef} onClick={() => { const rect = exportButtonRef.current?.getBoundingClientRect(); if (rect) setExportPosition({ top: rect.top, left: rect.right + 4 }); setExportOpen((value) => !value) }} className="flex h-8 w-full items-center justify-between gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><span className="flex items-center gap-2"><Download className="h-3.5 w-3.5" />导出 API 文档</span><ChevronRight className="h-3.5 w-3.5 text-zinc-500" /></button>}
+        {!isFolder && <button onClick={() => { setMoreOpen(false); onCopyCurl(node) }} className="flex h-8 w-full items-center gap-2 whitespace-nowrap rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Copy className="h-3.5 w-3.5 shrink-0" />复制为 cURL 命令</button>}
+        <button onClick={() => { setMoreOpen(false); onCopyName(node) }} className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Copy className="h-3.5 w-3.5" />复制名称</button>
+      </div>, document.body)}
+      {exportOpen && exportPosition && createPortal(<div ref={exportMenuRef} className="fixed z-[9999] w-32 rounded border border-zinc-700 bg-[#111821] p-1 shadow-2xl" style={{ top: exportPosition.top, left: exportPosition.left }}><button onClick={() => { setMoreOpen(false); setExportOpen(false); onExportFolder(node, 'markdown') }} className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800">Markdown</button><button onClick={() => { setMoreOpen(false); setExportOpen(false); onExportFolder(node, 'html') }} className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800">HTML</button></div>, document.body)}
+      {isFolder && expanded && <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }} onDragLeave={clearDragState} onDrop={handleDrop} className={isDragOver ? 'rounded bg-cyan-400/5' : ''}>{node.children?.map((child, childIndex) => <TreeNode key={child.id} node={child} index={childIndex} depth={depth + 1} query={query} onOpenApi={onOpenApi} onCreateFolder={onCreateFolder} onCreateApi={onCreateApi} onRename={onRename} onDelete={onDelete} onMoveApi={onMoveApi} onCopyName={onCopyName} onCopyCurl={onCopyCurl} onExportFolder={onExportFolder} />)}</div>}
     </div>
   )
 }
@@ -180,7 +210,6 @@ export function WorkspaceLayout() {
   const [openApiIds, setOpenApiIds] = useState<string[]>([])
   const [tabsInitialized, setTabsInitialized] = useState(false)
   const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number }>()
-  const [exportFolder, setExportFolder] = useState<ApiTreeNode>()
   const [dialog, setDialog] = useState<{ mode: 'folder' | 'api' | 'rename'; parentId?: string; node?: ApiTreeNode }>()
   const [dialogName, setDialogName] = useState('')
   const [dialogDescription, setDialogDescription] = useState('')
@@ -342,31 +371,56 @@ export function WorkspaceLayout() {
     }
   }
 
+  async function copyNodeCurl(node: ApiTreeNode) {
+    const request = workspace?.requests.find((item) => item.id === node.id)
+    const method = request?.method ?? node.method ?? 'GET'
+    const url = request?.url || ''
+    const parts = [`curl -X ${method} '${url.replace(/'/g, "'\\''")}'`]
+    request?.headers?.filter((item) => item.enabled && item.key).forEach((item) => parts.push(`-H '${`${item.key}: ${item.value}`.replace(/'/g, "'\\''")}'`))
+    if (request?.body) parts.push(`--data-raw '${request.body.replace(/'/g, "'\\''")}'`)
+    const command = parts.join(' \\\n  ')
+    try {
+      await navigator.clipboard?.writeText(command)
+    } catch {
+      const input = document.createElement('textarea')
+      input.value = command
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      input.remove()
+    }
+  }
+
   function exportFolderDoc(folder: ApiTreeNode, format: 'markdown' | 'html') {
     const requests = new Map((workspace?.requests ?? []).map((request) => [request.id, request]))
     const apis = flattenTreeApis(folder)
     const title = `${folder.name} API 文档`
     if (format === 'markdown') {
-      const sections = apis.map((api) => {
+      const sections = apis.map((api, index) => {
         const request = requests.get(api.id)
         const method = request?.method ?? api.method ?? ''
-        const lines = [`## ${api.name}`, '', `- 协议：${(request?.protocol ?? api.protocol ?? '').toUpperCase()}`, ...(method ? [`- 方法：${method}`] : []), `- 地址：${request?.url || '未设置'}`]
-        if (request?.description) lines.push(`- 描述：${request.description}`)
-        if (request?.params?.length) lines.push('', '### 请求参数', '', '| 参数 | 值 |', '| --- | --- |', ...request.params.filter((item) => item.enabled && item.key).map((item) => `| ${item.key} | ${item.value} |`))
-        if (request?.headers?.length) lines.push('', '### 请求头', '', '```text', ...request.headers.filter((item) => item.enabled && item.key).map((item) => `${item.key}: ${item.value}`), '```')
-        if (request?.body) lines.push('', '### 请求体', '', '```', request.body, '```')
+        const params = request?.params?.filter((item) => item.enabled && item.key) ?? []
+        const headers = request?.headers?.filter((item) => item.enabled && item.key) ?? []
+        const lines = [`## ${index + 1}. ${api.name}`, '', '| 项目 | 内容 |', '| --- | --- |', `| 协议 | ${(request?.protocol ?? api.protocol ?? '').toUpperCase() || '-'} |`, ...(method ? [`| 方法 | \`${method}\` |`] : []), `| 地址 | \`${request?.url || '未设置'}\` |`]
+        if (request?.description) lines.push(`| 说明 | ${request.description.replace(/\n/g, '<br>')} |`)
+        if (params.length) lines.push('', '### 请求参数', '', '| 参数 | 值 |', '| --- | --- |', ...params.map((item) => `| \`${item.key}\` | ${String(item.value).replace(/\n/g, '<br>')} |`))
+        if (headers.length) lines.push('', '### 请求头', '', '| Header | 值 |', '| --- | --- |', ...headers.map((item) => `| \`${item.key}\` | ${String(item.value).replace(/\n/g, '<br>')} |`))
+        if (request?.body) lines.push('', '### 请求体', '', '```json', request.body, '```')
         return lines.join('\n')
       })
-      downloadFile(`${folder.name}-api-docs.md`, `# ${title}\n\n${sections.join('\n\n') || '该目录暂无接口。'}\n`, 'text/markdown;charset=utf-8')
+      const toc = apis.map((api, index) => `${index + 1}. ${api.name}`).join('\n')
+      downloadFile(`${folder.name}-api-docs.md`, `# API-forge\n\n## ${title}\n\n> 共 ${apis.length} 个接口 · 导出时间：${new Date().toLocaleString('zh-CN')}\n\n## 接口目录\n\n${toc || '该目录暂无接口。'}\n\n${sections.join('\n\n---\n\n')}`, 'text/markdown;charset=utf-8')
       return
     }
-    const sections = apis.map((api) => {
+    const sections = apis.map((api, index) => {
       const request = requests.get(api.id)
       const method = request?.method ?? api.method ?? ''
-      const fields = [...(request?.params ?? []).filter((item) => item.enabled && item.key).map((item) => `<li><code>${escapeHtml(item.key)}</code>: ${escapeHtml(item.value)}</li>`), ...(request?.headers ?? []).filter((item) => item.enabled && item.key).map((item) => `<li><code>${escapeHtml(item.key)}</code>: ${escapeHtml(item.value)}</li>`)]
-      return `<section><h2>${escapeHtml(api.name)}</h2><p><strong>协议：</strong>${escapeHtml((request?.protocol ?? api.protocol ?? '').toUpperCase())}${method ? `　<strong>方法：</strong>${escapeHtml(method)}` : ''}</p><p><strong>地址：</strong><code>${escapeHtml(request?.url || '未设置')}</code></p>${request?.description ? `<p>${escapeHtml(request.description)}</p>` : ''}${fields.length ? `<h3>参数与请求头</h3><ul>${fields.join('')}</ul>` : ''}${request?.body ? `<h3>请求体</h3><pre>${escapeHtml(request.body)}</pre>` : ''}</section>`
+      const params = request?.params?.filter((item) => item.enabled && item.key) ?? []
+      const headers = request?.headers?.filter((item) => item.enabled && item.key) ?? []
+      const table = (items: typeof params) => items.length ? `<table><thead><tr><th>名称</th><th>值</th></tr></thead><tbody>${items.map((item) => `<tr><td><code>${escapeHtml(item.key)}</code></td><td>${escapeHtml(item.value)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">无</p>'
+      return `<section id="api-${index + 1}"><h2><span class="index">${String(index + 1).padStart(2, '0')}</span>${escapeHtml(api.name)}</h2><div class="badges"><span class="protocol">${escapeHtml((request?.protocol ?? api.protocol ?? '').toUpperCase() || 'API')}</span>${method ? `<span class="method">${escapeHtml(method)}</span>` : ''}</div><div class="url"><span>请求地址</span><code>${escapeHtml(request?.url || '未设置')}</code></div>${request?.description ? `<p class="description">${escapeHtml(request.description).replace(/\n/g, '<br>')}</p>` : ''}<h3>请求参数</h3>${table(params)}<h3>请求头</h3>${table(headers)}${request?.body ? `<h3>请求体</h3><pre>${escapeHtml(request.body)}</pre>` : ''}</section>`
     }).join('') || '<p>该目录暂无接口。</p>'
-    const html = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font:14px/1.6 system-ui,sans-serif;max-width:960px;margin:40px auto;padding:0 24px;color:#1f2937}section{border-top:1px solid #e5e7eb;padding:20px 0}code,pre{background:#f3f4f6;border-radius:4px;padding:2px 5px}pre{padding:12px;white-space:pre-wrap}</style><h1>${escapeHtml(title)}</h1>${sections}</html>`
+    const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} - API-forge</title><style>*{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:#243044;font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}main{max-width:1080px;margin:0 auto;padding:36px 28px}.brand{display:flex;align-items:center;gap:12px;margin-bottom:28px;padding:16px 20px;border-radius:12px;background:#0b0f14;color:#f8fafc}.brand svg{width:38px;height:38px;flex:none}.brand-name{font-size:18px;font-weight:700;letter-spacing:.02em}.brand-title{margin-left:auto;color:#a7f3d0;font-size:14px}header{margin-bottom:28px}h1{margin:0 0 8px;font-size:32px}header p,.muted{color:#718096}nav{display:flex;flex-direction:column;gap:6px;margin-bottom:28px;padding:16px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}nav strong{display:block;margin-bottom:4px}nav a{display:block;width:100%;padding:8px 10px;border-radius:6px;color:#2563eb;text-decoration:none;background:#eff6ff}nav a:hover{background:#dbeafe}section{margin:20px 0;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 4px 16px #1e293b0a}h2{display:flex;gap:12px;align-items:center;margin:0;font-size:22px}.index{font:12px ui-monospace;color:#94a3b8}.badges{display:flex;gap:8px;margin:12px 0}.protocol,.method{display:inline-block;padding:2px 9px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:700}.method{background:#dcfce7;color:#15803d}.url{display:flex;gap:12px;padding:12px;border-radius:8px;background:#f8fafc}.url span{color:#64748b;white-space:nowrap}h3{margin:22px 0 8px;font-size:14px}table{width:100%;border-collapse:collapse}th,td{padding:9px 12px;text-align:left;border-bottom:1px solid #edf2f7}th{color:#64748b;background:#f8fafc}code{padding:2px 5px;border-radius:4px;background:#f1f5f9;color:#334155;font:12px ui-monospace,monospace}pre{padding:14px;overflow:auto;border-radius:8px;background:#0f172a;color:#dbeafe;font:12px/1.7 ui-monospace,monospace}.description{color:#526176}@media(max-width:640px){main{padding:24px 14px}.brand-title{display:none}h1{font-size:26px}.url{flex-direction:column;gap:4px}}</style></head><body><main><div class="brand"><svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="API-forge Logo"><rect width="64" height="64" rx="14" fill="#0B0F14"/><rect x="8" y="10" width="48" height="44" rx="8" fill="#111821" stroke="#263342" stroke-width="2"/><path d="M18 24L26 32L18 40" stroke="#32F08C" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 41H45" stroke="#42D9FF" stroke-width="4" stroke-linecap="round"/><circle cx="17" cy="17" r="2" fill="#42D9FF"/><circle cx="24" cy="17" r="2" fill="#32F08C"/></svg><span class="brand-name">API-forge</span><span class="brand-title">API 文档</span></div><header><h1>${escapeHtml(title)}</h1><p>共 ${apis.length} 个接口 · 导出时间：${escapeHtml(new Date().toLocaleString('zh-CN'))}</p></header><nav><strong>接口目录</strong>${apis.map((api, index) => `<a href="#api-${index + 1}">${String(index + 1).padStart(2, '0')} ${escapeHtml(api.name)}</a>`).join('')}</nav>${sections}</main></body></html>`
     downloadFile(`${folder.name}-api-docs.html`, html, 'text/html;charset=utf-8')
   }
 
@@ -464,7 +518,7 @@ export function WorkspaceLayout() {
 
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-[#0b0f14] text-zinc-100">
-      <aside className={`relative flex shrink-0 flex-col border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? 'select-none' : 'transition-[width] duration-150'}`} style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}>
+      <aside className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? 'select-none' : 'transition-[width] duration-150'}`} style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}>
         <div className={`api-forge-brand flex h-14 items-center border-b border-zinc-800 ${sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}>
           {!sidebarCollapsed && <div className="api-forge-brand-mark flex h-8 w-8 shrink-0 items-center justify-center rounded bg-cyan-400/15">
             <img src={isDark ? lightLogo : logo} alt="API-forge" className="h-6 w-6" />
@@ -496,8 +550,8 @@ export function WorkspaceLayout() {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {workspace?.apiTree.map((node, index) => <TreeNode key={node.id} node={node} index={index} query={searchQuery} onOpenApi={openApi} onCreateFolder={(parentId) => openDialog({ mode: 'folder', parentId })} onCreateApi={(parentId) => openDialog({ mode: 'api', parentId })} onRename={(node) => openDialog({ mode: 'rename', node })} onDelete={requestDelete} onMoveApi={moveApi} onCopyName={copyNodeName} onExportFolder={setExportFolder} />)}
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3">
+          {workspace?.apiTree.map((node, index) => <TreeNode key={node.id} node={node} index={index} query={searchQuery} onOpenApi={openApi} onCreateFolder={(parentId) => openDialog({ mode: 'folder', parentId })} onCreateApi={(parentId) => openDialog({ mode: 'api', parentId })} onRename={(node) => openDialog({ mode: 'rename', node })} onDelete={requestDelete} onMoveApi={moveApi} onCopyName={copyNodeName} onCopyCurl={copyNodeCurl} onExportFolder={exportFolderDoc} />)}
           {workspace && !treeHasMatch(workspace.apiTree, searchQuery) && <div className="p-4 text-center text-xs text-zinc-600">未找到匹配接口</div>}
         </div>
 
@@ -507,7 +561,18 @@ export function WorkspaceLayout() {
             <Settings2 className="h-3.5 w-3.5" />
             <span className="truncate">系统设置</span>
           </NavLink>
-          <label className="flex h-8 shrink-0 items-center rounded border border-zinc-700 bg-zinc-950/60 px-1.5" title="主题快速切换"><Palette className="mr-1 h-3 w-3 text-cyan-300" /><select aria-label="主题快速切换" value={theme} onChange={(event) => setTheme(event.target.value as Parameters<typeof setTheme>[0])} className="h-6 max-w-[76px] border-0 bg-transparent px-0 text-[10px] text-zinc-300 outline-none"><option value="dark">深色</option><option value="light">浅色</option><option value="system">系统</option><option value="custom">自定义</option></select></label>
+          <div className="flex h-8 shrink-0 items-center gap-1 rounded border border-zinc-700 bg-zinc-950/60 px-1.5" aria-label="主题快速切换">
+            {([
+              ['dark', '深色'],
+              ['light', '浅色'],
+              ['system', '跟随系统'],
+              ['darkOrange', '深色-橙色'],
+              ['lightBlue', '浅色-蓝色'],
+            ] as Array<[Theme, string]>).map(([id, name]) => {
+              const preset = id === 'system' ? themePresets.dark : themePresets[id]
+              return <button key={id} type="button" onClick={() => setTheme(id)} className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${theme === id ? 'border-zinc-100 ring-1 ring-zinc-400 ring-offset-1 ring-offset-zinc-950' : 'border-zinc-600'}`} style={{ backgroundColor: preset.accent }} title={name} aria-label={name} />
+            })}
+          </div>
           </div>
         </div>
         </>}
@@ -584,14 +649,6 @@ export function WorkspaceLayout() {
           <button onClick={() => closeApi(tabMenu.id)} className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800">关闭当前</button>
           <button onClick={() => closeOtherApis(tabMenu.id)} className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800">关闭其他</button>
           <button onClick={closeAllApis} className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-rose-200 hover:bg-rose-500/15">关闭所有</button>
-        </div>
-      </>}
-      {exportFolder && <>
-        <div className="fixed inset-0 z-40" onClick={() => setExportFolder(undefined)} />
-        <div className="fixed left-3 top-24 z-50 w-44 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl">
-          <div className="px-3 py-2 text-[11px] text-zinc-500">导出“{exportFolder.name}”</div>
-          <button onClick={() => { exportFolderDoc(exportFolder, 'markdown'); setExportFolder(undefined) }} className="flex h-8 w-full items-center gap-2 rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Download className="h-3.5 w-3.5" />Markdown 文档</button>
-          <button onClick={() => { exportFolderDoc(exportFolder, 'html'); setExportFolder(undefined) }} className="flex h-8 w-full items-center gap-2 rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Download className="h-3.5 w-3.5" />HTML 文档</button>
         </div>
       </>}
       {dialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

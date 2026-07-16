@@ -12,6 +12,8 @@ const themes: Array<{ id: Theme; name: string; description: string; icon: typeof
 ]
 
 const colorThemes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
+  { id: 'lightBlue', name: '浅色-蓝色', description: '清晰明亮的蓝色界面', icon: Sun },
+  { id: 'darkOrange', name: '深色-橙色', description: '黑色背景与橙色强调', icon: Sunset },
   { id: 'dim', name: '深色高对比', description: '更强的文字和边界对比', icon: Palette },
   { id: 'ocean', name: '海洋蓝', description: '冷静通透的蓝绿色', icon: Waves },
   { id: 'forest', name: '森林绿', description: '沉稳自然的绿色', icon: Leaf },
@@ -52,6 +54,9 @@ export default function SettingsPage() {
   const [showLargeApiKey, setShowLargeApiKey] = useState(false)
   const [showLightApiKey, setShowLightApiKey] = useState(false)
   const [cursorGlowEnabled, setCursorGlowEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
+  const [cursorGlowEffect, setCursorGlowEffect] = useState(() => localStorage.getItem('cursorMosaicEffect') || 'breathe')
+  const [cursorGlowTexture, setCursorGlowTexture] = useState(() => localStorage.getItem('cursorMosaicTexture') || 'grid')
+  const [cursorGlowColor, setCursorGlowColor] = useState(() => localStorage.getItem('cursorMosaicColor') || 'theme')
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
@@ -128,6 +133,19 @@ export default function SettingsPage() {
     window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
   }
 
+  function updateCursorGlowEffect(effect: string) {
+    setCursorGlowEffect(effect)
+    localStorage.setItem('cursorMosaicEffect', effect)
+    window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
+  }
+
+  function updateCursorGlowSetting(key: 'cursorMosaicTexture' | 'cursorMosaicColor', value: string) {
+    if (key === 'cursorMosaicTexture') setCursorGlowTexture(value)
+    else setCursorGlowColor(value)
+    localStorage.setItem(key, value)
+    window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
+  }
+
   async function checkForUpdates() {
     setUpdateStatus({ state: 'checking' })
     await window.desktopApi?.checkForUpdates()
@@ -179,6 +197,11 @@ export default function SettingsPage() {
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-4 flex items-center gap-2"><MousePointer2 className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">交互效果</h2></div>
         <label className="flex items-center justify-between gap-4 text-xs text-zinc-300"><span><span className="block font-medium">启用光标马赛克光晕</span><span className="mt-1 block text-[11px] text-zinc-500">在光标附近显示跟随移动的像素光晕</span></span><input type="checkbox" checked={cursorGlowEnabled} onChange={(event) => updateCursorGlow(event.target.checked)} className="h-4 w-4 accent-cyan-400" /></label>
+        <div className={`mt-4 border-t border-zinc-800 pt-4 ${!cursorGlowEnabled ? 'pointer-events-none opacity-50' : ''}`}>
+          <div className="mb-4"><div className="mb-2 text-xs font-medium text-zinc-300">纹理</div><div className="grid grid-cols-3 gap-2"><button onClick={() => updateCursorGlowSetting('cursorMosaicTexture', 'grid')} className={`rounded border px-2 py-2 text-[11px] ${cursorGlowTexture === 'grid' ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-200' : 'border-zinc-700 text-zinc-400'}`}>像素网格</button><button onClick={() => updateCursorGlowSetting('cursorMosaicTexture', 'dots')} className={`rounded border px-2 py-2 text-[11px] ${cursorGlowTexture === 'dots' ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-200' : 'border-zinc-700 text-zinc-400'}`}>颗粒点阵</button><button onClick={() => updateCursorGlowSetting('cursorMosaicTexture', 'soft')} className={`rounded border px-2 py-2 text-[11px] ${cursorGlowTexture === 'soft' ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-200' : 'border-zinc-700 text-zinc-400'}`}>柔和光斑</button></div></div>
+          <div className="mb-4"><div className="mb-2 text-xs font-medium text-zinc-300">运动</div>{[['定点光效', [['breathe', '呼吸'], ['expand', '脉冲扩散'], ['contract', '脉冲收缩'], ['blink', '闪烁'], ['steady', '静止柔光'], ['centerExpand', '中心放射'], ['centerContract', '中心收束'], ['mirrorPulse', '镜像脉冲'], ['rotate', '旋转对称'], ['ripple', '同心波纹']]], ['动态追踪', [['drift', '轻柔漂移'], ['bounce', '弹跳移动'], ['orbit', '环绕移动'], ['slideX', '水平移动'], ['slideY', '垂直移动']]]].map(([group, effects]) => <div key={String(group)} className="mb-3 last:mb-0"><div className="mb-2 text-[11px] text-zinc-500">{group}</div><div className="grid grid-cols-2 gap-2 sm:grid-cols-5">{(effects as string[][]).map(([id, name]) => <button key={id} onClick={() => updateCursorGlowEffect(id)} className={`rounded border px-2 py-2 text-[11px] ${cursorGlowEffect === id ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-200' : 'border-zinc-700 text-zinc-400'}`}>{name}</button>)}</div></div>)}</div>
+          <div><div className="mb-2 text-xs font-medium text-zinc-300">色彩</div><div className="grid grid-cols-4 gap-2">{[['theme', '跟随主题'], ['cyan', '青蓝'], ['amber', '琥珀'], ['spectrum', '彩虹']].map(([id, name]) => <button key={id} onClick={() => updateCursorGlowSetting('cursorMosaicColor', id)} className={`rounded border px-2 py-2 text-[11px] ${cursorGlowColor === id ? 'border-cyan-400/70 bg-cyan-400/15 text-cyan-200' : 'border-zinc-700 text-zinc-400'}`}>{name}</button>)}</div></div>
+        </div>
       </section>
       </>}
       {activeCategory === 'model' && <>

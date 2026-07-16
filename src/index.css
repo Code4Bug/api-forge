@@ -265,7 +265,8 @@ html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14)
 /* 光标附近的像素化光晕，仅作为背景反馈，不参与交互。 */
 .cursor-mosaic-glow {
   position: fixed;
-  z-index: 20;
+  /* 光晕覆盖侧栏和内容面板，但 pointer-events:none 不阻断交互。 */
+  z-index: 1000;
   top: 0;
   left: 0;
   width: 240px;
@@ -274,26 +275,89 @@ html.light .context-gauge-tooltip { box-shadow: 0 8px 24px rgba(15, 23, 42, .14)
   opacity: 0;
   transform: translate3d(calc(var(--cursor-x) - 120px), calc(var(--cursor-y) - 120px), 0);
   transition: opacity 260ms ease;
+}
+
+.cursor-mosaic-glow-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
   background-image:
-    radial-gradient(circle at center, rgba(50, 240, 140, .13) 0 9%, rgba(66, 217, 255, .08) 24%, transparent 66%),
-    linear-gradient(rgba(66, 217, 255, .07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(50, 240, 140, .06) 1px, transparent 1px);
+    radial-gradient(circle at center, var(--app-glow-primary) 0 9%, var(--app-glow-secondary) 24%, transparent 66%),
+    linear-gradient(var(--app-glow-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-glow-grid) 1px, transparent 1px);
   background-size: 100% 100%, 12px 12px, 12px 12px;
   mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
   -webkit-mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
   mix-blend-mode: screen;
 }
+.cursor-mosaic-glow-surface[data-texture="dots"] { background-image: radial-gradient(circle, var(--app-glow-primary) 1px, transparent 2px); background-size: 10px 10px; }
+.cursor-mosaic-glow-surface[data-texture="soft"] { background-image: radial-gradient(circle at center, var(--app-glow-primary) 0 18%, var(--app-glow-secondary) 42%, transparent 72%); }
+.cursor-mosaic-glow-surface[data-color="cyan"] { --app-glow-primary: rgba(34, 211, 238, .32); --app-glow-secondary: rgba(14, 165, 233, .18); --app-glow-grid: rgba(34, 211, 238, .14); }
+.cursor-mosaic-glow-surface[data-color="amber"] { --app-glow-primary: rgba(245, 158, 11, .32); --app-glow-secondary: rgba(234, 88, 12, .18); --app-glow-grid: rgba(245, 158, 11, .14); }
+.cursor-mosaic-glow-surface[data-color="spectrum"] { background-image: conic-gradient(from 0deg, rgba(34,211,238,.24), rgba(168,85,247,.22), rgba(245,158,11,.24), rgba(34,211,238,.24)); }
 
 .cursor-mosaic-glow[data-visible="true"] {
   opacity: 1;
 }
 
-/* 浅色背景改用深色青蓝光，避免 screen 混合后与白底失去对比。 */
+@keyframes cursor-glow-breathe { 0%, 100% { scale: .92; opacity: .72; } 50% { scale: 1.08; opacity: 1; } }
+@keyframes cursor-glow-expand { 0%, 100% { scale: .78; } 50% { scale: 1.22; } }
+@keyframes cursor-glow-contract { 0%, 100% { scale: 1.18; } 50% { scale: .78; } }
+@keyframes cursor-glow-rotate { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes cursor-glow-drift { 0%, 100% { translate: -4px 0; } 50% { translate: 4px -5px; } }
+@keyframes cursor-glow-bounce { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+@keyframes cursor-glow-blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes cursor-glow-ripple { 0%, 100% { scale: .86; filter: blur(0); } 50% { scale: 1.14; filter: blur(1px); } }
+@keyframes cursor-glow-heartbeat { 0%, 45%, 100% { scale: 1; } 12% { scale: 1.14; } 24% { scale: .96; } }
+/* 非移动动效只改变自身形态，始终围绕光标中心变化。 */
+@keyframes cursor-glow-center-expand { 0%, 100% { scale: .72; opacity: .55; } 50% { scale: 1.28; opacity: 1; } }
+@keyframes cursor-glow-center-contract { 0%, 100% { scale: 1.25; opacity: .95; } 50% { scale: .72; opacity: .55; } }
+@keyframes cursor-glow-mirror-pulse { 0%, 100% { scale: 1 .78; } 50% { scale: .78 1.2; } }
+@keyframes cursor-glow-orbit { from { rotate: 0deg; translate: 8px -5px; } 50% { translate: -8px 5px; } to { rotate: 360deg; translate: 8px -5px; } }
+@keyframes cursor-glow-slide-x { 0%, 100% { translate: -12px 0; } 50% { translate: 12px 0; } }
+@keyframes cursor-glow-slide-y { 0%, 100% { translate: 0 -12px; } 50% { translate: 0 12px; } }
+.cursor-mosaic-glow-surface[data-effect="breathe"] { animation: cursor-glow-breathe 2.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="expand"] { animation: cursor-glow-expand 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="contract"] { animation: cursor-glow-contract 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="rotate"] { animation: cursor-glow-rotate 7s linear infinite; }
+.cursor-mosaic-glow-surface[data-effect="drift"] { animation: cursor-glow-drift 3s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="bounce"] { animation: cursor-glow-bounce 1.7s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="blink"] { animation: cursor-glow-blink 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="ripple"] { animation: cursor-glow-ripple 2.2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="heartbeat"] { animation: cursor-glow-heartbeat 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="centerExpand"] { animation: cursor-glow-center-expand 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="centerContract"] { animation: cursor-glow-center-contract 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="mirrorPulse"] { animation: cursor-glow-mirror-pulse 2.2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="orbit"] { animation: cursor-glow-orbit 4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="slideX"] { animation: cursor-glow-slide-x 2.4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="slideY"] { animation: cursor-glow-slide-y 2.4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="steady"] { opacity: .82; }
+
+/* 中心不动类不允许叠加移动动效留下的位移。 */
+.cursor-mosaic-glow-surface[data-effect="breathe"],
+.cursor-mosaic-glow-surface[data-effect="expand"],
+.cursor-mosaic-glow-surface[data-effect="contract"],
+.cursor-mosaic-glow-surface[data-effect="blink"],
+.cursor-mosaic-glow-surface[data-effect="steady"],
+.cursor-mosaic-glow-surface[data-effect="centerExpand"],
+.cursor-mosaic-glow-surface[data-effect="centerContract"],
+.cursor-mosaic-glow-surface[data-effect="mirrorPulse"],
+.cursor-mosaic-glow-surface[data-effect="rotate"],
+.cursor-mosaic-glow-surface[data-effect="ripple"] {
+  translate: 0 0 !important;
+}
+
+/* 浅色背景改用正片叠底，避免 screen 混合后与白底失去对比。 */
 html.light .cursor-mosaic-glow {
   background-image:
-    radial-gradient(circle at center, rgba(8, 145, 178, .2) 0 9%, rgba(37, 99, 235, .12) 24%, transparent 66%),
-    linear-gradient(rgba(8, 145, 178, .14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 99, 235, .12) 1px, transparent 1px);
+    radial-gradient(circle at center, var(--app-glow-primary) 0 9%, var(--app-glow-secondary) 24%, transparent 66%),
+    linear-gradient(var(--app-glow-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-glow-secondary) 1px, transparent 1px);
+  mix-blend-mode: multiply;
+}
+
+html[data-theme="lightBlue"] .cursor-mosaic-glow {
   mix-blend-mode: multiply;
 }
 
@@ -358,18 +422,21 @@ html.light .cursor-mosaic-glow {
 }
 
 :root {
-  --app-bg: #050505;
-  --app-surface: #0b0b0b;
-  --app-raised: #151515;
-  --app-border: #262626;
-  --app-text: #f5f5f5;
-  --app-muted: #8a8a8a;
-  --app-accent: #f59e0b;
-  --app-accent-soft: rgba(245, 158, 11, .14);
-  --app-accent-border: #75551c;
-  --app-input: #101010;
-  --app-hover: #242424;
-  --app-selection: rgba(245, 158, 11, .28);
+  --app-bg: #0a0a0a;
+  --app-surface: #111111;
+  --app-raised: #1b1b1b;
+  --app-border: #303030;
+  --app-text: #f2f2f2;
+  --app-muted: #969696;
+  --app-accent: #a3a3a3;
+  --app-accent-soft: rgba(163, 163, 163, .14);
+  --app-accent-border: #666666;
+  --app-input: #151515;
+  --app-hover: #2b2b2b;
+  --app-selection: rgba(163, 163, 163, .28);
+  --app-glow-primary: rgba(163, 163, 163, .24);
+  --app-glow-secondary: rgba(163, 163, 163, .14);
+  --app-glow-grid: rgba(163, 163, 163, .10);
   color-scheme: dark;
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -382,7 +449,7 @@ html.light .cursor-mosaic-glow {
 
 html.light {
   color-scheme: light;
-  --app-bg: #f4f7fb;
+  --app-bg: #e9e9e9;
 }
 
 html.dim {
@@ -397,26 +464,26 @@ html.light #root {
 
 html.light [class*="bg-zinc-950"],
 html.light [class*="bg-[#"] {
-  background-color: #ffffff !important;
+  background-color: #fafafa !important;
 }
 
 html.light [class*="bg-zinc-900"] {
-  background-color: #eef2f7 !important;
+  background-color: #f0f0f0 !important;
 }
 
 html.light [class*="bg-zinc-800"] {
-  background-color: #e5eaf1 !important;
+  background-color: #e3e3e3 !important;
 }
 
 html.light [class*="border-zinc-800"],
 html.light [class*="border-zinc-700"] {
-  border-color: #d3dae5 !important;
+  border-color: #c4c4c4 !important;
 }
 
 html.light [class*="text-zinc-100"],
 html.light [class*="text-zinc-200"],
 html.light [class*="text-zinc-300"] {
-  color: #263241 !important;
+  color: #202020 !important;
 }
 
 html[data-theme] [class*="bg-zinc-950"],
@@ -448,13 +515,46 @@ html[data-theme] [class*="text-zinc-400"] {
   color: var(--app-muted) !important;
 }
 
-html[data-theme] .variable-input-field {
+html[data-theme] .variable-input-overlay {
   color: transparent !important;
 }
 
 html[data-theme] .variable-input-field,
-html[data-theme] .variable-input-field + * {
+html[data-theme] .variable-input-preview {
   line-height: inherit;
+}
+
+.variable-input-preview {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  color: var(--app-text);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  transform: none !important;
+  zoom: 1 !important;
+}
+
+.variable-input-preview-multiline {
+  display: block;
+}
+
+.variable-input-preview > span {
+  display: block;
+  min-width: 0;
+  margin: 0;
+}
+
+.variable-input-overlay {
+  line-height: inherit;
+  -webkit-text-fill-color: transparent !important;
+  text-indent: 0;
+}
+
+.variable-input-field::placeholder {
+  color: transparent;
 }
 
 html[data-theme] body,
@@ -584,6 +684,37 @@ html.light [class*="text-red-400"] {
 
 html.light [class*="text-zinc-950"] {
   color: #ffffff !important;
+}
+
+/* 蓝色浅色主题中的请求方法标签使用深色文字，确保在浅色底色上清晰可见。 */
+html[data-theme="lightBlue"] [class*="text-emerald-200"],
+html[data-theme="lightBlue"] [class*="text-emerald-300"] {
+  color: #047857 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-blue-200"],
+html[data-theme="lightBlue"] [class*="text-blue-300"] {
+  color: #1d4ed8 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-amber-200"],
+html[data-theme="lightBlue"] [class*="text-amber-300"] {
+  color: #b45309 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-violet-200"],
+html[data-theme="lightBlue"] [class*="text-violet-300"] {
+  color: #6d28d9 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-rose-200"],
+html[data-theme="lightBlue"] [class*="text-rose-300"] {
+  color: #be123c !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-cyan-200"],
+html[data-theme="lightBlue"] [class*="text-cyan-300"] {
+  color: #0e7490 !important;
 }
 
 html.light select,

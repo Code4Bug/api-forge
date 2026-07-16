@@ -11,11 +11,19 @@ import SettingsPage from '@/pages/SettingsPage'
 function CursorMosaicGlow() {
   const glowRef = useRef<HTMLDivElement>(null)
   const [enabled, setEnabled] = useState(() => localStorage.getItem('cursorMosaicGlow') !== 'false')
+  const [effect, setEffect] = useState(() => localStorage.getItem('cursorMosaicEffect') || 'breathe')
+  const [texture, setTexture] = useState(() => localStorage.getItem('cursorMosaicTexture') || 'grid')
+  const [colorMode, setColorMode] = useState(() => localStorage.getItem('cursorMosaicColor') || 'theme')
   const target = useRef({ x: -240, y: -240 })
   const current = useRef({ x: -240, y: -240 })
 
   useEffect(() => {
-    const sync = () => setEnabled(localStorage.getItem('cursorMosaicGlow') !== 'false')
+    const sync = () => {
+      setEnabled(localStorage.getItem('cursorMosaicGlow') !== 'false')
+      setEffect(localStorage.getItem('cursorMosaicEffect') || 'breathe')
+      setTexture(localStorage.getItem('cursorMosaicTexture') || 'grid')
+      setColorMode(localStorage.getItem('cursorMosaicColor') || 'theme')
+    }
     window.addEventListener('api-forge:cursor-glow-change', sync)
     return () => window.removeEventListener('api-forge:cursor-glow-change', sync)
   }, [])
@@ -31,8 +39,9 @@ function CursorMosaicGlow() {
       if (glowRef.current) glowRef.current.dataset.visible = 'false'
     }
     const animate = () => {
-      current.current.x += (target.current.x - current.current.x) * 0.12
-      current.current.y += (target.current.y - current.current.y) * 0.12
+      // 提高跟随系数，减少光标移动时的拖尾延迟。
+      current.current.x += (target.current.x - current.current.x) * 0.38
+      current.current.y += (target.current.y - current.current.y) * 0.38
       if (glowRef.current) {
         glowRef.current.style.setProperty('--cursor-x', `${current.current.x}px`)
         glowRef.current.style.setProperty('--cursor-y', `${current.current.y}px`)
@@ -49,7 +58,7 @@ function CursorMosaicGlow() {
     }
   }, [enabled])
 
-  return enabled ? <div ref={glowRef} className="cursor-mosaic-glow" aria-hidden="true" /> : null
+  return enabled ? <div ref={glowRef} className="cursor-mosaic-glow" aria-hidden="true"><span className="cursor-mosaic-glow-surface" data-effect={effect} data-texture={texture} data-color={colorMode} /></div> : null
 }
 
 export default function App() {

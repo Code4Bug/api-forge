@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export type Theme = 'light' | 'dark' | 'system' | 'dim' | 'ocean' | 'forest' | 'violet' | 'sunset' | 'custom'
+export type Theme = 'light' | 'dark' | 'system' | 'dim' | 'darkOrange' | 'lightBlue' | 'ocean' | 'forest' | 'violet' | 'sunset' | 'custom'
 
 export interface ThemeConfig {
   background: string
@@ -13,10 +13,13 @@ export interface ThemeConfig {
 }
 
 export const themePresets: Record<Exclude<Theme, 'system' | 'custom'>, ThemeConfig> = {
-  // 深色主题使用中性黑色系，作为独立于系统偏好的默认主题。
-  dark: { background: '#050505', surface: '#0b0b0b', raised: '#151515', border: '#262626', text: '#f5f5f5', muted: '#8a8a8a', accent: '#f59e0b' },
-  light: { background: '#f4f7fb', surface: '#ffffff', raised: '#eef2f7', border: '#d3dae5', text: '#1f2937', muted: '#667085', accent: '#0891b2' },
+  // 默认深色主题使用黑灰配色，避免强调色干扰内容层级。
+  dark: { background: '#0a0a0a', surface: '#111111', raised: '#1b1b1b', border: '#303030', text: '#f2f2f2', muted: '#969696', accent: '#a3a3a3' },
+  // 默认浅色主题使用灰白配色，降低蓝色饱和度。
+  light: { background: '#e9e9e9', surface: '#fafafa', raised: '#f0f0f0', border: '#c4c4c4', text: '#202020', muted: '#666666', accent: '#5f5f5f' },
   dim: { background: '#101722', surface: '#17212e', raised: '#202d3c', border: '#3a4a5e', text: '#f8fafc', muted: '#a8b4c3', accent: '#7dd3fc' },
+  darkOrange: { background: '#050505', surface: '#0b0b0b', raised: '#151515', border: '#262626', text: '#f5f5f5', muted: '#8a8a8a', accent: '#f59e0b' },
+  lightBlue: { background: '#f4f7fb', surface: '#ffffff', raised: '#eef2f7', border: '#d3dae5', text: '#1f2937', muted: '#667085', accent: '#0891b2' },
   ocean: { background: '#071923', surface: '#0b2634', raised: '#10384a', border: '#1e586d', text: '#e5f6fb', muted: '#8bb6c4', accent: '#38bdf8' },
   forest: { background: '#0b1713', surface: '#11231c', raised: '#19382b', border: '#2b5b46', text: '#e8f5ed', muted: '#91b3a1', accent: '#6ee7b7' },
   violet: { background: '#130f1f', surface: '#211832', raised: '#302247', border: '#57427a', text: '#f5efff', muted: '#b7a9cf', accent: '#c4b5fd' },
@@ -55,6 +58,10 @@ function applyTheme(theme: Theme) {
   root.style.setProperty('--app-input', `color-mix(in srgb, ${config.surface} 72%, ${config.raised})`)
   root.style.setProperty('--app-hover', `color-mix(in srgb, ${config.raised} 78%, ${config.text})`)
   root.style.setProperty('--app-selection', `color-mix(in srgb, ${config.accent} 28%, transparent)`)
+  const glowStrength = actualTheme === 'lightBlue' ? [42, 24, 18] : [24, 14, 10]
+  root.style.setProperty('--app-glow-primary', `color-mix(in srgb, ${config.accent} ${glowStrength[0]}%, transparent)`)
+  root.style.setProperty('--app-glow-secondary', `color-mix(in srgb, ${config.accent} ${glowStrength[1]}%, transparent)`)
+  root.style.setProperty('--app-glow-grid', `color-mix(in srgb, ${config.accent} ${glowStrength[2]}%, transparent)`)
   root.classList.remove('light', 'dark', 'dim')
   root.classList.add(actualTheme === 'light' ? 'light' : actualTheme === 'dim' ? 'dim' : 'dark')
 }
