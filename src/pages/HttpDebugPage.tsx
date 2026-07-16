@@ -308,7 +308,7 @@ export default function HttpDebugPage() {
     if (activeApiNode && activeApiNode.protocol !== 'http') return ['Info'] as const
     return method === 'GET' || method === 'HEAD'
       ? ['Headers', 'Bearer', 'Params', 'Settings', 'Test', 'Info'] as const
-      : ['Headers', 'Bearer', 'BODY', 'Params', 'Settings', 'Test', 'Info'] as const
+      : ['Headers', 'Bearer', 'Body', 'Params', 'Settings', 'Test', 'Info'] as const
   }, [activeApiNode?.protocol, method])
   const [requestTabOrder, setRequestTabOrder] = useState<string[]>(() => {
     try {
@@ -326,7 +326,7 @@ export default function HttpDebugPage() {
   const [activeRequestTab, setActiveRequestTab] = useState<(typeof requestTabs)[number]>(requestTabs[0])
   useEffect(() => {
     setRequestTabOrder((current) => [...current.filter((tab) => requestTabs.includes(tab as never)), ...requestTabs.filter((tab) => !current.includes(tab))])
-    const defaultTab = requestTabs.includes('BODY' as never) ? 'BODY' : requestTabs.includes('Params' as never) ? 'Params' : requestTabs[0]
+    const defaultTab = requestTabs.includes('Body' as never) ? 'Body' : requestTabs.includes('Params' as never) ? 'Params' : requestTabs[0]
     setActiveRequestTab(defaultTab as (typeof requestTabs)[number])
   }, [activeApiId, requestTabs])
   useEffect(() => {
@@ -678,7 +678,7 @@ export default function HttpDebugPage() {
           {activeRequestTab === 'Bearer' && (
             <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4"><label className="block text-xs text-zinc-400">认证方式<select className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100"><option>Bearer Token</option><option>Basic Auth</option><option>API Key</option></select></label><label className="block text-xs text-zinc-400">Token<VariableInput value={bearerToken} variables={variables} onChange={updateBearer} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-3 font-mono text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="输入 token 或 {{token}}" /></label><p className="text-[11px] text-zinc-600">保存后会同步更新 Headers 中的 Authorization。</p></div>
           )}
-          {activeRequestTab === 'BODY' && (
+          {activeRequestTab === 'Body' && (
             <div className="flex h-full min-h-0 flex-col">
               <div className="mb-2 flex items-center justify-between">
                 <label className="block text-xs font-medium text-zinc-300">Body</label>
@@ -706,7 +706,14 @@ export default function HttpDebugPage() {
                     <div key={field.id} className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_110px_24px] gap-2">
                       <input type="checkbox" checked={field.enabled} onChange={(event) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} className="h-4 w-4 shrink-0 self-center justify-self-center accent-cyan-400" />
                       <VariableInput value={field.key} variables={variables} onChange={(value) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, key: value } : item))} placeholder="key" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100" />
-                      <VariableInput value={field.value} variables={variables} onChange={(value) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item))} placeholder={field.kind === 'file' ? '文件路径' : 'value'} className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100" />
+                      {field.kind === 'file' ? (
+                        <label htmlFor={`form-file-${field.id}`} className="flex h-9 min-w-0 cursor-pointer items-center overflow-hidden rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-300 hover:border-zinc-600">
+                          <input id={`form-file-${field.id}`} type="file" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, value: `@${file.name}` } : item)); event.currentTarget.value = '' }} />
+                          <span className="truncate">{field.value || '选择文件'}</span>
+                        </label>
+                      ) : (
+                        <VariableInput value={field.value} variables={variables} onChange={(value) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item))} placeholder="value" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100" />
+                      )}
                       <select value={field.kind} onChange={(event) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value as 'text' | 'file' } : item))} className="h-9 rounded border border-zinc-800 bg-zinc-900 px-2 text-xs text-zinc-100">
                         <option value="text">文本</option>
                         <option value="file">文件</option>

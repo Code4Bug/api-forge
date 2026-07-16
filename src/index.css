@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* UI 文案默认不可选，编辑控件和代码编辑器保留文本选择能力。 */
+html,
+body,
+#root {
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.monaco-editor,
+.monaco-editor * {
+  user-select: text;
+}
+
 .ai-message {
   width: fit-content;
   max-width: min(82vw, 760px);
