@@ -397,13 +397,13 @@ export function WorkspaceLayout() {
     const availableIds = new Set(apiNodes.map((node) => node.id))
     const storedTabs = readApiTabsState()
     const ids = (storedTabs?.openApiIds ?? workspace.preferences.openApiIds ?? []).filter((id) => availableIds.has(id))
-    const restoredActiveApiId = storedTabs?.activeApiId ?? activeApiId
+    const restoredActiveApiId = storedTabs?.activeApiId ?? workspace.preferences.activeApiId
     const nextActiveApiId = restoredActiveApiId && ids.includes(restoredActiveApiId) ? restoredActiveApiId : ids[0]
     setOpenApiIds(ids)
     setTabsInitialized(true)
     setActiveApiId(nextActiveApiId)
     writeApiTabsState(ids, nextActiveApiId)
-  }, [workspace, apiNodes, tabsInitialized, activeApiId, setActiveApiId])
+  }, [workspace, apiNodes, tabsInitialized, setActiveApiId])
 
   function updateOpenApiIds(ids: string[], nextActiveApiId = activeApiId) {
     setOpenApiIds(ids)
@@ -685,7 +685,7 @@ export function WorkspaceLayout() {
               {openApis.map((api) => (
                 <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { activateApi(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
                   <span className="truncate">{api.name}</span>
-                  <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
+                  <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
                 </NavLink>
               ))}
               <button className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增标签"><Plus className="h-3.5 w-3.5" /></button>

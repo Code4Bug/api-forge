@@ -231,7 +231,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       workspace,
       activeProtocol: workspace.preferences.activeProtocol,
       activeEnvironmentId: workspace.preferences.activeEnvironmentId,
-      activeApiId: workspace.preferences.activeApiId,
       saveStatus: 'saved',
     })
     if (JSON.stringify(normalizedPreferences) !== JSON.stringify(originalPreferences)) persistWorkspace(workspace, set)
