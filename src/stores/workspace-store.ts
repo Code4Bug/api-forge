@@ -50,6 +50,7 @@ interface WorkspaceState {
   setOpenApiIds: (apiIds: string[]) => void
   updateRequest: (request: RequestDefinition) => void
   addHistory: (item: RequestHistoryItem) => void
+  removeHistory: (ids: string[]) => void
   clearHistory: () => void
   createFolder: (parentId?: string, name?: string) => string | undefined
   createApi: (parentId: string | undefined, input: ApiDefinitionInput) => string | undefined
@@ -372,6 +373,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const nextWorkspace = { ...workspace, history: [item, ...workspace.history].slice(0, 200) }
     set({ workspace: nextWorkspace })
     saveHistory(nextWorkspace.history, set)
+  },
+  removeHistory: (ids) => {
+    const { workspace } = get()
+    if (!workspace || ids.length === 0) return
+    const idSet = new Set(ids)
+    const nextHistory = workspace.history.filter((item) => !idSet.has(item.id))
+    if (nextHistory.length === workspace.history.length) return
+    const nextWorkspace = { ...workspace, history: nextHistory }
+    set({ workspace: nextWorkspace })
+    saveHistory(nextHistory, set)
   },
   clearHistory: () => {
     const { workspace } = get()
