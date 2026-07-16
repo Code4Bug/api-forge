@@ -145,6 +145,21 @@ export interface AppInfo {
   platform: string
 }
 
+export interface AiMessage {
+  id: string
+  role: 'user' | 'assistant' | 'reasoning' | 'tool'
+  content: string
+  tool?: string
+  reasoningDone?: boolean
+}
+
+export interface AiConversation {
+  id: string
+  title: string
+  messages: AiMessage[]
+  updatedAt: string
+}
+
 export interface UpdateStatus {
   state: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
   version?: string
@@ -218,6 +233,8 @@ export interface DesktopApi {
   loadWorkspace: () => Promise<WorkspaceSnapshot>
   saveWorkspace: (workspace: WorkspaceSnapshot) => Promise<{ ok: true }>
   saveHistory: (history: RequestHistoryItem[]) => Promise<{ ok: true }>
+  loadConversations: () => Promise<AiConversation[]>
+  saveConversations: (conversations: AiConversation[]) => Promise<{ ok: true }>
   httpSend: (request: HttpSendRequest) => Promise<HttpSendResult>
   httpCancel: (requestId: string) => Promise<{ ok: true }>
   socketConnect: (request: SocketConnectRequest) => Promise<SocketResult>

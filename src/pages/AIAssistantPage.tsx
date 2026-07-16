@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown, ChevronRight, Copy, Download, RotateCcw, Send, Settings2, Sparkles, Square, Wrench } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { getActiveLargeModel, getActiveLightModel, type ApiTreeNode, type HttpMethod, type LargeModelConfig, type Protocol } from '@/shared/ipc-contracts'
+import { getActiveLargeModel, getActiveLightModel, type AiConversation, type AiMessage, type ApiTreeNode, type HttpMethod, type LargeModelConfig, type Protocol } from '@/shared/ipc-contracts'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 
-type Message = { id: string; role: 'user' | 'assistant' | 'reasoning' | 'tool'; content: string; tool?: string; reasoningDone?: boolean }
-type Conversation = { id: string; title: string; messages: Message[]; updatedAt: string }
+type Message = AiMessage
+type Conversation = AiConversation
 type ToolName = 'list_directories' | 'get_directory' | 'create_directory' | 'edit_directory' | 'delete_directory' | 'list_apis' | 'get_api_details' | 'create_api' | 'edit_api' | 'delete_api' | 'get_app_version' | 'get_usage_help'
 type ModelMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>; tool_call_id?: string; name?: string }
 
@@ -29,6 +29,20 @@ function buildConversationExport(conversations: Conversation[]) {
 function removeDuplicateEmptyConversations(conversations: Conversation[]): Conversation[] {
   const firstEmptyId = conversations.find((conversation) => conversation.messages.length === 0)?.id
   return conversations.filter((conversation) => conversation.messages.length > 0 || conversation.id === firstEmptyId)
+}
+
+function readLegacyConversations(): Conversation[] {
+  try {
+    const stored = localStorage.getItem('ai-chat-conversations')
+    if (stored) {
+      const conversations = removeDuplicateEmptyConversations(JSON.parse(stored) as Conversation[])
+      if (conversations.length > 0) return conversations
+    }
+    const messages = JSON.parse(localStorage.getItem('ai-chat-messages') ?? '[]') as Message[]
+    return [{ id: crypto.randomUUID(), title: messages.find((item) => item.role === 'user')?.content?.slice(0, 32) || '新对话', messages, updatedAt: new Date().toISOString() }]
+  } catch {
+    return [{ id: crypto.randomUUID(), title: '新对话', messages: [], updatedAt: new Date().toISOString() }]
+  }
 }
 
 function normalizeConversationTitle(value: string, fallback: string) {
@@ -114,14 +128,7 @@ export default function AIAssistantPage() {
   const renameNode = useWorkspaceStore((s) => s.renameNode)
   const deleteNode = useWorkspaceStore((s) => s.deleteNode)
   const createFolder = useWorkspaceStore((s) => s.createFolder)
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    try {
-      const stored = localStorage.getItem('ai-chat-conversations')
-      if (stored) return removeDuplicateEmptyConversations(JSON.parse(stored) as Conversation[])
-      const legacy = JSON.parse(localStorage.getItem('ai-chat-messages') ?? '[]') as Message[]
-      return [{ id: crypto.randomUUID(), title: legacy.find((item) => item.role === 'user')?.content?.slice(0, 32) || '新对话', messages: legacy, updatedAt: new Date().toISOString() }]
-    } catch { return [{ id: crypto.randomUUID(), title: '新对话', messages: [], updatedAt: new Date().toISOString() }] }
-  })
+  const [conversations, setConversations] = useState<Conversation[]>(readLegacyConversations)
   const [activeConversationId, setActiveConversationId] = useState(() => conversations[0]?.id ?? '')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -139,6 +146,23 @@ export default function AIAssistantPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const shouldFollowRef = useRef(true)
+
+  useEffect(() => {
+    const desktopApi = window.desktopApi
+    if (!desktopApi) return
+    let canceled = false
+    void desktopApi.loadConversations().then(async (stored) => {
+      const next = stored.length > 0 ? removeDuplicateEmptyConversations(stored) : conversationsRef.current
+      if (canceled) return
+      conversationsRef.current = next
+      setConversations(next)
+      setActiveConversationId((current) => next.some((item) => item.id === current) ? current : next[0]?.id ?? '')
+      if (stored.length === 0) await desktopApi.saveConversations(next)
+      localStorage.removeItem('ai-chat-conversations')
+      localStorage.removeItem('ai-chat-messages')
+    }).catch((error) => console.error('加载 AI 对话失败:', error))
+    return () => { canceled = true }
+  }, [])
 
   const nodes = useMemo(() => flatten(workspace?.apiTree ?? []), [workspace?.apiTree])
   const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? conversations[0]
@@ -160,14 +184,16 @@ export default function AIAssistantPage() {
   function persist(next: Conversation[]) {
     conversationsRef.current = next
     setConversations(next)
-    localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
+    if (window.desktopApi) void window.desktopApi.saveConversations(next).catch((error) => console.error('保存 AI 对话失败:', error))
+    else localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
   }
   function persistMessages(nextMessages: Message[]) {
     if (!activeConversation) return
     setConversations((current) => {
       const next = current.map((item) => item.id === activeConversation.id ? { ...item, messages: nextMessages, updatedAt: new Date().toISOString() } : item)
       conversationsRef.current = next
-      localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
+      if (window.desktopApi) void window.desktopApi.saveConversations(next).catch((error) => console.error('保存 AI 对话失败:', error))
+      else localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
       return next
     })
   }
@@ -175,7 +201,8 @@ export default function AIAssistantPage() {
     setConversations((current) => {
       const next = current.map((item) => item.id === conversationId ? { ...item, title, updatedAt: new Date().toISOString() } : item)
       conversationsRef.current = next
-      localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
+      if (window.desktopApi) void window.desktopApi.saveConversations(next).catch((error) => console.error('保存 AI 对话失败:', error))
+      else localStorage.setItem('ai-chat-conversations', JSON.stringify(next))
       return next
     })
   }

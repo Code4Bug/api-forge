@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
+import type { AiConversation, DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
 
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
@@ -14,6 +14,8 @@ const desktopApi: DesktopApi = {
   loadWorkspace: () => ipcRenderer.invoke('workspace:load'),
   saveWorkspace: (workspace: WorkspaceSnapshot) => ipcRenderer.invoke('workspace:save', workspace),
   saveHistory: (history: RequestHistoryItem[]) => ipcRenderer.invoke('history:save', history),
+  loadConversations: () => ipcRenderer.invoke('conversations:load'),
+  saveConversations: (conversations: AiConversation[]) => ipcRenderer.invoke('conversations:save', conversations),
   httpSend: (request: HttpSendRequest) => ipcRenderer.invoke('http:send', request),
   httpCancel: (requestId: string) => ipcRenderer.invoke('http:cancel', requestId),
   socketConnect: (request: SocketConnectRequest) => ipcRenderer.invoke('socket:connect', request),

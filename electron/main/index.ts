@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen } from 'electron'
 import electronUpdater from 'electron-updater'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
@@ -8,7 +8,7 @@ import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
-import type { DesktopApi, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import type { AiConversation, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 
 const { autoUpdater } = electronUpdater
 
@@ -245,6 +245,14 @@ function historyPath() {
   return join(app.getPath('userData'), 'history.json')
 }
 
+function conversationsPath() {
+  return join(app.getPath('userData'), 'conversations')
+}
+
+function conversationsMetadataPath() {
+  return join(conversationsPath(), 'metadata.json')
+}
+
 function windowStatePath() {
   return join(app.getPath('userData'), 'window-state.json')
 }
@@ -326,6 +334,69 @@ async function writeHistory(history: RequestHistoryItem[]) {
   await writeFile(targetPath, JSON.stringify(history, null, 2), 'utf-8')
   return { ok: true as const }
 }
+
+interface ConversationMetadata {
+  version: 1
+  conversations: Array<{ id: string; title: string; updatedAt: string; file: string }>
+}
+
+async function writeJsonAtomically(targetPath: string, value: unknown) {
+  const directory = dirname(targetPath)
+  const temporaryPath = join(directory, `.${process.pid}-${Date.now()}-${randomUUID()}.tmp`)
+  await mkdir(directory, { recursive: true })
+  try {
+    await writeFile(temporaryPath, JSON.stringify(value, null, 2), 'utf-8')
+    await rename(temporaryPath, targetPath)
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined)
+    throw error
+  }
+}
+
+async function readConversations(): Promise<AiConversation[]> {
+  try {
+    const metadata = JSON.parse(await readFile(conversationsMetadataPath(), 'utf-8')) as ConversationMetadata
+    if (metadata.version !== 1 || !Array.isArray(metadata.conversations)) return []
+    const conversations = await Promise.all(metadata.conversations.map(async (item) => {
+      if (item.file !== `conversation-${encodeURIComponent(item.id)}.json`) return undefined
+      try {
+        const conversation = JSON.parse(await readFile(join(conversationsPath(), item.file), 'utf-8')) as AiConversation
+        if (!conversation || conversation.id !== item.id || !Array.isArray(conversation.messages)) return undefined
+        return { ...conversation, title: item.title, updatedAt: item.updatedAt }
+      } catch {
+        return undefined
+      }
+    }))
+    return conversations.filter((item): item is AiConversation => item !== undefined)
+  } catch {
+    return []
+  }
+}
+
+async function writeConversations(conversations: AiConversation[]) {
+  const directory = conversationsPath()
+  const metadata: ConversationMetadata = {
+    version: 1,
+    conversations: conversations.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title,
+      updatedAt: conversation.updatedAt,
+      file: `conversation-${encodeURIComponent(conversation.id)}.json`,
+    })),
+  }
+  await mkdir(directory, { recursive: true })
+  await Promise.all(metadata.conversations.map((item, index) => writeJsonAtomically(join(directory, item.file), conversations[index])))
+  await writeJsonAtomically(conversationsMetadataPath(), metadata)
+
+  const activeFiles = new Set(metadata.conversations.map((item) => item.file))
+  const files = await readdir(directory)
+  await Promise.all(files
+    .filter((file) => file.startsWith('conversation-') && file.endsWith('.json') && !activeFiles.has(file))
+    .map((file) => unlink(join(directory, file)).catch(() => undefined)))
+  return { ok: true as const }
+}
+
+let conversationSaveQueue: Promise<unknown> = Promise.resolve()
 
 async function writeConfig(preferences: UserPreferences) {
   const targetPath = configPath()
@@ -508,6 +579,11 @@ ipcMain.handle('update:install', () => {
 ipcMain.handle('workspace:load', readWorkspace)
 ipcMain.handle('workspace:save', (_event, workspace: WorkspaceSnapshot) => writeWorkspace(workspace))
 ipcMain.handle('history:save', (_event, history: RequestHistoryItem[]) => writeHistory(history))
+ipcMain.handle('conversations:load', () => conversationSaveQueue.catch(() => undefined).then(readConversations))
+ipcMain.handle('conversations:save', (_event, conversations: AiConversation[]) => {
+  conversationSaveQueue = conversationSaveQueue.catch(() => undefined).then(() => writeConversations(conversations))
+  return conversationSaveQueue
+})
 ipcMain.handle('socket:connect', async (event, request) => {
   const { connectionId, protocol, host, port, timeout = 5000 } = request as { connectionId: string; protocol: 'tcp' | 'udp'; host: string; port: number; timeout?: number }
   if (!connectionId || !host || !Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, error: '主机和端口无效' }
