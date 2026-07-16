@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, Upload, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
 import { getThemeMode, themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
@@ -94,6 +94,7 @@ export default function SettingsPage() {
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
+  const settingsFileInputRef = useRef<HTMLInputElement>(null)
   const customColorMode = getThemeMode(customColors)
 
   useEffect(() => setCustomColors(customTheme), [customTheme])
@@ -223,17 +224,79 @@ export default function SettingsPage() {
     await window.desktopApi?.installUpdate()
   }
 
+  function exportSettings() {
+    const settings = {
+      version: 1,
+      theme: localStorage.getItem('theme') ?? theme,
+      customTheme: localStorage.getItem('customTheme'),
+      customThemes: localStorage.getItem('customThemes'),
+      activeCustomThemeId: localStorage.getItem('activeCustomThemeId'),
+      cursorMosaicGlow: localStorage.getItem('cursorMosaicGlow') ?? String(cursorGlowEnabled),
+      cursorMosaicEffect: localStorage.getItem('cursorMosaicEffect') ?? cursorGlowEffect,
+      cursorMosaicTexture: localStorage.getItem('cursorMosaicTexture') ?? cursorGlowTexture,
+      cursorMosaicColor: localStorage.getItem('cursorMosaicColor') ?? cursorGlowColor,
+      autoSaveEnabled: String(autoSaveEnabled),
+      autoSaveInterval: String(autoSaveInterval),
+      largeModels,
+      lightModels,
+      activeLargeModelId: workspace?.preferences.activeLargeModelId,
+      activeLightModelId: workspace?.preferences.activeLightModelId,
+    }
+    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `api-forge-settings-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importSettings(file?: File) {
+    if (!file) return
+    try {
+      const settings = JSON.parse(await file.text()) as Record<string, unknown>
+      if (settings.version !== 1 || typeof settings.theme !== 'string') throw new Error('设置文件格式不正确')
+      const supportedThemes = [...themes, ...colorThemes].map((item) => item.id)
+      if (settings.theme !== 'custom' && !supportedThemes.includes(settings.theme as Theme)) throw new Error('设置文件中的主题不受支持')
+      localStorage.setItem('theme', settings.theme)
+      for (const key of ['customTheme', 'customThemes', 'activeCustomThemeId', 'cursorMosaicGlow', 'cursorMosaicEffect', 'cursorMosaicTexture', 'cursorMosaicColor']) {
+        if (typeof settings[key] === 'string') localStorage.setItem(key, settings[key] as string)
+      }
+      if (typeof settings.cursorMosaicGlow === 'string') setCursorGlowEnabled(settings.cursorMosaicGlow !== 'false')
+      if (typeof settings.cursorMosaicEffect === 'string') setCursorGlowEffect(settings.cursorMosaicEffect)
+      if (typeof settings.cursorMosaicTexture === 'string') setCursorGlowTexture(settings.cursorMosaicTexture)
+      if (typeof settings.cursorMosaicColor === 'string') setCursorGlowColor(settings.cursorMosaicColor)
+      const enabled = settings.autoSaveEnabled !== 'false'
+      const interval = Number(settings.autoSaveInterval) || 60
+      setAutoSaveSettings(enabled, interval)
+      if (Array.isArray(settings.largeModels)) settings.largeModels.forEach((config) => { if (config && typeof config === 'object') updateLargeModelConfig(config as LargeModelConfig) })
+      if (Array.isArray(settings.lightModels)) settings.lightModels.forEach((config) => { if (config && typeof config === 'object') updateLightModelConfig(config as LightModelConfig) })
+      if (typeof settings.activeLargeModelId === 'string') activateLargeModelConfig(settings.activeLargeModelId)
+      if (typeof settings.activeLightModelId === 'string') activateLightModelConfig(settings.activeLightModelId)
+      window.dispatchEvent(new Event('api-forge:theme-change'))
+      window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
+      saveNow()
+    } catch (error) {
+      window.alert(error instanceof Error ? `导入失败：${error.message}` : '导入失败：文件无法读取')
+    }
+  }
+
   return <div className="flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
     <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-4">
       <div><h1 className="text-sm font-semibold">系统设置</h1><p className="text-xs text-zinc-500">调整界面外观和工作区保存行为</p></div>
-      <button
-        onClick={saveNow}
-        disabled={saveStatus === 'saving'}
-        className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950 transition-colors hover:bg-cyan-300 active:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-      >
-        {saveStatus === 'saving' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : saveStatus === 'error' ? <AlertCircle className="h-3.5 w-3.5" /> : saveStatus === 'saved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-        {saveStatus === 'saving' ? '保存中...' : saveStatus === 'error' ? '保存失败' : saveStatus === 'saved' ? '已保存' : '立即保存'}
-      </button>
+      <div className="flex items-center gap-2">
+        <input ref={settingsFileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { void importSettings(event.target.files?.[0]); event.currentTarget.value = '' }} />
+        <button type="button" onClick={() => settingsFileInputRef.current?.click()} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"><Upload className="h-3.5 w-3.5" />导入</button>
+        <button type="button" onClick={exportSettings} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 transition-colors hover:bg-zinc-800"><Download className="h-3.5 w-3.5" />导出</button>
+        <button
+          onClick={saveNow}
+          disabled={saveStatus === 'saving'}
+          className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950 transition-colors hover:bg-cyan-300 active:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+        >
+          {saveStatus === 'saving' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : saveStatus === 'error' ? <AlertCircle className="h-3.5 w-3.5" /> : saveStatus === 'saved' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+          {saveStatus === 'saving' ? '保存中...' : saveStatus === 'error' ? '保存失败' : saveStatus === 'saved' ? '已保存' : '立即保存'}
+        </button>
+      </div>
     </div>
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
       <nav className="w-full shrink-0 border-b border-zinc-800 bg-zinc-950/20 p-2.5 md:w-44 md:border-b-0 md:border-r md:p-3" aria-label="设置分类">
