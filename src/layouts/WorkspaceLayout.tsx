@@ -98,6 +98,26 @@ function parseCurlCommand(value: string): { name: string; method: HttpMethod; pr
 }
 
 const expandedFoldersStorageKey = 'api-forge:expanded-folders'
+const apiTabsStorageKey = 'api-forge:api-tabs'
+
+interface ApiTabsState {
+  openApiIds: string[]
+  activeApiId?: string
+}
+
+function readApiTabsState(): ApiTabsState | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(apiTabsStorageKey) ?? '') as Partial<ApiTabsState>
+    if (!Array.isArray(value.openApiIds) || value.openApiIds.some((id) => typeof id !== 'string')) return undefined
+    return { openApiIds: value.openApiIds, activeApiId: typeof value.activeApiId === 'string' ? value.activeApiId : undefined }
+  } catch {
+    return undefined
+  }
+}
+
+function writeApiTabsState(openApiIds: string[], activeApiId?: string) {
+  localStorage.setItem(apiTabsStorageKey, JSON.stringify({ openApiIds, activeApiId }))
+}
 
 function readExpandedFolders(): Record<string, boolean> {
   try {
@@ -223,7 +243,7 @@ const saveStatusContent = {
 } as const
 
 export function WorkspaceLayout() {
-  const { workspace, activeApiId, activeEnvironmentId, saveStatus, autoSaveEnabled, autoSaveInterval, loadWorkspace, saveNow, setActiveApiId, setActiveEnvironmentId, setOpenApiIds: saveOpenApiIds, createFolder, createApi, updateRequest, moveApi, renameNode, deleteNode } = useWorkspaceStore()
+  const { workspace, activeApiId, activeEnvironmentId, saveStatus, autoSaveEnabled, autoSaveInterval, loadWorkspace, saveNow, setActiveApiId, setActiveEnvironmentId, createFolder, createApi, updateRequest, moveApi, renameNode, deleteNode } = useWorkspaceStore()
   const { theme, setTheme, isDark } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [openApiIds, setOpenApiIds] = useState<string[]>([])
@@ -244,6 +264,7 @@ export function WorkspaceLayout() {
   const sidebarResizeOffsetRef = useRef(0)
   const deleteConfirmingRef = useRef(false)
   const apiTabsRef = useRef<HTMLDivElement>(null)
+  const scrollNewApiTabToEndRef = useRef(false)
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false)
   const [appVersion, setAppVersion] = useState('')
@@ -360,6 +381,13 @@ export function WorkspaceLayout() {
 
   useEffect(() => {
     updateApiTabsOverflow()
+    if (scrollNewApiTabToEndRef.current) {
+      scrollNewApiTabToEndRef.current = false
+      const tabs = apiTabsRef.current
+      if (tabs && tabs.scrollWidth > tabs.clientWidth + 1) {
+        tabs.scrollTo({ left: tabs.scrollWidth, behavior: 'smooth' })
+      }
+    }
     window.addEventListener('resize', updateApiTabsOverflow)
     return () => window.removeEventListener('resize', updateApiTabsOverflow)
   }, [openApis.length])
@@ -367,22 +395,32 @@ export function WorkspaceLayout() {
   useEffect(() => {
     if (!workspace || tabsInitialized) return
     const availableIds = new Set(apiNodes.map((node) => node.id))
-    const ids = (workspace.preferences.openApiIds ?? []).filter((id) => availableIds.has(id))
+    const storedTabs = readApiTabsState()
+    const ids = (storedTabs?.openApiIds ?? workspace.preferences.openApiIds ?? []).filter((id) => availableIds.has(id))
+    const restoredActiveApiId = storedTabs?.activeApiId ?? activeApiId
+    const nextActiveApiId = restoredActiveApiId && ids.includes(restoredActiveApiId) ? restoredActiveApiId : ids[0]
     setOpenApiIds(ids)
     setTabsInitialized(true)
-    if (ids.join('\0') !== (workspace.preferences.openApiIds ?? []).join('\0')) saveOpenApiIds(ids)
-    if (ids.length && (!activeApiId || !availableIds.has(activeApiId))) setActiveApiId(ids[0])
-  }, [workspace, apiNodes, tabsInitialized, activeApiId, saveOpenApiIds, setActiveApiId])
+    setActiveApiId(nextActiveApiId)
+    writeApiTabsState(ids, nextActiveApiId)
+  }, [workspace, apiNodes, tabsInitialized, activeApiId, setActiveApiId])
 
-  function updateOpenApiIds(ids: string[]) {
+  function updateOpenApiIds(ids: string[], nextActiveApiId = activeApiId) {
     setOpenApiIds(ids)
-    saveOpenApiIds(ids)
+    writeApiTabsState(ids, nextActiveApiId)
+  }
+
+  function activateApi(id: string) {
+    setActiveApiId(id)
+    writeApiTabsState(openApiIds, id)
   }
 
   function openApi(node: ApiTreeNode) {
+    const isNewTab = !openApiIds.includes(node.id)
+    if (isNewTab) scrollNewApiTabToEndRef.current = true
+    const next = isNewTab ? [...openApiIds, node.id] : openApiIds
     setActiveApiId(node.id)
-    const next = openApiIds.includes(node.id) ? openApiIds : [...openApiIds, node.id]
-    updateOpenApiIds(next)
+    updateOpenApiIds(next, node.id)
     navigate(`/${node.protocol ?? 'http'}`)
   }
 
@@ -454,10 +492,10 @@ export function WorkspaceLayout() {
 
   function closeApi(id: string) {
     const next = openApiIds.filter((item) => item !== id)
-    updateOpenApiIds(next)
+    const nextActiveApiId = activeApiId === id ? next[next.length - 1] : activeApiId
+    updateOpenApiIds(next, nextActiveApiId)
     if (activeApiId === id) {
-      const nextActive = next[next.length - 1]
-      const node = apiNodes.find((item) => item.id === nextActive)
+      const node = apiNodes.find((item) => item.id === nextActiveApiId)
       if (node) {
         setActiveApiId(node.id)
         navigate(`/${node.protocol ?? 'http'}`)
@@ -471,7 +509,7 @@ export function WorkspaceLayout() {
   }
 
   function closeOtherApis(id: string) {
-    updateOpenApiIds([id])
+    updateOpenApiIds([id], id)
     const node = apiNodes.find((item) => item.id === id)
     if (node && activeApiId !== id) {
       setActiveApiId(id)
@@ -481,7 +519,7 @@ export function WorkspaceLayout() {
   }
 
   function closeAllApis() {
-    updateOpenApiIds([])
+    updateOpenApiIds([], undefined)
     setActiveApiId(undefined)
     setTabMenu(undefined)
     navigate('/http')
@@ -512,7 +550,8 @@ export function WorkspaceLayout() {
         else updateRequest({ id, name: dialogName, description: dialogDescription.trim() || undefined, protocol: dialogProtocol, method: dialogMethod, url: '', params: [], headers: [], updatedAt: new Date().toISOString() })
         setActiveApiId(id)
         setParsedCurl(undefined)
-        updateOpenApiIds(openApiIds.includes(id) ? openApiIds : [...openApiIds, id])
+        scrollNewApiTabToEndRef.current = true
+        updateOpenApiIds(openApiIds.includes(id) ? openApiIds : [...openApiIds, id], id)
         navigate(`/${parsedCurl?.protocol ?? dialogProtocol}`)
       }
     }
@@ -539,7 +578,8 @@ export function WorkspaceLayout() {
     if (confirmed) {
       deleteNode(node.id)
       const deletedIds = new Set(flattenNodeIds(node))
-      updateOpenApiIds(openApiIds.filter((id) => !deletedIds.has(id)))
+      const next = openApiIds.filter((id) => !deletedIds.has(id))
+      updateOpenApiIds(next, activeApiId && !deletedIds.has(activeApiId) ? activeApiId : next[next.length - 1])
     }
     window.setTimeout(() => { deleteConfirmingRef.current = false }, 0)
   }
@@ -643,7 +683,7 @@ export function WorkspaceLayout() {
           <div className="relative min-w-0 max-w-[70%] flex-1">
             <div ref={apiTabsRef} onScroll={updateApiTabsOverflow} className="scrollbar-hidden flex min-w-0 items-center gap-1 overflow-x-auto px-7">
               {openApis.map((api) => (
-                <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { setActiveApiId(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
+                <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { activateApi(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
                   <span className="truncate">{api.name}</span>
                   <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
                 </NavLink>

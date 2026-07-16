@@ -348,12 +348,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     saveWorkspace(nextWorkspace, set)
   },
   setActiveApiId: (apiId) => {
-    const { activeApiId, workspace } = get()
-    if (!workspace || (apiId === activeApiId && workspace.preferences.activeApiId === apiId)) return
-
-    const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, activeApiId: apiId } }
-    set({ activeApiId: apiId, workspace: nextWorkspace })
-    saveWorkspace(nextWorkspace, set)
+    if (apiId === get().activeApiId) return
+    set({ activeApiId: apiId })
   },
   setOpenApiIds: (apiIds) => {
     const { workspace } = get()

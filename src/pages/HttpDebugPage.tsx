@@ -221,6 +221,7 @@ export default function HttpDebugPage() {
   const activeEnvironmentId = useWorkspaceStore((state) => state.activeEnvironmentId)
   const activeApiId = useWorkspaceStore((state) => state.activeApiId)
   const updateRequest = useWorkspaceStore((state) => state.updateRequest)
+  const saveNow = useWorkspaceStore((state) => state.saveNow)
   const markUnsaved = useWorkspaceStore((state) => state.markUnsaved)
   const updateProcessVariable = useWorkspaceStore((state) => state.updateProcessVariable)
   const captureProcessVariables = useWorkspaceStore((state) => state.captureProcessVariables)
@@ -442,6 +443,7 @@ export default function HttpDebugPage() {
       updatedAt: new Date().toISOString(),
     }
     updateRequest(request)
+    saveNow()
     setSaveMessage('已保存')
     window.setTimeout(() => setSaveMessage(''), 1800)
   }
