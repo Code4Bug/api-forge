@@ -349,7 +349,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   setActiveApiId: (apiId) => {
     const { activeApiId, workspace } = get()
-    if (!workspace || apiId === activeApiId) return
+    if (!workspace || (apiId === activeApiId && workspace.preferences.activeApiId === apiId)) return
 
     const nextWorkspace = { ...workspace, preferences: { ...workspace.preferences, activeApiId: apiId } }
     set({ activeApiId: apiId, workspace: nextWorkspace })
@@ -425,8 +425,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const { workspace, activeApiId } = get()
     if (!workspace) return
     const nextWorkspace = { ...workspace, apiTree: removeTree(workspace.apiTree, nodeId) }
-    set({ workspace: nextWorkspace, activeApiId: treeContains(nextWorkspace.apiTree, activeApiId) ? activeApiId : undefined })
-    saveWorkspace(nextWorkspace, set)
+    const nextActiveApiId = treeContains(nextWorkspace.apiTree, activeApiId) ? activeApiId : undefined
+    const nextOpenApiIds = (workspace.preferences.openApiIds ?? []).filter((id) => treeContains(nextWorkspace.apiTree, id))
+    const preferences = { ...nextWorkspace.preferences, activeApiId: nextActiveApiId, openApiIds: nextOpenApiIds }
+    const persistedWorkspace = { ...nextWorkspace, preferences }
+    set({ workspace: persistedWorkspace, activeApiId: nextActiveApiId })
+    saveWorkspace(persistedWorkspace, set)
   },
   saveNow: () => {
     const { workspace } = get()

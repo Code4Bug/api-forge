@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
+import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { getActiveLargeModel } from '@/shared/ipc-contracts'
 import { themePresets, useTheme, type Theme } from '@/hooks/useTheme'
@@ -97,11 +97,29 @@ function parseCurlCommand(value: string): { name: string; method: HttpMethod; pr
   return { name: `${method} ${parsed.pathname || '/'}`, method, protocol: 'http', url, headers, body: bodyMatch?.[2] }
 }
 
-function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateFolder, onCreateApi, onRename, onDelete, onMoveApi, onCopyName, onCopyCurl, onExportFolder }: { node: ApiTreeNode; depth?: number; index?: number; query?: string; onOpenApi: (node: ApiTreeNode) => void; onCreateFolder: (parentId: string) => void; onCreateApi: (parentId?: string) => void; onRename: (node: ApiTreeNode) => void; onDelete: (node: ApiTreeNode) => void; onMoveApi: (apiId: string, parentId?: string, index?: number) => void; onCopyName: (node: ApiTreeNode) => void; onCopyCurl: (node: ApiTreeNode) => void; onExportFolder: (node: ApiTreeNode, format: 'markdown' | 'html') => void }) {
+const expandedFoldersStorageKey = 'api-forge:expanded-folders'
+
+function readExpandedFolders(): Record<string, boolean> {
+  try {
+    const value = localStorage.getItem(expandedFoldersStorageKey)
+    if (!value) return {}
+    const parsed = JSON.parse(value)
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.fromEntries(Object.entries(parsed).filter(([, expanded]) => typeof expanded === 'boolean')) as Record<string, boolean>
+  } catch {
+    return {}
+  }
+}
+
+function writeExpandedFolders(folders: Record<string, boolean>) {
+  localStorage.setItem(expandedFoldersStorageKey, JSON.stringify(folders))
+}
+
+function TreeNode({ node, depth = 0, index = 0, query = '', expandedFolders, onFolderExpandedChange, onOpenApi, onCreateFolder, onCreateApi, onRename, onDelete, onMoveApi, onCopyName, onCopyCurl, onExportFolder }: { node: ApiTreeNode; depth?: number; index?: number; query?: string; expandedFolders: Record<string, boolean>; onFolderExpandedChange: (folderId: string, expanded: boolean) => void; onOpenApi: (node: ApiTreeNode) => void; onCreateFolder: (parentId: string) => void; onCreateApi: (parentId?: string) => void; onRename: (node: ApiTreeNode) => void; onDelete: (node: ApiTreeNode) => void; onMoveApi: (apiId: string, parentId?: string, index?: number) => void; onCopyName: (node: ApiTreeNode) => void; onCopyCurl: (node: ApiTreeNode) => void; onExportFolder: (node: ApiTreeNode, format: 'markdown' | 'html') => void }) {
   const isFolder = node.type === 'folder'
   const { activeApiId } = useWorkspaceStore()
   const isActive = activeApiId === node.id
-  const [expanded, setExpanded] = useState(true)
+  const expanded = isFolder ? (expandedFolders[node.id] ?? true) : false
   const [isDragOver, setIsDragOver] = useState(false)
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -169,7 +187,7 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
 
   return (
     <div>
-      <div role="button" tabIndex={0} draggable={!isFolder} onDragStart={handleDragStart} onDragEnd={clearDragState} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (isFolder) setIsDragOver(true); else setIsDropTarget(true) }} onDragLeave={clearDragState} onDrop={handleDrop} onClick={() => isFolder ? setExpanded((value) => !value) : onOpenApi(node)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (isFolder) setExpanded((value) => !value); else onOpenApi(node) } }} className={`group flex h-8 w-full items-center rounded text-left ${isDragOver ? 'bg-cyan-400/20 ring-1 ring-cyan-400/50' : isDropTarget ? 'bg-cyan-400/10 ring-1 ring-cyan-400/30' : isActive ? 'bg-cyan-400/10' : ''}`}>
+      <div role="button" tabIndex={0} draggable={!isFolder} onDragStart={handleDragStart} onDragEnd={clearDragState} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; if (isFolder) setIsDragOver(true); else setIsDropTarget(true) }} onDragLeave={clearDragState} onDrop={handleDrop} onClick={() => isFolder ? onFolderExpandedChange(node.id, !expanded) : onOpenApi(node)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (isFolder) onFolderExpandedChange(node.id, !expanded); else onOpenApi(node) } }} className={`group flex h-8 w-full items-center rounded text-left ${isDragOver ? 'bg-cyan-400/20 ring-1 ring-cyan-400/50' : isDropTarget ? 'bg-cyan-400/10 ring-1 ring-cyan-400/30' : isActive ? 'bg-cyan-400/10' : ''}`}>
         <div className={`flex min-w-0 flex-1 items-center gap-1.5 py-0 pr-0 text-xs ${isActive ? 'text-zinc-100' : 'text-zinc-300'}`} style={{ paddingLeft: 8 + depth * 14 }}>
           {isFolder ? (expanded ? <ChevronDown className="h-3 w-3 text-zinc-500" /> : <ChevronRight className="h-3 w-3 text-zinc-500" />) : <span className="w-3" />}
           {isFolder ? <Folder className="h-3.5 w-3.5 text-amber-300" /> : <ApiTypeIcon protocol={node.protocol} active={isActive} />}
@@ -192,7 +210,7 @@ function TreeNode({ node, depth = 0, index = 0, query = '', onOpenApi, onCreateF
         <button onClick={() => { setMoreOpen(false); onCopyName(node) }} className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800"><Copy className="h-3.5 w-3.5" />复制名称</button>
       </div>, document.body)}
       {exportOpen && exportPosition && createPortal(<div ref={exportMenuRef} className="fixed z-[9999] w-32 rounded border border-zinc-700 bg-[#111821] p-1 shadow-2xl" style={{ top: exportPosition.top, left: exportPosition.left }}><button onClick={() => { setMoreOpen(false); setExportOpen(false); onExportFolder(node, 'markdown') }} className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800">Markdown</button><button onClick={() => { setMoreOpen(false); setExportOpen(false); onExportFolder(node, 'html') }} className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-zinc-300 hover:bg-zinc-800">HTML</button></div>, document.body)}
-      {isFolder && expanded && <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }} onDragLeave={clearDragState} onDrop={handleDrop} className={isDragOver ? 'rounded bg-cyan-400/5' : ''}>{node.children?.map((child, childIndex) => <TreeNode key={child.id} node={child} index={childIndex} depth={depth + 1} query={query} onOpenApi={onOpenApi} onCreateFolder={onCreateFolder} onCreateApi={onCreateApi} onRename={onRename} onDelete={onDelete} onMoveApi={onMoveApi} onCopyName={onCopyName} onCopyCurl={onCopyCurl} onExportFolder={onExportFolder} />)}</div>}
+      {isFolder && expanded && <div onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }} onDragLeave={clearDragState} onDrop={handleDrop} className={isDragOver ? 'rounded bg-cyan-400/5' : ''}>{node.children?.map((child, childIndex) => <TreeNode key={child.id} node={child} index={childIndex} depth={depth + 1} query={query} expandedFolders={expandedFolders} onFolderExpandedChange={onFolderExpandedChange} onOpenApi={onOpenApi} onCreateFolder={onCreateFolder} onCreateApi={onCreateApi} onRename={onRename} onDelete={onDelete} onMoveApi={onMoveApi} onCopyName={onCopyName} onCopyCurl={onCopyCurl} onExportFolder={onExportFolder} />)}</div>}
     </div>
   )
 }
@@ -219,6 +237,7 @@ export function WorkspaceLayout() {
   const [dialogMethod, setDialogMethod] = useState<HttpMethod | undefined>('GET')
   const [pendingCurl, setPendingCurl] = useState('')
   const [parsedCurl, setParsedCurl] = useState<ReturnType<typeof parseCurlCommand>>()
+  const [expandedFolders, setExpandedFolders] = useState(readExpandedFolders)
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebarWidth') ?? 260))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const [resizingSidebar, setResizingSidebar] = useState(false)
@@ -246,6 +265,10 @@ export function WorkspaceLayout() {
   useEffect(() => {
     localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    writeExpandedFolders(expandedFolders)
+  }, [expandedFolders])
 
   useEffect(() => {
     if (!resizingSidebar) return
@@ -325,7 +348,8 @@ export function WorkspaceLayout() {
   }, [activeApiId, location.pathname, saveNow, workspace])
 
   const apiNodes = workspace ? flattenApiNodes(workspace.apiTree) : []
-  const openApis = apiNodes.filter((node) => openApiIds.includes(node.id))
+  // 按持久化的 ID 顺序恢复标签，接口树的目录排序不应影响标签顺序。
+  const openApis = openApiIds.map((id) => apiNodes.find((node) => node.id === id)).filter((node): node is ApiTreeNode => Boolean(node))
 
   function updateApiTabsOverflow() {
     const tabs = apiTabsRef.current
@@ -342,11 +366,13 @@ export function WorkspaceLayout() {
 
   useEffect(() => {
     if (!workspace || tabsInitialized) return
-    const ids = workspace.preferences.openApiIds ?? []
+    const availableIds = new Set(apiNodes.map((node) => node.id))
+    const ids = (workspace.preferences.openApiIds ?? []).filter((id) => availableIds.has(id))
     setOpenApiIds(ids)
     setTabsInitialized(true)
-    if (ids.length && !activeApiId) setActiveApiId(ids[0])
-  }, [workspace, tabsInitialized, activeApiId, setActiveApiId])
+    if (ids.join('\0') !== (workspace.preferences.openApiIds ?? []).join('\0')) saveOpenApiIds(ids)
+    if (ids.length && (!activeApiId || !availableIds.has(activeApiId))) setActiveApiId(ids[0])
+  }, [workspace, apiNodes, tabsInitialized, activeApiId, saveOpenApiIds, setActiveApiId])
 
   function updateOpenApiIds(ids: string[]) {
     setOpenApiIds(ids)
@@ -518,6 +544,18 @@ export function WorkspaceLayout() {
     window.setTimeout(() => { deleteConfirmingRef.current = false }, 0)
   }
 
+  function setFolderExpanded(folderId: string, expanded: boolean) {
+    setExpandedFolders((current) => ({ ...current, [folderId]: expanded }))
+  }
+
+  function setAllFoldersExpanded(expanded: boolean) {
+    const folders = flattenFolders(workspace?.apiTree ?? [])
+    setExpandedFolders((current) => ({
+      ...current,
+      ...Object.fromEntries(folders.map((folder) => [folder.id, expanded])),
+    }))
+  }
+
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-[#0b0f14] text-zinc-100">
       <aside className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? 'select-none' : 'transition-[width] duration-150'}`} style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}>
@@ -547,13 +585,21 @@ export function WorkspaceLayout() {
             <BookOpen className="h-3.5 w-3.5" />
             API 目录
           </div>
-          <button onClick={() => openDialog({ mode: 'folder' })} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="新建目录">
-            <Plus className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setAllFoldersExpanded(true)} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="全部展开" aria-label="全部展开">
+              <ChevronsDown className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => setAllFoldersExpanded(false)} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="全部折叠" aria-label="全部折叠">
+              <ChevronsUp className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => openDialog({ mode: 'folder' })} className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="新建目录" aria-label="新建目录">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3">
-          {workspace?.apiTree.map((node, index) => <TreeNode key={node.id} node={node} index={index} query={searchQuery} onOpenApi={openApi} onCreateFolder={(parentId) => openDialog({ mode: 'folder', parentId })} onCreateApi={(parentId) => openDialog({ mode: 'api', parentId })} onRename={(node) => openDialog({ mode: 'rename', node })} onDelete={requestDelete} onMoveApi={moveApi} onCopyName={copyNodeName} onCopyCurl={copyNodeCurl} onExportFolder={exportFolderDoc} />)}
+          {workspace?.apiTree.map((node, index) => <TreeNode key={node.id} node={node} index={index} query={searchQuery} expandedFolders={expandedFolders} onFolderExpandedChange={setFolderExpanded} onOpenApi={openApi} onCreateFolder={(parentId) => openDialog({ mode: 'folder', parentId })} onCreateApi={(parentId) => openDialog({ mode: 'api', parentId })} onRename={(node) => openDialog({ mode: 'rename', node })} onDelete={requestDelete} onMoveApi={moveApi} onCopyName={copyNodeName} onCopyCurl={copyNodeCurl} onExportFolder={exportFolderDoc} />)}
           {workspace && !treeHasMatch(workspace.apiTree, searchQuery) && <div className="p-4 text-center text-xs text-zinc-600">未找到匹配接口</div>}
         </div>
 
