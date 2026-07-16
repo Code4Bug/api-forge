@@ -21,6 +21,17 @@ const colorThemes: Array<{ id: Theme; name: string; description: string; icon: t
   { id: 'sunset', name: '落日橙', description: '温暖明快的橙色', icon: Sunset },
 ]
 
+function ThemeColorPreview({ id }: { id: Theme }) {
+  if (id === 'system') {
+    return <span aria-hidden="true" className="grid h-8 w-11 shrink-0 grid-cols-2 overflow-hidden rounded border border-zinc-600">
+      {[themePresets.dark, themePresets.light].map((preset) => <span key={preset.background} className="relative" style={{ backgroundColor: preset.background }}><span className="absolute inset-x-1 top-1 h-3 rounded-sm" style={{ backgroundColor: preset.surface }} /><span className="absolute inset-x-1 bottom-1 h-1 rounded-sm" style={{ backgroundColor: preset.accent }} /></span>)}
+    </span>
+  }
+  const preset = themePresets[id as keyof typeof themePresets]
+  if (!preset) return null
+  return <span aria-hidden="true" className="relative h-8 w-11 shrink-0 overflow-hidden rounded border" style={{ backgroundColor: preset.background, borderColor: preset.border }}><span className="absolute inset-x-1 top-1 h-4 rounded-sm" style={{ backgroundColor: preset.surface }} /><span className="absolute bottom-1 left-1 h-1 w-5 rounded-sm" style={{ backgroundColor: preset.accent }} /></span>
+}
+
 const modelProviders = ['OpenAI 兼容', 'OpenAI', '通义千问', '智谱 AI', 'DeepSeek', 'Moonshot AI', 'Ollama', '自定义']
 const providerPresets: Record<string, { baseUrl: string; model: string }> = {
   'OpenAI 兼容': { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -199,12 +210,12 @@ export default function SettingsPage() {
         <div className="mb-4 flex items-center gap-2"><Palette className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">主题设置</h2></div>
         <div className="mb-3 text-xs font-medium text-zinc-300">默认主题</div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-          {themes.map(({ id, name, description, icon: Icon }) => <button key={id} onClick={() => setTheme(id)} style={{ borderColor: themePresets[id as keyof typeof themePresets]?.accent }} className={`flex h-full min-w-0 items-center gap-3 rounded border p-3 text-left ${theme === id ? 'bg-cyan-400/10' : 'border-zinc-800 hover:border-zinc-600'}`}><span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: themePresets[id as keyof typeof themePresets]?.accent }} /><span className="min-w-0 flex-1"><span className="block break-words text-xs font-medium">{name}</span><span className="mt-1 block break-words text-[11px] text-zinc-500">{description}</span></span><span className="flex shrink-0 items-center gap-1"><Icon className="h-4 w-4 text-zinc-400" />{theme === id && <Check className="h-4 w-4 text-cyan-300" />}</span></button>)}
+          {themes.map(({ id, name, description, icon: Icon }) => <button key={id} onClick={() => setTheme(id)} className={`flex h-full min-w-0 items-center gap-3 rounded border p-3 text-left ${theme === id ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-zinc-800 hover:border-zinc-600'}`}><ThemeColorPreview id={id} /><span className="min-w-0 flex-1"><span className="block break-words text-xs font-medium">{name}</span><span className="mt-1 block break-words text-[11px] text-zinc-500">{description}</span></span><span className="flex shrink-0 items-center gap-1"><Icon className="h-4 w-4 text-zinc-400" />{theme === id && <Check className="h-4 w-4 text-cyan-300" />}</span></button>)}
         </div>
         <div className="mt-5 border-t border-zinc-800 pt-4">
           <div className="mb-3 text-xs font-medium text-zinc-300">更多主题色</div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3">
-            {colorThemes.map(({ id, name, description, icon: Icon }) => <button key={id} onClick={() => setTheme(id)} style={{ borderColor: themePresets[id as keyof typeof themePresets]?.accent }} className={`flex h-full min-w-0 items-center gap-3 rounded border p-3 text-left ${theme === id ? 'bg-cyan-400/10' : 'border-zinc-800 hover:border-zinc-600'}`}><span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: themePresets[id as keyof typeof themePresets]?.accent }} /><span className="min-w-0 flex-1"><span className="block break-words text-xs font-medium">{name}</span><span className="mt-1 block break-words text-[11px] text-zinc-500">{description}</span></span><span className="flex shrink-0 items-center gap-1"><Icon className="h-4 w-4 text-zinc-400" />{theme === id && <Check className="h-4 w-4 text-cyan-300" />}</span></button>)}
+            {colorThemes.map(({ id, name, description, icon: Icon }) => <button key={id} onClick={() => setTheme(id)} className={`flex h-full min-w-0 items-center gap-3 rounded border p-3 text-left ${theme === id ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-zinc-800 hover:border-zinc-600'}`}><ThemeColorPreview id={id} /><span className="min-w-0 flex-1"><span className="block break-words text-xs font-medium">{name}</span><span className="mt-1 block break-words text-[11px] text-zinc-500">{description}</span></span><span className="flex shrink-0 items-center gap-1"><Icon className="h-4 w-4 text-zinc-400" />{theme === id && <Check className="h-4 w-4 text-cyan-300" />}</span></button>)}
           </div>
           <div className="mt-5 border-t border-zinc-800 pt-4">
             <div className="mb-3 text-xs font-medium text-zinc-300">自定义主题色</div>

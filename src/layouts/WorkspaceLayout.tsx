@@ -572,7 +572,10 @@ export function WorkspaceLayout() {
               ['lightBlue', '浅色-蓝色'],
             ] as Array<[Theme, string]>).map(([id, name]) => {
               const preset = id === 'system' ? themePresets.dark : themePresets[id]
-              return <button key={id} type="button" onClick={() => setTheme(id)} className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${theme === id ? 'border-zinc-100 ring-1 ring-zinc-400 ring-offset-1 ring-offset-zinc-950' : 'border-zinc-600'}`} style={{ backgroundColor: preset.accent }} title={name} aria-label={name} />
+              const background = id === 'system'
+                ? `linear-gradient(90deg, ${themePresets.dark.background} 0 50%, ${themePresets.light.background} 50% 100%)`
+                : id === 'dark' || id === 'light' ? preset.background : preset.accent
+              return <button key={id} type="button" onClick={() => setTheme(id)} className={`h-4 w-4 rounded-full border transition-transform hover:scale-110 ${theme === id ? 'border-zinc-100 ring-1 ring-zinc-400 ring-offset-1 ring-offset-zinc-950' : 'border-zinc-600'}`} style={{ background }} title={name} aria-label={name} />
             })}
           </div>
           </div>
