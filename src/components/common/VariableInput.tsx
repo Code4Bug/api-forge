@@ -57,6 +57,12 @@ export function VariableInput({ value, variables, onChange, multiline = false, c
     const previewElement = previewRef.current
     if (!field || !previewElement || !hasVariable) return
     const computed = window.getComputedStyle(field)
+    previewElement.style.top = `${field.offsetTop}px`
+    previewElement.style.left = `${field.offsetLeft}px`
+    previewElement.style.right = 'auto'
+    previewElement.style.bottom = 'auto'
+    previewElement.style.width = `${field.offsetWidth}px`
+    previewElement.style.height = `${field.offsetHeight}px`
     const properties = ['font-family', 'font-size', 'font-style', 'font-weight', 'letter-spacing', 'line-height', 'text-transform', 'text-indent', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width']
     properties.forEach((property) => previewElement.style.setProperty(property, computed.getPropertyValue(property)))
   }, [className, hasVariable, multiline, value])

@@ -125,6 +125,7 @@
 
 html:not(.light) .ai-message-user { color: #cffafe; background: rgba(34, 211, 238, .1); }
 html:not(.light) .ai-message-tool { color: #fcd34d; }
+html[data-theme="lightBlue"] .ai-message-user { color: #155e75; }
 .ai-markdown { color: inherit; }
 
 .ai-tool-panel {
@@ -715,6 +716,38 @@ html[data-theme="lightBlue"] [class*="text-rose-300"] {
 html[data-theme="lightBlue"] [class*="text-cyan-200"],
 html[data-theme="lightBlue"] [class*="text-cyan-300"] {
   color: #0e7490 !important;
+}
+
+/* 浅色蓝色主题的强调控件统一使用蓝底白色前景。 */
+html[data-theme="lightBlue"] [class~="bg-cyan-400"][class*="text-zinc-950"] {
+  color: #ffffff !important;
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"] {
+  display: grid;
+  appearance: none;
+  place-content: center;
+  border: 1px solid var(--app-border);
+  border-radius: .25rem;
+  background: var(--app-input);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]::before {
+  width: .625rem;
+  height: .625rem;
+  background: #ffffff;
+  clip-path: polygon(14% 44%, 0 65%, 43% 100%, 100% 16%, 80% 0, 40% 62%);
+  content: '';
+  transform: scale(0);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]:checked {
+  border-color: var(--app-accent);
+  background: var(--app-accent);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]:checked::before {
+  transform: scale(1);
 }
 
 html.light select,
