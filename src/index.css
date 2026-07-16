@@ -600,6 +600,35 @@ html[data-theme] button:active:not(:disabled) {
   filter: brightness(.98);
 }
 
+/* 全局按钮按下位移不能覆盖分隔条自身的横向定位。 */
+html[data-theme] button.sidebar-resize-handle:active:not(:disabled) {
+  transform: translateX(50%);
+}
+
+html[data-theme] button.http-split-resize-handle:active:not(:disabled) {
+  transform: translateX(-50%);
+}
+
+/* 分隔线使用主题色，悬停时由中间向两侧渐隐并适度加宽。 */
+.resize-line {
+  display: block;
+  width: 2px;
+  background: color-mix(in srgb, var(--app-border) 72%, var(--app-text));
+  transition: width 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.resize-handle:hover .resize-line {
+  width: 4px;
+  background: linear-gradient(to right, transparent, var(--app-accent), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 32%, transparent);
+}
+
+.resize-line.is-resizing {
+  width: 4px;
+  background: linear-gradient(to right, transparent, var(--app-accent), transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--app-accent) 42%, transparent);
+}
+
 html[data-theme] button:focus-visible {
   outline: 2px solid var(--app-accent-border);
   outline-offset: 2px;

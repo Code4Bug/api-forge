@@ -765,12 +765,16 @@ export default function HttpDebugPage() {
       </section>
       <button type="button" aria-label="调整请求和响应区域宽度" title="拖动调整请求和响应区域宽度" onPointerDown={(event) => {
         event.preventDefault()
-        const handle = event.currentTarget.getBoundingClientRect()
-        resizePointerOffsetRef.current = event.clientX - (handle.left + handle.width / 2)
+        const container = splitContainerRef.current
+        const rect = container?.getBoundingClientRect()
+        if (rect) {
+          const dividerX = rect.left + rect.width * splitRatio
+          resizePointerOffsetRef.current = event.clientX - dividerX
+        }
         setIsResizing(true)
-      }} className="group absolute inset-y-0 left-[var(--http-split-ratio)] z-20 hidden w-3 -translate-x-1/2 items-center justify-center bg-transparent lg:flex" style={{ cursor: 'col-resize' }}>
-        <span className={`relative h-full transition-[width,background-image,box-shadow] duration-150 ${isResizing ? 'w-0.5 bg-gradient-to-b from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_rgba(34,211,238,0.35)]' : 'w-px bg-zinc-700 group-hover:w-0.5 group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-cyan-400/80 group-hover:to-transparent group-hover:shadow-[0_0_8px_rgba(34,211,238,0.25)]'}`}>
-          <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1.5 py-2 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${isResizing ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
+      }} className="resize-handle http-split-resize-handle group absolute inset-y-0 left-[var(--http-split-ratio)] z-20 hidden w-3 -translate-x-1/2 items-center justify-center bg-transparent lg:flex" style={{ cursor: 'col-resize' }}>
+        <span className={`resize-line relative h-full ${isResizing ? 'is-resizing' : ''}`}>
+          <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-0.5 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1 py-1.5 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${isResizing ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
           <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
           <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
           <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />

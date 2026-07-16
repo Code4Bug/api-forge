@@ -222,6 +222,7 @@ export function WorkspaceLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebarWidth') ?? 260))
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const [resizingSidebar, setResizingSidebar] = useState(false)
+  const sidebarResizeOffsetRef = useRef(0)
   const deleteConfirmingRef = useRef(false)
   const apiTabsRef = useRef<HTMLDivElement>(null)
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
@@ -249,7 +250,7 @@ export function WorkspaceLayout() {
   useEffect(() => {
     if (!resizingSidebar) return
     function handlePointerMove(event: PointerEvent) {
-      setSidebarWidth(Math.min(420, Math.max(220, event.clientX)))
+      setSidebarWidth(Math.min(420, Math.max(220, event.clientX - sidebarResizeOffsetRef.current)))
     }
     function stopResize() {
       setResizingSidebar(false)
@@ -577,9 +578,9 @@ export function WorkspaceLayout() {
           </div>
         </div>
         </>}
-        {!sidebarCollapsed && <button onPointerDown={(event) => { event.preventDefault(); setResizingSidebar(true) }} className="group absolute right-0 top-0 z-10 flex h-full w-3 translate-x-1/2 items-center justify-center bg-transparent" style={{ cursor: 'col-resize' }} title="调整侧栏宽度" aria-label="调整侧栏宽度">
-          <span className={`relative h-full transition-[width,background-image,box-shadow] duration-150 ${resizingSidebar ? 'w-0.5 bg-gradient-to-b from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_rgba(34,211,238,0.35)]' : 'w-px bg-zinc-700 group-hover:w-0.5 group-hover:bg-gradient-to-b group-hover:from-transparent group-hover:via-cyan-400/80 group-hover:to-transparent group-hover:shadow-[0_0_8px_rgba(34,211,238,0.25)]'}`}>
-            <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1.5 py-2 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${resizingSidebar ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
+        {!sidebarCollapsed && <button onPointerDown={(event) => { event.preventDefault(); const aside = event.currentTarget.parentElement; sidebarResizeOffsetRef.current = aside ? event.clientX - aside.getBoundingClientRect().right : 0; setResizingSidebar(true) }} className="resize-handle sidebar-resize-handle group absolute right-0 top-0 z-10 flex h-full w-3 translate-x-1/2 items-center justify-center bg-transparent" style={{ cursor: 'col-resize' }} title="调整侧栏宽度" aria-label="调整侧栏宽度">
+          <span className={`resize-line relative h-full ${resizingSidebar ? 'is-resizing' : ''}`}>
+            <span className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-0.5 rounded-full border border-zinc-700/80 bg-[#0f141b]/90 px-1 py-1.5 shadow-lg backdrop-blur-sm transition-[opacity,border-color] duration-150 ${resizingSidebar ? 'border-cyan-400/60 opacity-100' : 'opacity-0 group-hover:border-cyan-400/40 group-hover:opacity-100'}`}>
               <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
               <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
               <span className="h-0.5 w-0.5 rounded-full bg-cyan-200/80" />
