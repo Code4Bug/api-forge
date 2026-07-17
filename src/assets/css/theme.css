@@ -142,7 +142,7 @@ html[data-theme] .variable-input-no-native-arrow::-webkit-list-button {
 }
 
 .variable-input-field::placeholder {
-  color: transparent;
+  color: var(--app-muted);
 }
 
 html[data-theme] body,

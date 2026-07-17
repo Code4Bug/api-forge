@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
-import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
+import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, Copy, Download, FileCode2, FilePlus2, FlaskConical, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { getActiveLargeModel, getActiveLightModel } from '@/shared/ipc-contracts'
 import { themePresets, useTheme, type Theme } from '@/hooks/useTheme'
@@ -13,7 +13,7 @@ import { ThemedSelect } from '@/components/common/ThemedSelect'
 import { Modal } from '@/components/common/Modal'
 import { ConfirmModal } from '@/components/common/ConfirmModal'
 
-type AppMenuAction = 'about' | 'new-api' | 'new-folder' | 'save-current' | 'import-curl' | 'export-workspace' | 'open-http' | 'open-websocket' | 'open-socket' | 'open-environments' | 'open-history' | 'open-ai' | 'open-settings' | 'shortcuts' | 'guide'
+type AppMenuAction = 'about' | 'new-api' | 'new-folder' | 'save-current' | 'import-curl' | 'export-workspace' | 'open-http' | 'open-websocket' | 'open-socket' | 'open-environments' | 'open-history' | 'open-ai' | 'open-test' | 'open-settings' | 'shortcuts' | 'guide'
 
 function treeHasMatch(nodes: ApiTreeNode[], query: string): boolean {
   if (!query) return nodes.length > 0
@@ -402,6 +402,7 @@ export function WorkspaceLayout() {
       ['open-environments', () => navigate('/environments')],
       ['open-history', () => navigate('/history')],
       ['open-ai', () => navigate('/ai')],
+      ['open-test', () => navigate('/test')],
       ['open-settings', () => navigate('/settings')],
     ]
     const unsubscribe = handlers.map(([action, handler]) => {
@@ -819,6 +820,9 @@ export function WorkspaceLayout() {
             </NavLink>
             <NavLink to={aiReady ? '/ai' : '/settings'} aria-disabled={!aiReady} onClick={(event) => { if (!aiReady) event.preventDefault() }} className={({ isActive }) => `ai-entry-button flex h-9 w-10 items-center justify-center rounded px-2 ${isActive && aiReady ? 'is-active' : ''} ${!aiReady ? 'is-disabled cursor-not-allowed' : ''}`} title={aiReady ? 'AI 助手' : 'AI 助手未配置，请先完成大模型配置'}>
               <Sparkles className="ai-entry-icon h-3.5 w-3.5" />
+            </NavLink>
+            <NavLink to="/test" className={({ isActive }) => `ai-entry-button flex h-9 w-10 items-center justify-center rounded px-2 ${isActive ? 'is-active' : ''}`} title="测试中心">
+              <FlaskConical className="ai-entry-icon h-3.5 w-3.5" />
             </NavLink>
           </div>
         </header>

@@ -5,6 +5,7 @@ import EnvironmentPage from '@/pages/EnvironmentPage'
 import HistoryPage from '@/pages/HistoryPage'
 import HttpDebugPage from '@/pages/HttpDebugPage'
 import SocketPage from '@/pages/SocketPage'
+import TestCenterPage from '@/pages/TestCenterPage'
 import WebSocketPage from '@/pages/WebSocketPage'
 import SettingsPage from '@/pages/SettingsPage'
 
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/environments" element={<EnvironmentPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/ai" element={null} />
+          <Route path="/test" element={<TestCenterPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/http" replace />} />
         </Route>
