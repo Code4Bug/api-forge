@@ -6,6 +6,7 @@
   padding: .75rem 1rem;
   font-size: .75rem;
   line-height: 1.25rem;
+  user-select: text;
 }
 
 .ai-message-user {
@@ -52,6 +53,7 @@
   border-radius: .5rem;
   background: rgba(71, 85, 105, .12);
   color: #cbd5e1;
+  user-select: text;
 }
 
 .ai-reasoning-panel .ai-tool-toggle {
@@ -131,6 +133,7 @@ html[data-theme="lightBlue"] .ai-message-user { color: #155e75; }
   border: 1px solid rgba(245, 158, 11, .35);
   border-radius: .5rem;
   background: rgba(245, 158, 11, .05);
+  user-select: text;
 }
 
 .ai-tool-toggle {
@@ -173,6 +176,7 @@ html[data-theme="lightBlue"] .ai-message-user { color: #155e75; }
   line-height: 1.35rem;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
 }
 
 html.light .ai-tool-panel { background: rgba(255, 247, 237, .9); border-color: rgba(217, 119, 6, .32); }
