@@ -166,6 +166,32 @@ function maskHeaderValue(key: string, value: string) {
   return value
 }
 
+function normalizeHttpFieldItems(value: unknown, prefix: 'param' | 'header'): HttpFieldItem[] {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => {
+      if (item && typeof item === 'object') {
+        const record = item as Partial<HttpFieldItem>
+        return {
+          id: typeof record.id === 'string' && record.id.trim() ? record.id : `${prefix}-${index}`,
+          key: typeof record.key === 'string' ? record.key : '',
+          value: typeof record.value === 'string' ? record.value : record.value == null ? '' : String(record.value),
+          enabled: typeof record.enabled === 'boolean' ? record.enabled : true,
+        }
+      }
+      return { id: `${prefix}-${index}`, key: '', value: item == null ? '' : String(item), enabled: true }
+    })
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).map(([key, entryValue], index) => ({
+      id: `${prefix}-${index}`,
+      key,
+      value: entryValue == null ? '' : String(entryValue),
+      enabled: true,
+    }))
+  }
+  return []
+}
+
 function renderInlineMarkdown(value: string) {
   return value.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index} className="font-semibold text-zinc-100">{part.slice(2, -2)}</strong>
@@ -403,12 +429,14 @@ export default function HttpDebugPage() {
     const request = activeRequest as RequestDefinition | undefined
     setMethod(request?.method ?? activeApiNode?.method ?? 'GET')
     setUrl(request?.url ?? '')
-    setParams(request?.params?.length ? request.params.map((item, index) => ({ id: item.id || `${activeApiId}-param-${index}`, key: item.key, value: item.value, enabled: item.enabled })) : [{ id: `${activeApiId}-param-0`, key: '', value: '', enabled: true }])
-    setHeaders(request?.headers?.length ? request.headers.map((item, index) => ({ id: item.id || `${activeApiId}-header-${index}`, key: item.key, value: item.value, enabled: item.enabled })) : [{ id: `${activeApiId}-header-0`, key: '', value: '', enabled: true }])
+    const nextParams = normalizeHttpFieldItems(request?.params, 'param')
+    const nextHeaders = normalizeHttpFieldItems(request?.headers, 'header')
+    setParams(nextParams.length ? nextParams : [{ id: `${activeApiId}-param-0`, key: '', value: '', enabled: true }])
+    setHeaders(nextHeaders.length ? nextHeaders : [{ id: `${activeApiId}-header-0`, key: '', value: '', enabled: true }])
     setBody(request?.body ?? '')
     setBodyType(request?.bodyType ?? 'json')
     setFormFields(request?.formFields?.length ? request.formFields : [{ id: `${activeApiId}-form-0`, key: '', value: '', kind: 'text', enabled: true }])
-    const authorization = request?.headers?.find((item) => item.key.toLowerCase() === 'authorization')?.value ?? ''
+    const authorization = nextHeaders.find((item) => item.key.toLowerCase() === 'authorization')?.value ?? ''
     setBearerToken(authorization.replace(/^Bearer\s+/i, ''))
     setDescription(request?.description ?? '')
   }, [activeApiId, activeApiNode?.method, activeRequest])

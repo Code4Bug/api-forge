@@ -11,6 +11,32 @@ function snapshotOf(item: RequestHistoryItem) {
   return item.requestSnapshot as { apiId?: string; request?: Partial<RequestDefinition> }
 }
 
+function normalizeRequestFields(value: unknown, prefix: 'param' | 'header'): RequestDefinition['params'] {
+  if (Array.isArray(value)) {
+    return value.map((item, index) => {
+      if (item && typeof item === 'object') {
+        const record = item as Partial<RequestDefinition['params'][number]>
+        return {
+          id: typeof record.id === 'string' && record.id.trim() ? record.id : `${prefix}-${index}`,
+          key: typeof record.key === 'string' ? record.key : '',
+          value: typeof record.value === 'string' ? record.value : record.value == null ? '' : String(record.value),
+          enabled: typeof record.enabled === 'boolean' ? record.enabled : true,
+        }
+      }
+      return { id: `${prefix}-${index}`, key: '', value: item == null ? '' : String(item), enabled: true }
+    })
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).map(([key, entryValue], index) => ({
+      id: `${prefix}-${index}`,
+      key,
+      value: entryValue == null ? '' : String(entryValue),
+      enabled: true,
+    }))
+  }
+  return []
+}
+
 export default function HistoryPage() {
   const navigate = useNavigate()
   const workspace = useWorkspaceStore((state) => state.workspace)
@@ -72,7 +98,17 @@ export default function HistoryPage() {
     const snapshot = snapshotOf(item)
     if (snapshot.apiId && snapshot.request) {
       const current = workspace?.requests.find((request) => request.id === snapshot.apiId)
-      updateRequest({ ...(current ?? {}), ...snapshot.request, id: snapshot.apiId, protocol: current?.protocol ?? item.protocol, name: current?.name ?? `${item.method ?? item.protocol} 历史请求`, params: snapshot.request.params ?? [], headers: snapshot.request.headers ?? [], url: snapshot.request.url ?? item.url, updatedAt: new Date().toISOString() } as RequestDefinition)
+      updateRequest({
+        ...(current ?? {}),
+        ...snapshot.request,
+        id: snapshot.apiId,
+        protocol: current?.protocol ?? item.protocol,
+        name: current?.name ?? `${item.method ?? item.protocol} 历史请求`,
+        params: normalizeRequestFields(snapshot.request.params, 'param'),
+        headers: normalizeRequestFields(snapshot.request.headers, 'header'),
+        url: snapshot.request.url ?? item.url,
+        updatedAt: new Date().toISOString(),
+      } as RequestDefinition)
       setActiveApiId(snapshot.apiId)
       navigate('/http')
     }

@@ -59,6 +59,13 @@ function downloadFile(name: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function getRouteProtocol(pathname: string): Protocol | undefined {
+  if (pathname === '/http') return 'http'
+  if (pathname === '/websocket') return 'websocket'
+  if (pathname === '/socket') return 'socket'
+  return undefined
+}
+
 const protocolMethods: Record<Protocol, HttpMethod[]> = {
   http: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
   websocket: [],
@@ -275,7 +282,7 @@ const saveStatusContent = {
 } as const
 
 export function WorkspaceLayout() {
-  const { workspace, activeApiId, activeEnvironmentId, saveStatus, autoSaveEnabled, autoSaveInterval, loadWorkspace, saveNow, setActiveApiId, setActiveEnvironmentId, createFolder, createApi, updateRequest, moveApi, renameNode, deleteNode } = useWorkspaceStore()
+  const { workspace, activeProtocol, activeApiId, activeEnvironmentId, saveStatus, autoSaveEnabled, autoSaveInterval, loadWorkspace, saveNow, setActiveApiId, setActiveProtocol, setActiveEnvironmentId, createFolder, createApi, updateRequest, moveApi, renameNode, deleteNode } = useWorkspaceStore()
   const { theme, setTheme, isDark } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [openApiIds, setOpenApiIds] = useState<string[]>([])
@@ -356,6 +363,11 @@ export function WorkspaceLayout() {
   useEffect(() => {
     void loadWorkspace()
   }, [loadWorkspace])
+
+  useEffect(() => {
+    const protocol = getRouteProtocol(location.pathname)
+    if (protocol) setActiveProtocol(protocol)
+  }, [location.pathname, setActiveProtocol])
 
   useEffect(() => {
     if (!autoSaveEnabled || !workspace) return
@@ -772,13 +784,19 @@ export function WorkspaceLayout() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 bg-[#111821] px-4">
           <div className="relative min-w-0 max-w-[70%] flex-1">
-            <div ref={apiTabsRef} onScroll={updateApiTabsOverflow} className="scrollbar-hidden flex min-w-0 items-center gap-1 overflow-x-auto px-7">
-              {openApis.map((api) => (
-                <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { activateApi(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
-                  <span className="truncate">{api.name}</span>
-                  <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
-                </NavLink>
-              ))}
+          <div ref={apiTabsRef} onScroll={updateApiTabsOverflow} className="scrollbar-hidden flex min-w-0 items-center gap-1 overflow-x-auto px-7">
+              {openApis.length === 0
+                ? <NavLink to={`/${activeProtocol}`} onClick={() => setTabMenu(undefined)} className={({ isActive }) => `flex h-8 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${isActive && !activeApiId ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`} title="当前没有打开的 API，点击返回空 API 占位">
+                    <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded border px-1 text-[10px] font-semibold ${methodClass(undefined)}`}>空</span>
+                    <span className="truncate">空 API</span>
+                    <span className="text-[10px] text-zinc-600">{activeProtocol.toUpperCase()}</span>
+                  </NavLink>
+                : openApis.map((api) => (
+                  <NavLink key={api.id} to={`/${api.protocol ?? 'http'}`} onClick={() => { activateApi(api.id); setTabMenu(undefined) }} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ id: api.id, x: event.clientX, y: event.clientY }) }} className={`flex h-8 max-w-48 shrink-0 items-center gap-2 rounded px-3 text-xs transition-colors ${activeApiId === api.id ? 'bg-zinc-800 font-semibold text-zinc-100 hover:bg-white/10' : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-200'}`}>
+                    <span className="truncate">{api.name}</span>
+                    <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
+                  </NavLink>
+                ))}
               <button onClick={() => openDialog({ mode: 'api' })} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增 API" aria-label="新增 API">
                 <Plus className="h-3.5 w-3.5" />
               </button>
