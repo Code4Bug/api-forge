@@ -855,7 +855,7 @@ export default function HttpDebugPage() {
             {errorCode && <StatusPill tone="red">{errorCode}</StatusPill>}
           </div>
         </div>
-        <div className="flex h-12 shrink-0 items-end justify-between border-b border-zinc-800 px-4 text-xs text-zinc-500">
+        <div className="flex h-12 shrink-0 items-end justify-between border-b border-zinc-800 px-4 text-sm text-zinc-500">
           <div className="flex items-end gap-5">
             {(['Body', 'Headers', 'Cookies', '日志'] as const).map((tab) => (
               <button key={tab} onClick={() => setActiveResponseTab(tab)} className={`border-b-2 pb-3 transition-colors ${activeResponseTab === tab ? 'border-cyan-400 text-zinc-100' : 'border-transparent hover:text-zinc-300'}`}>{tab}</button>
