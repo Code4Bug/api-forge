@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Clock3, Droplets, Eye, EyeOff, Leaf, Monitor, Moon, Palette, Save, Sun, Sunset, Waves, Bot, Sparkles, Download, Upload, RefreshCw, CheckCircle2, AlertCircle, MousePointer2, SlidersHorizontal, Plus, Trash2, Power, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
 import { getThemeMode, themePresets, useTheme, type Theme, type ThemeConfig } from '@/hooks/useTheme'
 import { useWorkspaceStore } from '@/stores/workspace-store'
-import type { LargeModelConfig, LightModelConfig } from '@/shared/ipc-contracts'
+import { getActiveLightModel, type LargeModelConfig, type LightModelConfig } from '@/shared/ipc-contracts'
 import type { UpdateStatus } from '@/shared/ipc-contracts'
 
 const themes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
@@ -91,6 +91,9 @@ export default function SettingsPage() {
   const [cursorGlowEffect, setCursorGlowEffect] = useState(() => localStorage.getItem('cursorMosaicEffect') || 'breathe')
   const [cursorGlowTexture, setCursorGlowTexture] = useState(() => localStorage.getItem('cursorMosaicTexture') || 'grid')
   const [cursorGlowColor, setCursorGlowColor] = useState(() => localStorage.getItem('cursorMosaicColor') || 'theme')
+  const [slogan, setSlogan] = useState(() => localStorage.getItem('api-forge:slogan') || 'Local API Workspace')
+  const [sloganEffect, setSloganEffect] = useState(() => localStorage.getItem('api-forge:slogan-effect') || 'static')
+  const [generatingSlogan, setGeneratingSlogan] = useState(false)
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
@@ -211,6 +214,31 @@ export default function SettingsPage() {
     window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
   }
 
+  function updateSlogan(value: string) {
+    const next = value.slice(0, 80)
+    setSlogan(next)
+    localStorage.setItem('api-forge:slogan', next || 'Local API Workspace')
+    window.dispatchEvent(new Event('api-forge:slogan-change'))
+  }
+
+  function updateSloganEffect(value: string) {
+    setSloganEffect(value)
+    localStorage.setItem('api-forge:slogan-effect', value)
+    window.dispatchEvent(new Event('api-forge:slogan-change'))
+  }
+
+  async function generateSlogan() {
+    const config = getActiveLightModel(workspace?.preferences)
+    if (!config || !window.desktopApi?.httpSend) { window.alert('请先在 AI 模型中激活一个小模型'); return }
+    setGeneratingSlogan(true)
+    try {
+      const response = await window.desktopApi.httpSend({ method: 'POST', url: `${config.baseUrl.replace(/\/$/, '')}/chat/completions`, headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) }, body: JSON.stringify({ model: config.model, temperature: config.temperature, max_tokens: 32, stream: false, messages: [{ role: 'system', content: '为 API 调试工作台生成一句简洁的英文个性化 Slogan，不超过 32 个字符，只输出 Slogan。' }, { role: 'user', content: '请生成一句体现本地 API、快速调试或开发效率的 Slogan。' }] }), timeout: 30000 })
+      if (!response.ok || response.status < 200 || response.status >= 300) throw new Error('模型请求失败')
+      const content = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content?.replace(/[\r\n"'`]/g, '').trim()
+      if (content) updateSlogan(content)
+    } catch (error) { window.alert(error instanceof Error ? error.message : '生成失败，请检查小模型配置') } finally { setGeneratingSlogan(false) }
+  }
+
   async function checkForUpdates() {
     setUpdateStatus({ state: 'checking' })
     await window.desktopApi?.checkForUpdates()
@@ -235,6 +263,8 @@ export default function SettingsPage() {
       cursorMosaicEffect: localStorage.getItem('cursorMosaicEffect') ?? cursorGlowEffect,
       cursorMosaicTexture: localStorage.getItem('cursorMosaicTexture') ?? cursorGlowTexture,
       cursorMosaicColor: localStorage.getItem('cursorMosaicColor') ?? cursorGlowColor,
+      slogan,
+      sloganEffect,
       autoSaveEnabled: String(autoSaveEnabled),
       autoSaveInterval: String(autoSaveInterval),
       largeModels,
@@ -259,13 +289,15 @@ export default function SettingsPage() {
       const supportedThemes = [...themes, ...colorThemes].map((item) => item.id)
       if (settings.theme !== 'custom' && !supportedThemes.includes(settings.theme as Theme)) throw new Error('设置文件中的主题不受支持')
       localStorage.setItem('theme', settings.theme)
-      for (const key of ['customTheme', 'customThemes', 'activeCustomThemeId', 'cursorMosaicGlow', 'cursorMosaicEffect', 'cursorMosaicTexture', 'cursorMosaicColor']) {
+      for (const key of ['customTheme', 'customThemes', 'activeCustomThemeId', 'cursorMosaicGlow', 'cursorMosaicEffect', 'cursorMosaicTexture', 'cursorMosaicColor', 'slogan', 'sloganEffect']) {
         if (typeof settings[key] === 'string') localStorage.setItem(key, settings[key] as string)
       }
       if (typeof settings.cursorMosaicGlow === 'string') setCursorGlowEnabled(settings.cursorMosaicGlow !== 'false')
       if (typeof settings.cursorMosaicEffect === 'string') setCursorGlowEffect(settings.cursorMosaicEffect)
       if (typeof settings.cursorMosaicTexture === 'string') setCursorGlowTexture(settings.cursorMosaicTexture)
       if (typeof settings.cursorMosaicColor === 'string') setCursorGlowColor(settings.cursorMosaicColor)
+      if (typeof settings.slogan === 'string') setSlogan(settings.slogan)
+      if (typeof settings.sloganEffect === 'string') setSloganEffect(settings.sloganEffect)
       const enabled = settings.autoSaveEnabled !== 'false'
       const interval = Number(settings.autoSaveInterval) || 60
       setAutoSaveSettings(enabled, interval)
@@ -275,6 +307,7 @@ export default function SettingsPage() {
       if (typeof settings.activeLightModelId === 'string') activateLightModelConfig(settings.activeLightModelId)
       window.dispatchEvent(new Event('api-forge:theme-change'))
       window.dispatchEvent(new Event('api-forge:cursor-glow-change'))
+      window.dispatchEvent(new Event('api-forge:slogan-change'))
       saveNow()
     } catch (error) {
       window.alert(error instanceof Error ? `导入失败：${error.message}` : '导入失败：文件无法读取')
@@ -327,6 +360,18 @@ export default function SettingsPage() {
           <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input value={customThemeName} onChange={(event) => setCustomThemeName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentCustomTheme() }} placeholder={`自定义主题 ${savedCustomThemes.length + 1}`} maxLength={24} className="h-9 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-cyan-400" /><button type="button" onClick={saveCurrentCustomTheme} className="flex min-h-9 items-center justify-center gap-2 rounded border border-cyan-400/50 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-400/10"><Save className="h-3.5 w-3.5 shrink-0" />保存为新主题</button></div>
           {savedCustomThemes.length > 0 && <div className="mt-5 border-t border-zinc-800 pt-4"><div className="mb-3 text-xs font-medium text-zinc-300">已保存主题</div><div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,13rem),1fr))] gap-3">{savedCustomThemes.map((item) => <div key={item.id} className={`flex min-w-0 items-center gap-2 rounded border p-2 ${theme === 'custom' && activeCustomThemeId === item.id ? 'border-cyan-400/70 bg-cyan-400/10' : 'border-zinc-800'}`}><button type="button" onClick={() => activateCustomTheme(item.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded p-1 text-left"><ThemeConfigPreview config={item.config} /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-zinc-200">{item.name}</span><span className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">{item.mode === 'light' ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}{item.mode === 'light' ? '浅色' : '深色'} · {theme === 'custom' && activeCustomThemeId === item.id ? '当前使用' : '点击切换'}</span></span>{theme === 'custom' && activeCustomThemeId === item.id && <Check className="h-4 w-4 shrink-0 text-cyan-300" />}</button><button type="button" onClick={() => removeCustomTheme(item.id, item.name)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-rose-400/10 hover:text-rose-300" title={`删除 ${item.name}`} aria-label={`删除 ${item.name}`}><Trash2 className="h-3.5 w-3.5" /></button></div>)}</div></div>}
         </div>
+        </div>
+      </section>
+      <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+        <div className="mb-4 flex items-center gap-2"><Sparkles className="h-4 w-4 text-cyan-300" /><h2 className="text-sm font-medium">品牌 Slogan</h2></div>
+        <p className="mb-3 text-[11px] text-zinc-500">显示在 Logo 下方的小字，可自定义或使用已激活的小模型生成。</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input value={slogan} onChange={(event) => updateSlogan(event.target.value)} maxLength={80} placeholder="Local API Workspace" className="h-9 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-200 outline-none focus:border-cyan-400" />
+          <button type="button" onClick={() => void generateSlogan()} disabled={generatingSlogan} className="flex h-9 items-center justify-center gap-1.5 rounded border border-cyan-400/50 px-3 text-xs text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-50"><Sparkles className={`h-3.5 w-3.5 ${generatingSlogan ? 'animate-spin' : ''}`} />{generatingSlogan ? '生成中...' : '模型生成'}</button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs text-zinc-400"><span className="mb-1 block">动效</span><select value={sloganEffect} onChange={(event) => updateSloganEffect(event.target.value)} className="h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-200 outline-none focus:border-cyan-400"><option value="static">静态</option><option value="typewriter">打字机</option><option value="shimmer">流光</option><option value="breathe">呼吸</option><option value="marquee">横向漂移</option></select></label>
+          <div className="flex min-h-9 items-end text-[11px] text-zinc-500">预览：<span className={`ml-1 api-forge-slogan api-forge-slogan-${sloganEffect}`}>{slogan || 'Local API Workspace'}</span></div>
         </div>
       </section>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">

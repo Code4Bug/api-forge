@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { BookOpen, Boxes, Cable, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsDown, ChevronsUp, CircleAlert, Copy, Download, FileCode2, FilePlus2, Folder, History, LoaderCircle, MoreVertical, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Radio, Search, Settings2, Trash2, X, Sparkles } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace-store'
-import { getActiveLargeModel } from '@/shared/ipc-contracts'
+import { getActiveLargeModel, getActiveLightModel } from '@/shared/ipc-contracts'
 import { themePresets, useTheme, type Theme } from '@/hooks/useTheme'
 import AIAssistantPage from '@/pages/AIAssistantPage'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
@@ -98,6 +98,33 @@ function parseCurlCommand(value: string): { name: string; method: HttpMethod; pr
 }
 
 const expandedFoldersStorageKey = 'api-forge:expanded-folders'
+
+type SloganEffect = 'static' | 'typewriter' | 'shimmer' | 'breathe' | 'marquee'
+
+function BrandSlogan() {
+  const [settings, setSettings] = useState(() => ({
+    text: localStorage.getItem('api-forge:slogan') || 'Local API Workspace',
+    effect: (localStorage.getItem('api-forge:slogan-effect') || 'static') as SloganEffect,
+  }))
+  const [typed, setTyped] = useState(settings.text)
+
+  useEffect(() => {
+    const sync = () => setSettings({ text: localStorage.getItem('api-forge:slogan') || 'Local API Workspace', effect: (localStorage.getItem('api-forge:slogan-effect') || 'static') as SloganEffect })
+    window.addEventListener('api-forge:slogan-change', sync)
+    return () => window.removeEventListener('api-forge:slogan-change', sync)
+  }, [])
+
+  useEffect(() => {
+    if (settings.effect !== 'typewriter') { setTyped(settings.text); return }
+    let index = 0
+    setTyped('')
+    const timer = window.setInterval(() => { index += 1; setTyped(settings.text.slice(0, index)); if (index >= settings.text.length) window.clearInterval(timer) }, 90)
+    return () => window.clearInterval(timer)
+  }, [settings])
+
+  const className = `api-forge-slogan api-forge-slogan-${settings.effect}`
+  return <div className={className} title={settings.text}>{settings.effect === 'typewriter' ? typed : settings.text}</div>
+}
 const apiTabsStorageKey = 'api-forge:api-tabs'
 
 interface ApiTabsState {
@@ -605,7 +632,7 @@ export function WorkspaceLayout() {
           </div>}
           {!sidebarCollapsed && <div className="min-w-0">
             <div className="flex items-center gap-2"><div className="api-forge-brand-name text-sm font-semibold">API-forge</div>{appVersion && <span className="text-[10px] text-zinc-500">v{appVersion}</span>}</div>
-            <div className="text-[11px] text-zinc-500">Local API Workspace</div>
+            <BrandSlogan />
           </div>}
           <button onClick={() => setSidebarCollapsed((value) => !value)} className={sidebarCollapsed ? 'rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100' : 'ml-auto rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'}>
             {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
