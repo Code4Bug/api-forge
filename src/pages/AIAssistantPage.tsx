@@ -49,6 +49,7 @@ type ToolName =
   | "get_app_version"
   | "get_usage_help"
   | "test_http_api"
+  | "test_http_api_load"
   | "test_websocket"
   | "test_socket"
   | "script_exec";
@@ -79,6 +80,7 @@ const toolLabels: Record<ToolName, string> = {
   get_app_version: "获取应用版本信息",
   get_usage_help: "获取系统应用使用说明",
   test_http_api: "测试 HTTP 接口（直接发起请求并返回结果）",
+  test_http_api_load: "测试 HTTP 接口压测（并发发送并返回核心指标）",
   test_websocket: "测试 WebSocket（连接、发送消息并返回帧日志）",
   test_socket: "测试 Socket（连接 TCP/UDP 并发送报文）",
   script_exec: "执行系统脚本（受限于当前工作区）",
@@ -130,9 +132,15 @@ function toolParameters(name: ToolName) {
     case "delete_api":
     case "get_api_details":
     case "test_http_api":
+    case "test_http_api_load":
       return {
         type: "object",
-        properties: { id: { type: "string" } },
+        properties: {
+          id: { type: "string" },
+          concurrency: { type: "number" },
+          iterations: { type: "number" },
+          timeout: { type: "number" },
+        },
         required: ["id"],
       };
     case "test_websocket":
@@ -755,6 +763,7 @@ export default function AIAssistantPage() {
 - TCP/UDP：在 Socket 页面填写主机和端口，连接后发送文本或 Hex 报文。
 - 请求历史：底部或历史页面可查看请求结果，并恢复请求配置。
 - AI 工具：可查询、新增、修改和删除目录，也可列出、查看详情、创建或编辑接口；删除操作必须先征得用户确认。
+- AI 工具：HTTP 接口支持单次测试和并发压测，压测会返回总请求数、成功数、失败数、平均耗时、P95 和最大耗时。
 - 应用更新：系统设置中检查、下载并安装新版本。`;
     if (!workspace) return "工作区尚未加载";
     if (name === "list_directories")
@@ -965,6 +974,78 @@ export default function AIAssistantPage() {
       return json({
         request: extractRequestSummary(request),
         response,
+      });
+    }
+    if (name === "test_http_api_load") {
+      const id = String(args.id || "");
+      const request = workspace.requests.find((item) => item.id === id);
+      if (!request) return `未找到接口 ${id}`;
+      if (!window.desktopApi?.httpSend) return "当前环境不支持 HTTP 压测";
+      const concurrency = Math.max(1, Number(args.concurrency) || 3);
+      const iterations = Math.max(1, Number(args.iterations) || 12);
+      const timeout = Math.max(1000, Number(args.timeout) || 30000);
+      const requestBody = buildRequestBody(request, variables);
+      const requestPayload = {
+        method: request.method ?? "GET",
+        url: buildRequestUrl(request, variables),
+        params: resolveFields(request.params ?? [], variables).map((item) => ({
+          ...item,
+          enabled: true,
+        })),
+        headers: buildRequestHeaders(request, variables),
+        body: requestBody,
+        timeout,
+        followRedirects: true,
+        validateCertificates: true,
+      };
+      const durations: number[] = [];
+      let success = 0;
+      let failure = 0;
+      let cursor = 0;
+      const workers = Array.from(
+        { length: Math.max(1, concurrency) },
+        async () => {
+          while (cursor < iterations) {
+            const current = cursor;
+            cursor += 1;
+            if (current >= iterations) break;
+            const response = await window.desktopApi.httpSend({
+              requestId: `ai-test-http-load-${crypto.randomUUID()}`,
+              ...requestPayload,
+            });
+            if (response.ok) {
+              success += 1;
+              durations.push(response.durationMs);
+            } else {
+              failure += 1;
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
+      const sorted = [...durations].sort((a, b) => a - b);
+      const avg = durations.length
+        ? Math.round(
+            durations.reduce((sum, value) => sum + value, 0) /
+              durations.length,
+          )
+        : 0;
+      const p95 = sorted.length
+        ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
+        : 0;
+      const max = sorted.length ? sorted[sorted.length - 1] : 0;
+      return json({
+        request: extractRequestSummary(request),
+        summary: {
+          total: iterations,
+          success,
+          failure,
+          avg,
+          p95,
+          max,
+        },
+        concurrency,
+        timeout,
       });
     }
     if (name === "test_websocket") {
