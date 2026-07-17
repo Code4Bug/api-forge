@@ -232,9 +232,9 @@ export default function SettingsPage() {
     if (!config || !window.desktopApi?.httpSend) { window.alert('请先在 AI 模型中激活一个小模型'); return }
     setGeneratingSlogan(true)
     try {
-      const response = await window.desktopApi.httpSend({ method: 'POST', url: `${config.baseUrl.replace(/\/$/, '')}/chat/completions`, headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) }, body: JSON.stringify({ model: config.model, temperature: config.temperature, max_tokens: 32, stream: false, messages: [{ role: 'system', content: '为 API 调试工作台生成一句简洁的英文个性化 Slogan，不超过 32 个字符，只输出 Slogan。' }, { role: 'user', content: '请生成一句体现本地 API、快速调试或开发效率的 Slogan。' }] }), timeout: 30000 })
+      const response = await window.desktopApi.httpSend({ method: 'POST', url: `${config.baseUrl.replace(/\/$/, '')}/chat/completions`, headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) }, body: JSON.stringify({ model: config.model, temperature: Math.max(config.temperature, 0.8), max_tokens: 32, stream: false, messages: [{ role: 'system', content: '生成一句简短、帅酷、有辨识度的英文个性化 Slogan。最多 4 个单词或 24 个字符，只输出 Slogan，不加引号、标点或解释。不要关联 API、软件、接口、开发、技术或任何具体产品，像潮流品牌或创意工作室的宣言。' }, { role: 'user', content: '请给我一句让人印象深刻、简洁有态度的品牌短句。' }] }), timeout: 30000 })
       if (!response.ok || response.status < 200 || response.status >= 300) throw new Error('模型请求失败')
-      const content = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content?.replace(/[\r\n"'`]/g, '').trim()
+      const content = (JSON.parse(response.body) as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content?.replace(/[\r\n"'`.,!?：；。！？，、]/g, '').trim().slice(0, 32)
       if (content) updateSlogan(content)
     } catch (error) { window.alert(error instanceof Error ? error.message : '生成失败，请检查小模型配置') } finally { setGeneratingSlogan(false) }
   }
