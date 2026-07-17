@@ -9,6 +9,8 @@ import AIAssistantPage from '@/pages/AIAssistantPage'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, Protocol } from '@/shared/ipc-contracts'
 import logo from '@/assets/icons/favicon.svg'
 import lightLogo from '@/assets/icons/favicon-light.svg'
+import { ThemedSelect } from '@/components/common/ThemedSelect'
+import { Modal } from '@/components/common/Modal'
 
 function treeHasMatch(nodes: ApiTreeNode[], query: string): boolean {
   if (!query) return nodes.length > 0
@@ -737,9 +739,7 @@ export function WorkspaceLayout() {
             {pendingCurl && <button onClick={importCurl} className="flex h-9 w-24 animate-pulse items-center justify-center gap-2 rounded border border-amber-400/50 bg-amber-400/10 px-3 text-xs font-medium text-amber-200 hover:bg-amber-400/20">从 curl 导入</button>}
             <div className="flex h-9 w-36 min-w-0 items-center gap-2 rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-300">
               <Boxes className="h-3.5 w-3.5 shrink-0 text-emerald-300" />
-              <select className="min-w-0 flex-1 truncate bg-transparent outline-none" value={activeEnvironmentId} onChange={(event) => setActiveEnvironmentId(event.target.value)}>
-                {workspace?.environments.map((env) => <option key={env.id} value={env.id}>{env.name}</option>)}
-              </select>
+              <ThemedSelect bare className="min-w-0 flex-1" size="md" menuOffsetX={-30} value={activeEnvironmentId} options={(workspace?.environments ?? []).map((env) => ({ value: env.id, label: env.name }))} onChange={setActiveEnvironmentId} aria-label="当前环境" />
               <NavLink to="/environments" className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="设置环境变量">
                 <Settings2 className="h-3.5 w-3.5" />
               </NavLink>
@@ -781,15 +781,26 @@ export function WorkspaceLayout() {
           <button onClick={closeAllApis} className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-rose-200 hover:bg-rose-500/15">关闭所有</button>
         </div>
       </>}
-      {dialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <form onSubmit={(event) => { event.preventDefault(); submitDialog() }} className="w-full max-w-md rounded-lg border border-zinc-700 bg-[#111821] p-5 shadow-2xl">
-          <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-semibold">{dialog.mode === 'folder' ? '新建目录' : dialog.mode === 'api' ? '新建 API' : '重命名'}</h2><button type="button" onClick={() => setDialog(undefined)} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"><X className="h-4 w-4" /></button></div>
+      <Modal open={Boolean(dialog)} title={dialog ? (dialog.mode === 'folder' ? '新建目录' : dialog.mode === 'api' ? '新建 API' : '重命名') : ''} onClose={() => setDialog(undefined)} className="max-w-md">
+        {dialog && <form onSubmit={(event) => { event.preventDefault(); submitDialog() }}>
           <label className="mb-4 block text-xs text-zinc-400">名称<input autoFocus value={dialogName} onChange={(event) => setDialogName(event.target.value)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="请输入名称" /></label>
           {dialog.mode === 'api' && <label className="mb-4 block text-xs text-zinc-400">备注描述<textarea value={dialogDescription} onChange={(event) => setDialogDescription(event.target.value)} className="mt-2 min-h-20 w-full resize-y rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="请输入接口用途或备注" /></label>}
-          {dialog.mode === 'api' && <div className="space-y-3"><label className="block text-xs text-zinc-400">所属目录<select value={dialogFolderId ?? ''} onChange={(event) => setDialogFolderId(event.target.value || undefined)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="">根目录</option>{flattenFolders(workspace?.apiTree ?? []).map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><label className="text-xs text-zinc-400">协议<select value={dialogProtocol} onChange={(event) => changeDialogProtocol(event.target.value as Protocol)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="http">HTTP</option><option value="websocket">WebSocket</option><option value="socket">Socket</option></select></label><label className="text-xs text-zinc-400">方法<select disabled={protocolMethods[dialogProtocol].length === 0} value={dialogMethod ?? ''} onChange={(event) => setDialogMethod((event.target.value || undefined) as HttpMethod | undefined)} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"><option value="">不适用</option>{protocolMethods[dialogProtocol].map((method) => <option key={method} value={method}>{method}</option>)}</select></label></div></div>}
+          {dialog.mode === 'api' && <div className="space-y-3">
+            <label className="block text-xs text-zinc-400">所属目录
+              <ThemedSelect className="mt-2" value={dialogFolderId ?? ''} options={[{ value: '', label: '根目录' }, ...flattenFolders(workspace?.apiTree ?? []).map((folder) => ({ value: folder.id, label: folder.name }))]} onChange={(value) => setDialogFolderId(value || undefined)} />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-zinc-400">协议
+                <ThemedSelect className="mt-2" value={dialogProtocol} options={[{ value: 'http' as const, label: 'HTTP' }, { value: 'websocket' as const, label: 'WebSocket' }, { value: 'socket' as const, label: 'Socket' }]} onChange={(value) => changeDialogProtocol(value)} />
+              </label>
+              <label className="text-xs text-zinc-400">方法
+                <ThemedSelect className="mt-2" disabled={protocolMethods[dialogProtocol].length === 0} value={dialogMethod ?? ''} options={[{ value: '', label: '不适用' }, ...protocolMethods[dialogProtocol].map((method) => ({ value: method, label: method }))]} onChange={(value) => setDialogMethod((value || undefined) as HttpMethod | undefined)} />
+              </label>
+            </div>
+          </div>}
           <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDialog(undefined)} className="h-9 rounded border border-zinc-700 px-4 text-xs text-zinc-300 hover:bg-zinc-800">取消</button><button type="submit" disabled={!dialogName.trim()} className="h-9 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 disabled:opacity-40">保存</button></div>
-        </form>
-      </div>}
+        </form>}
+      </Modal>
     </div>
   )
 }

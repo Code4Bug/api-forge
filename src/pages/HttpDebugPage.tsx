@@ -7,6 +7,7 @@ import { VariableEditor } from '@/components/common/VariableEditor'
 import { getWorkspaceVariables, replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
 import type { ApiTreeNode, HttpFieldItem, HttpMethod, HttpSendResult, ProcessVariable, RequestDefinition } from '@/shared/ipc-contracts'
+import { ThemedSelect } from '@/components/common/ThemedSelect'
 
 const initialParams: HttpFieldItem[] = [
   { id: 'param-page', key: 'page', value: '1', enabled: true },
@@ -668,9 +669,13 @@ export default function HttpDebugPage() {
     <div ref={splitContainerRef} className={`relative grid h-full min-h-0 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] overflow-auto lg:grid-cols-[var(--http-split-ratio)_minmax(0,1fr)] lg:grid-rows-1 lg:overflow-hidden ${isResizing ? 'select-none' : ''}`} style={{ '--http-split-ratio': `${splitRatio * 100}%` } as CSSProperties}>
       <section className="flex min-h-0 min-w-0 flex-col border-b border-zinc-800 bg-[#0b0f14] lg:border-b-0 lg:border-r">
         <div className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-4 py-2">
-          <select value={method} onChange={(event) => setMethod(event.target.value as HttpMethod)} className={`h-9 rounded border px-3 text-xs font-semibold outline-none ${methodColorClasses[method]}`}>
-            {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as HttpMethod[]).map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
+          <ThemedSelect
+            className="w-28"
+            value={method}
+            options={(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as HttpMethod[]).map((item) => ({ value: item, label: item }))}
+            onChange={(value) => setMethod(value as HttpMethod)}
+            triggerClassName={`font-semibold ${methodColorClasses[method]}`}
+          />
           <div className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-[180px]">
             <VariableInput value={url} variables={variables} onChange={setUrl} placeholder="输入请求地址，例如 {{base_url}}/api" className="h-9 w-full rounded border border-zinc-700 bg-transparent px-3 text-sm text-zinc-100 caret-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/60" />
           </div>
@@ -719,7 +724,7 @@ export default function HttpDebugPage() {
             </div>
           )}
           {activeRequestTab === 'Bearer' && (
-            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4"><label className="block text-xs text-zinc-400">认证方式<select className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-100"><option>Bearer Token</option><option>Basic Auth</option><option>API Key</option></select></label><label className="block text-xs text-zinc-400">Token<VariableInput value={bearerToken} variables={variables} onChange={updateBearer} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-3 font-mono text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="输入 token 或 {{token}}" /></label><p className="text-[11px] text-zinc-600">保存后会同步更新 Headers 中的 Authorization。</p></div>
+            <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4"><label className="block text-xs text-zinc-400">认证方式<ThemedSelect className="mt-2" value="Bearer Token" options={[{ value: 'Bearer Token', label: 'Bearer Token' }, { value: 'Basic Auth', label: 'Basic Auth' }, { value: 'API Key', label: 'API Key' }]} onChange={() => undefined} /></label><label className="block text-xs text-zinc-400">Token<VariableInput value={bearerToken} variables={variables} onChange={updateBearer} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-900 px-3 font-mono text-xs text-zinc-100 outline-none focus:border-cyan-400/60" placeholder="输入 token 或 {{token}}" /></label><p className="text-[11px] text-zinc-600">保存后会同步更新 Headers 中的 Authorization。</p></div>
           )}
           {activeRequestTab === 'Body' && (
             <div className="flex h-full min-h-0 flex-col">
@@ -732,15 +737,21 @@ export default function HttpDebugPage() {
                       <button onClick={() => transformJsonBody(true)} className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800">压缩</button>
                     </>
                   )}
-                  <select value={bodyType} onChange={(event) => updateBodyType(event.target.value as NonNullable<RequestDefinition['bodyType']>)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-[11px] text-zinc-300">
-                    <option value="json">JSON</option>
-                    <option value="form-urlencoded">表单 URL 编码</option>
-                    <option value="multipart">Multipart 表单</option>
-                    <option value="text">纯文本</option>
-                    <option value="xml">XML</option>
-                    <option value="html">HTML</option>
-                    <option value="javascript">JavaScript</option>
-                  </select>
+                  <ThemedSelect
+                    size="sm"
+                    className="w-44"
+                    value={bodyType}
+                    options={[
+                      { value: 'json' as const, label: 'JSON' },
+                      { value: 'form-urlencoded' as const, label: '表单 URL 编码' },
+                      { value: 'multipart' as const, label: 'Multipart 表单' },
+                      { value: 'text' as const, label: '纯文本' },
+                      { value: 'xml' as const, label: 'XML' },
+                      { value: 'html' as const, label: 'HTML' },
+                      { value: 'javascript' as const, label: 'JavaScript' },
+                    ]}
+                    onChange={(value) => updateBodyType(value as NonNullable<RequestDefinition['bodyType']>)}
+                  />
                 </div>
               </div>
               {(bodyType === 'form-urlencoded' || bodyType === 'multipart') ? (
@@ -757,10 +768,12 @@ export default function HttpDebugPage() {
                       ) : (
                         <VariableInput value={field.value} variables={variables} onChange={(value) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item))} placeholder="value" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100" />
                       )}
-                      <select value={field.kind} onChange={(event) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value as 'text' | 'file' } : item))} className="h-9 rounded border border-zinc-800 bg-zinc-900 px-2 text-xs text-zinc-100">
-                        <option value="text">文本</option>
-                        <option value="file">文件</option>
-                      </select>
+                      <ThemedSelect
+                        className="w-24"
+                        value={field.kind}
+                        options={[{ value: 'text' as const, label: '文本' }, { value: 'file' as const, label: '文件' }]}
+                        onChange={(kind) => setFormFields((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, kind } : item))}
+                      />
                       <button onClick={() => setFormFields((items) => items.filter((_, itemIndex) => itemIndex !== index))} className="text-zinc-500 hover:text-zinc-100" title="删除字段">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
