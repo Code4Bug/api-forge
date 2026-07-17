@@ -185,6 +185,8 @@ export interface HttpSendRequest {
   headers?: Record<string, string>
   body?: string
   timeout?: number
+  followRedirects?: boolean
+  validateCertificates?: boolean
 }
 
 export interface HttpSendResponse {

@@ -651,6 +651,8 @@ ipcMain.handle('socket:close', (_event, connectionId: string) => { const socket 
 ipcMain.handle('http:send', async (event, request) => {
   const startedAt = Date.now()
   const timeout = request.timeout ?? 30000
+  const followRedirects = request.followRedirects ?? true
+  const validateCertificates = request.validateCertificates ?? true
 
   if (!request.url || timeout <= 0) {
     return { ok: false, error: { code: 'INVALID_REQUEST', message: 'URL and a positive timeout are required' } }
@@ -662,13 +664,16 @@ ipcMain.handle('http:send', async (event, request) => {
     if (canceledHttpRequests.has(request.requestId)) controller.abort()
   }
   const timer = setTimeout(() => controller.abort(), timeout)
+  const previousTlsSetting = process.env.NODE_TLS_REJECT_UNAUTHORIZED
 
   try {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = validateCertificates ? '1' : '0'
     const response = await fetch(request.url, {
       method: request.method,
       headers: request.headers,
       body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
       signal: controller.signal,
+      redirect: followRedirects ? 'follow' : 'manual',
     })
     const headers = Object.fromEntries(response.headers.entries())
     const contentType = headers['content-type'] ?? ''
@@ -713,6 +718,8 @@ ipcMain.handle('http:send', async (event, request) => {
     }
   } finally {
     clearTimeout(timer)
+    if (previousTlsSetting === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsSetting
     if (request.requestId) httpControllers.delete(request.requestId)
   }
 })
