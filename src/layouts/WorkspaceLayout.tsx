@@ -12,6 +12,8 @@ import lightLogo from '@/assets/icons/favicon-light.svg'
 import { ThemedSelect } from '@/components/common/ThemedSelect'
 import { Modal } from '@/components/common/Modal'
 
+type AppMenuAction = 'about' | 'new-api' | 'new-folder' | 'save-current' | 'import-curl' | 'export-workspace' | 'open-http' | 'open-websocket' | 'open-socket' | 'open-environments' | 'open-history' | 'open-ai' | 'open-settings' | 'shortcuts' | 'guide'
+
 function treeHasMatch(nodes: ApiTreeNode[], query: string): boolean {
   if (!query) return nodes.length > 0
   return nodes.some((node) => node.name.toLowerCase().includes(query.toLowerCase()) || (node.children ? treeHasMatch(node.children, query) : false))
@@ -297,6 +299,9 @@ export function WorkspaceLayout() {
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false)
   const [appVersion, setAppVersion] = useState('')
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const statusContent = saveStatusContent[saveStatus]
@@ -356,6 +361,46 @@ export function WorkspaceLayout() {
     const timer = window.setInterval(saveNow, autoSaveInterval * 1000)
     return () => window.clearInterval(timer)
   }, [autoSaveEnabled, autoSaveInterval, workspace, saveNow])
+
+  useEffect(() => {
+    const handlers: Array<[AppMenuAction, () => void | Promise<void>]> = [
+      ['about', () => setAboutOpen(true)],
+      ['shortcuts', () => setShortcutsOpen(true)],
+      ['guide', () => setGuideOpen(true)],
+      ['new-api', () => openDialog({ mode: 'api' })],
+      ['new-folder', () => openDialog({ mode: 'folder' })],
+      ['save-current', () => { void window.dispatchEvent(new CustomEvent('api-forge:save-request')) }],
+      ['export-workspace', () => exportWorkspace()],
+      ['import-curl', async () => {
+        const text = await navigator.clipboard?.readText().catch(() => '')
+        if (!text) return
+        const parsed = parseCurlCommand(text)
+        if (!parsed) return
+        setPendingCurl(text)
+        setParsedCurl(parsed)
+        openDialog({ mode: 'api' })
+        setDialogName(parsed.name)
+        setDialogProtocol(parsed.protocol)
+        setDialogMethod(parsed.method)
+      }],
+      ['open-http', () => navigate('/http')],
+      ['open-websocket', () => navigate('/websocket')],
+      ['open-socket', () => navigate('/socket')],
+      ['open-environments', () => navigate('/environments')],
+      ['open-history', () => navigate('/history')],
+      ['open-ai', () => navigate('/ai')],
+      ['open-settings', () => navigate('/settings')],
+    ]
+    const unsubscribe = handlers.map(([action, handler]) => {
+      const eventName = `api-forge:${action}`
+      const listener = () => { void handler() }
+      window.addEventListener(eventName, listener)
+      return () => window.removeEventListener(eventName, listener)
+    })
+    return () => {
+      unsubscribe.forEach((dispose) => dispose())
+    }
+  }, [navigate])
 
   useEffect(() => {
     function checkClipboard() {
@@ -612,6 +657,12 @@ export function WorkspaceLayout() {
     setDialogMethod(parsed.method)
   }
 
+  function exportWorkspace() {
+    if (!workspace) return
+    const { history: _history, preferences: _preferences, ...workspaceOnly } = workspace
+    downloadFile(`api-forge-workspace-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(workspaceOnly, null, 2), 'application/json;charset=utf-8')
+  }
+
   function requestDelete(node: ApiTreeNode) {
     if (deleteConfirmingRef.current) return
     deleteConfirmingRef.current = true
@@ -802,6 +853,30 @@ export function WorkspaceLayout() {
           </div>}
           <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDialog(undefined)} className="h-9 rounded border border-zinc-700 px-4 text-xs text-zinc-300 hover:bg-zinc-800">取消</button><button type="submit" disabled={!dialogName.trim()} className="h-9 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 disabled:opacity-40">保存</button></div>
         </form>}
+      </Modal>
+      <Modal open={aboutOpen} title="关于 API-forge" onClose={() => setAboutOpen(false)} className="max-w-lg">
+        <div className="space-y-3 p-5 text-xs leading-6 text-zinc-300">
+          <p>本地 API 调试与工作区管理工具。</p>
+          <p>当前版本：{appVersion || '读取中'}</p>
+          <p>支持 HTTP、WebSocket、Socket 调试，配合环境变量、历史记录和 AI 辅助工作流。</p>
+        </div>
+      </Modal>
+      <Modal open={shortcutsOpen} title="快捷键说明" onClose={() => setShortcutsOpen(false)} className="max-w-lg">
+        <div className="space-y-2 p-5 text-xs leading-6 text-zinc-300">
+          <p><code className="rounded bg-zinc-900 px-1.5 py-0.5">Ctrl/Cmd + N</code> 新建 API</p>
+          <p><code className="rounded bg-zinc-900 px-1.5 py-0.5">Ctrl/Cmd + S</code> 保存当前</p>
+          <p><code className="rounded bg-zinc-900 px-1.5 py-0.5">Ctrl/Cmd + Shift + N</code> 新建目录</p>
+          <p><code className="rounded bg-zinc-900 px-1.5 py-0.5">Ctrl/Cmd + Shift + O</code> 导入 curl</p>
+          <p><code className="rounded bg-zinc-900 px-1.5 py-0.5">Ctrl/Cmd + ,</code> 打开系统设置</p>
+        </div>
+      </Modal>
+      <Modal open={guideOpen} title="使用指南" onClose={() => setGuideOpen(false)} className="max-w-lg">
+        <div className="space-y-3 p-5 text-xs leading-6 text-zinc-300">
+          <p>1. 在左侧创建目录并组织接口。</p>
+          <p>2. 通过顶部菜单或标签页切换当前调试协议。</p>
+          <p>3. 为接口绑定环境变量后发送请求并保存历史。</p>
+          <p>4. 需要迁移已有接口时，直接使用 curl 导入。</p>
+        </div>
       </Modal>
     </div>
   )

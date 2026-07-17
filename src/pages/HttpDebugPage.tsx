@@ -387,8 +387,8 @@ export default function HttpDebugPage() {
       draftSyncKeyRef.current = ''
       setMethod('GET')
       setUrl('')
-      setParams([])
-      setHeaders([])
+      setParams([{ id: `param-${crypto.randomUUID()}`, key: '', value: '', enabled: true }])
+      setHeaders([{ id: `header-${crypto.randomUUID()}`, key: '', value: '', enabled: true }])
       setBody('')
       setBodyType('json')
       setFormFields([])
@@ -402,10 +402,8 @@ export default function HttpDebugPage() {
     const request = activeRequest as RequestDefinition | undefined
     setMethod(request?.method ?? activeApiNode?.method ?? 'GET')
     setUrl(request?.url ?? '')
-    setParams(request?.params?.map((item, index) => ({ id: item.id || `${activeApiId}-param-${index}`, key: item.key, value: item.value, enabled: item.enabled })) ?? [{ id: `${activeApiId}-param-0`, key: '', value: '', enabled: true }])
-    setHeaders(request?.headers?.map((item, index) => ({ id: item.id || `${activeApiId}-header-${index}`, key: item.key, value: item.value, enabled: item.enabled })) ?? [{ id: `${activeApiId}-header-0`, key: '', value: '', enabled: true }])
-    if (request && request.params.length === 0) setParams([{ id: `${activeApiId}-param-0`, key: '', value: '', enabled: true }])
-    if (request && request.headers.length === 0) setHeaders([{ id: `${activeApiId}-header-0`, key: '', value: '', enabled: true }])
+    setParams(request?.params?.length ? request.params.map((item, index) => ({ id: item.id || `${activeApiId}-param-${index}`, key: item.key, value: item.value, enabled: item.enabled })) : [{ id: `${activeApiId}-param-0`, key: '', value: '', enabled: true }])
+    setHeaders(request?.headers?.length ? request.headers.map((item, index) => ({ id: item.id || `${activeApiId}-header-${index}`, key: item.key, value: item.value, enabled: item.enabled })) : [{ id: `${activeApiId}-header-0`, key: '', value: '', enabled: true }])
     setBody(request?.body ?? '')
     setBodyType(request?.bodyType ?? 'json')
     setFormFields(request?.formFields?.length ? request.formFields : [{ id: `${activeApiId}-form-0`, key: '', value: '', kind: 'text', enabled: true }])
@@ -438,7 +436,14 @@ export default function HttpDebugPage() {
   }
 
   function removeParam(index: number) {
-    setParams((current) => current.filter((_, currentIndex) => currentIndex !== index))
+    setParams((current) => {
+      const next = current.filter((_, currentIndex) => currentIndex !== index)
+      return next.length ? next : [{ id: `param-${crypto.randomUUID()}`, key: '', value: '', enabled: true }]
+    })
+  }
+
+  function normalizeHttpFields(items: HttpFieldItem[], prefix: 'param' | 'header') {
+    return items.length ? items : [{ id: `${prefix}-${crypto.randomUUID()}`, key: '', value: '', enabled: true }]
   }
 
   function saveCurrentRequest() {
@@ -450,8 +455,8 @@ export default function HttpDebugPage() {
       description: description.trim() || undefined,
       method,
       url,
-      params: params.map((item, index) => ({ id: `${activeApiId}-param-${index}`, ...item })),
-      headers: headers.map((item, index) => ({ id: `${activeApiId}-header-${index}`, ...item })),
+      params: normalizeHttpFields(params, 'param').map((item, index) => ({ id: `${activeApiId}-param-${index}`, ...item })),
+      headers: normalizeHttpFields(headers, 'header').map((item, index) => ({ id: `${activeApiId}-header-${index}`, ...item })),
       body,
       bodyType,
       formFields,
@@ -715,7 +720,10 @@ export default function HttpDebugPage() {
                     <input type="checkbox" checked={item.enabled} onChange={(event) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, enabled: event.target.checked } : entry)))} className="h-4 w-4 accent-cyan-400" />
                     <VariableInput list="header-key-values" value={item.key} variables={variables} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, key: value } : entry)))} placeholder="key" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
                     <VariableInput list={item.key === 'Content-Type' ? 'header-content-type-values' : item.key === 'Authorization' ? 'header-authorization-values' : undefined} value={item.value} variables={variables} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, value } : entry)))} placeholder="value" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
-                    <button onClick={() => setHeaders((current) => current.filter((_, currentIndex) => currentIndex !== index))} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="删除 header">
+                    <button onClick={() => setHeaders((current) => {
+                      const next = current.filter((_, currentIndex) => currentIndex !== index)
+                      return next.length ? next : [{ id: `header-${crypto.randomUUID()}`, key: '', value: '', enabled: true }]
+                    })} className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="删除 header">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>

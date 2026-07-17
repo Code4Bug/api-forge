@@ -426,28 +426,51 @@ async function writeWorkspace(workspace: WorkspaceSnapshot) {
 function createApplicationMenu(mainWindow: BrowserWindow) {
   const isMac = process.platform === 'darwin'
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ label: app.name, submenu: [{ role: 'about' as const }] }] : []),
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },
+        { type: 'separator' as const },
+        { label: '系统设置', accelerator: 'CmdOrCtrl+,', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings') },
+      ],
+    }] : []),
     {
       label: '文件',
       submenu: [
+        { label: '新建目录', accelerator: 'CmdOrCtrl+Shift+N', click: () => mainWindow.webContents.send('app:menu-action', 'new-folder') },
         { label: '新建 API', accelerator: 'CmdOrCtrl+N', click: () => mainWindow.webContents.send('app:menu-action', 'new-api') },
-        { label: '保存请求', accelerator: 'CmdOrCtrl+S', click: () => mainWindow.webContents.send('app:menu-action', 'save-request') },
-        { type: 'separator' },
+        { label: '导入 curl', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow.webContents.send('app:menu-action', 'import-curl') },
+        { label: '保存当前', accelerator: 'CmdOrCtrl+S', click: () => mainWindow.webContents.send('app:menu-action', 'save-current') },
+        { label: '导出工作区', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow.webContents.send('app:menu-action', 'export-workspace') },
+        { type: 'separator' as const },
         { label: '关闭窗口', role: 'close' as const },
         { label: '退出应用', accelerator: 'CmdOrCtrl+Q', click: () => app.exit(0) },
       ],
     },
     {
       label: '编辑',
-      submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
+      submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' as const }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
     },
     {
       label: '查看',
       submenu: [
         { role: 'reload' },
         { role: 'togglefullscreen' },
-        { type: 'separator' },
+        { type: 'separator' as const },
         { role: 'toggleDevTools', visible: isDev },
+      ],
+    },
+    {
+      label: '工作区',
+      submenu: [
+        { label: 'HTTP 调试', click: () => mainWindow.webContents.send('app:menu-action', 'open-http') },
+        { label: 'WebSocket 调试', click: () => mainWindow.webContents.send('app:menu-action', 'open-websocket') },
+        { label: 'Socket 调试', click: () => mainWindow.webContents.send('app:menu-action', 'open-socket') },
+        { type: 'separator' as const },
+        { label: '环境管理', click: () => mainWindow.webContents.send('app:menu-action', 'open-environments') },
+        { label: '请求历史', click: () => mainWindow.webContents.send('app:menu-action', 'open-history') },
+        { label: 'AI 助手', click: () => mainWindow.webContents.send('app:menu-action', 'open-ai') },
+        { label: '系统设置', accelerator: 'CmdOrCtrl+,', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings') },
       ],
     },
     {
@@ -457,8 +480,11 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
     {
       label: '帮助',
       submenu: [
+        { label: '快捷键说明', click: () => mainWindow.webContents.send('app:menu-action', 'shortcuts') },
+        { label: '使用指南', click: () => mainWindow.webContents.send('app:menu-action', 'guide') },
+        { type: 'separator' as const },
         { label: '检查新版本', click: () => { void checkForUpdates() } },
-        { type: 'separator' },
+        { type: 'separator' as const },
         { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },
       ],
     },
