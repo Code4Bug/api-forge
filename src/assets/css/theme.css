@@ -107,6 +107,11 @@ html[data-theme] .variable-input-preview {
   line-height: inherit;
 }
 
+html[data-theme] .variable-input-no-native-arrow::-webkit-calendar-picker-indicator,
+html[data-theme] .variable-input-no-native-arrow::-webkit-list-button {
+  display: none;
+}
+
 .variable-input-preview {
   display: flex;
   align-items: center;

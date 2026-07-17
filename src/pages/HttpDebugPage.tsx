@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react'
 import { Check, Copy, LoaderCircle, Plus, Save, Send, Square, Trash2 } from 'lucide-react'
 import { StatusPill } from '@/components/common/StatusPill'
 import { VariableInput } from '@/components/common/VariableInput'
+import { HeaderSuggestInput } from '@/components/common/HeaderSuggestInput'
 import { VariableEditor } from '@/components/common/VariableEditor'
 import { getWorkspaceVariables, replaceEnvironmentVariables, useWorkspaceStore } from '@/stores/workspace-store'
 import { useTheme } from '@/hooks/useTheme'
@@ -708,18 +709,11 @@ export default function HttpDebugPage() {
                 </button>
               </div>
               <div className="space-y-2 rounded border border-zinc-800 bg-zinc-950 p-3">
-                <datalist id="header-content-type-values">
-                  {headerValueOptions['Content-Type'].map((item) => <option key={item} value={item} />)}
-                </datalist>
-                <datalist id="header-authorization-values">
-                  {headerValueOptions.Authorization.map((item) => <option key={item} value={item} />)}
-                </datalist>
-                <datalist id="header-key-values">{headerKeyOptions.map((item) => <option key={item} value={item} />)}</datalist>
                 {headers.map((item, index) => (
                   <div key={item.id} className="grid grid-cols-[24px_minmax(0,1fr)_minmax(0,1fr)_24px] items-center gap-2">
                     <input type="checkbox" checked={item.enabled} onChange={(event) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, enabled: event.target.checked } : entry)))} className="h-4 w-4 accent-cyan-400" />
-                    <VariableInput list="header-key-values" value={item.key} variables={variables} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, key: value } : entry)))} placeholder="key" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
-                    <VariableInput list={item.key === 'Content-Type' ? 'header-content-type-values' : item.key === 'Authorization' ? 'header-authorization-values' : undefined} value={item.value} variables={variables} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, value } : entry)))} placeholder="value" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
+                    <HeaderSuggestInput value={item.key} options={headerKeyOptions} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, key: value } : entry)))} placeholder="key" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
+                    <HeaderSuggestInput value={item.value} options={item.key === 'Content-Type' ? headerValueOptions['Content-Type'] : item.key === 'Authorization' ? headerValueOptions.Authorization : []} onChange={(value) => setHeaders((current) => current.map((entry, currentIndex) => (currentIndex === index ? { ...entry, value } : entry)))} placeholder="value" className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 outline-none focus:border-cyan-400/60" />
                     <button onClick={() => setHeaders((current) => {
                       const next = current.filter((_, currentIndex) => currentIndex !== index)
                       return next.length ? next : [{ id: `header-${crypto.randomUUID()}`, key: '', value: '', enabled: true }]

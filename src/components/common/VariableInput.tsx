@@ -47,7 +47,7 @@ export function VariableInput({ value, variables, onChange, multiline = false, c
   // 预览层只负责变量高亮，不能重复真实输入框的边框和背景。
   const previewClassName = className.split(/\s+/).filter((token) => /^(font-|text-(?:xs|sm|base|lg|\[)|leading-|tracking-|p[trblxy]?-[0-9])/.test(token)).join(' ')
   const preview = <div ref={previewRef} aria-hidden="true" className={`variable-input-preview pointer-events-none absolute inset-0 z-0 overflow-hidden ${multiline ? 'variable-input-preview-multiline whitespace-pre-wrap break-words' : 'whitespace-pre'} ${previewClassName}`}><span>{parts.map((part, partIndex) => part.match(/^\{\{[^{}]+\}\}$/) ? <span key={`${part}-${partIndex}`} style={{ color: 'var(--app-accent)' }}>{part}</span> : <span key={`${part}-${partIndex}`}>{part}</span>)}</span></div>
-  const transparentClass = `${className} variable-input-field relative z-10 ${hasVariable ? 'variable-input-overlay !bg-transparent !text-transparent' : ''} caret-[var(--app-text)] selection:bg-cyan-400/30`
+  const transparentClass = `${className} ${props.list ? 'variable-input-no-native-arrow' : ''} variable-input-field relative z-10 ${hasVariable ? 'variable-input-overlay !bg-transparent !text-transparent' : ''} caret-[var(--app-text)] selection:bg-cyan-400/30`
   const fieldStyle = hasVariable
     ? { ...props.style, color: 'transparent', WebkitTextFillColor: 'transparent' }
     : props.style
