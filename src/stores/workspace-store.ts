@@ -216,6 +216,10 @@ function findTreeNode(nodes: ApiTreeNode[], nodeId: string): ApiTreeNode | undef
   return undefined
 }
 
+function collectTreeNodeIds(node: ApiTreeNode): string[] {
+  return [node.id, ...(node.children ?? []).flatMap(collectTreeNodeIds)]
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspace: undefined,
   activeProtocol: 'http',
@@ -430,7 +434,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   deleteNode: (nodeId) => {
     const { workspace, activeApiId } = get()
     if (!workspace) return
-    const nextWorkspace = { ...workspace, apiTree: removeTree(workspace.apiTree, nodeId) }
+    const deletedNode = findTreeNode(workspace.apiTree, nodeId)
+    const deletedIds = deletedNode ? collectTreeNodeIds(deletedNode) : [nodeId]
+    const nextWorkspace = {
+      ...workspace,
+      apiTree: removeTree(workspace.apiTree, nodeId),
+      requests: workspace.requests.filter((item) => !deletedIds.includes(item.id)),
+    }
     const nextActiveApiId = treeContains(nextWorkspace.apiTree, activeApiId) ? activeApiId : undefined
     const nextOpenApiIds = (workspace.preferences.openApiIds ?? []).filter((id) => treeContains(nextWorkspace.apiTree, id))
     const preferences = { ...nextWorkspace.preferences, activeApiId: nextActiveApiId, openApiIds: nextOpenApiIds }

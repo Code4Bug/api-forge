@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, CheckCircle2, FlaskConical, History, Layers3, Play, Plus, Square, Trash2, Wrench } from 'lucide-react'
 import { useWorkspaceStore, getWorkspaceVariables, replaceEnvironmentVariables } from '@/stores/workspace-store'
-import type { HttpFieldItem, HttpMethod, HttpSendResult, RequestDefinition, RequestHistoryItem } from '@/shared/ipc-contracts'
+import type { ApiTreeNode, HttpFieldItem, HttpMethod, HttpSendResult, RequestDefinition, RequestHistoryItem } from '@/shared/ipc-contracts'
 import { ThemedSelect } from '@/components/common/ThemedSelect'
 import { StatusPill } from '@/components/common/StatusPill'
 
@@ -11,6 +11,20 @@ type ScenarioStep = {
   id: string
   requestId: string
   name: string
+}
+
+type AssertionItem = {
+  id: string
+  enabled: boolean
+  type: 'status' | 'contains' | 'json-path'
+  value: string
+  expected?: string
+}
+
+type TestSummary = {
+  ok: boolean
+  title: string
+  details: string[]
 }
 
 function cloneFields(fields: HttpFieldItem[] | undefined, fallbackPrefix: 'param' | 'header'): HttpFieldItem[] {
@@ -54,18 +68,76 @@ function buildHttpMethodOptions() {
   return ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map((value) => ({ value, label: value }))
 }
 
+function flattenApiTree(nodes: ApiTreeNode[], parents: string[] = []): Array<{ id: string; label: string }> {
+  return nodes.flatMap((node) => {
+    if (node.type === 'folder') return flattenApiTree(node.children ?? [], [...parents, node.name])
+    return [{ id: node.id, label: [...parents, node.name].join(' / ') }]
+  })
+}
+
+function parseJsonBody(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
+  }
+}
+
+function readJsonPath(root: unknown, path: string): unknown {
+  const normalized = path.trim()
+  if (!normalized) return undefined
+  const tokens = normalized.replace(/^\$\.?/, '').split('.').filter(Boolean)
+  let current: unknown = root
+  for (const token of tokens) {
+    if (current == null) return undefined
+    const arrayMatch = token.match(/^([^[\]]+)(\[(\d+)\])?$/)
+    if (!arrayMatch) return undefined
+    const [, key, , index] = arrayMatch
+    if (typeof current !== 'object' || current === null || !(key in current)) return undefined
+    current = (current as Record<string, unknown>)[key]
+    if (index !== undefined) {
+      if (!Array.isArray(current)) return undefined
+      current = current[Number(index)]
+    }
+  }
+  return current
+}
+
+function createDefaultAssertions(): AssertionItem[] {
+  return [
+    { id: 'assert-status', enabled: true, type: 'status', value: '200' },
+    { id: 'assert-body', enabled: false, type: 'contains', value: '', expected: '' },
+  ]
+}
+
+function readDraft(key: string): { method?: HttpMethod; url?: string; body?: string; params?: HttpFieldItem[]; headers?: HttpFieldItem[]; assertions?: AssertionItem[] } | undefined {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) as { method?: HttpMethod; url?: string; body?: string; params?: HttpFieldItem[]; headers?: HttpFieldItem[]; assertions?: AssertionItem[] } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeDraft(key: string, value: unknown) {
+  localStorage.setItem(key, JSON.stringify(value))
+}
+
 export default function TestCenterPage() {
   const workspace = useWorkspaceStore((state) => state.workspace)
   const activeEnvironmentId = useWorkspaceStore((state) => state.activeEnvironmentId)
   const activeApiId = useWorkspaceStore((state) => state.activeApiId)
   const addHistory = useWorkspaceStore((state) => state.addHistory)
-  const requests = workspace?.requests ?? []
+  const apiNodes = useMemo(() => flattenApiTree(workspace?.apiTree ?? []), [workspace?.apiTree])
+  const requestsById = useMemo(() => new Map((workspace?.requests ?? []).map((item) => [item.id, item] as const)), [workspace?.requests])
   const history = workspace?.history ?? []
   const variables = useMemo(() => getWorkspaceVariables(workspace, activeEnvironmentId), [workspace, activeEnvironmentId])
   const [tab, setTab] = useState<TabKey>('single')
-  const activeRequest = useMemo(() => findApiNode(requests, activeApiId) ?? requests[0], [requests, activeApiId])
-  const [selectedRequestId, setSelectedRequestId] = useState<string>(activeRequest?.id ?? '')
-  const selectedRequest = useMemo(() => requests.find((item) => item.id === selectedRequestId) ?? activeRequest, [requests, selectedRequestId, activeRequest])
+  const activeRequestId = activeApiId && apiNodes.some((item) => item.id === activeApiId) ? activeApiId : apiNodes[0]?.id
+  const [selectedRequestId, setSelectedRequestId] = useState<string>(activeRequestId ?? '')
+  const selectedRequest = useMemo(() => requestsById.get(selectedRequestId) ?? requestsById.get(activeRequestId ?? ''), [requestsById, selectedRequestId, activeRequestId])
+  const draftKey = selectedRequest ? `api-forge:test-draft:${selectedRequest.id}` : undefined
+  const [assertions, setAssertions] = useState<AssertionItem[]>(createDefaultAssertions)
   const [method, setMethod] = useState<HttpMethod>(selectedRequest?.method ?? 'GET')
   const [url, setUrl] = useState(selectedRequest?.url ?? '')
   const [params, setParams] = useState<HttpFieldItem[]>(cloneFields(selectedRequest?.params, 'param'))
@@ -75,33 +147,41 @@ export default function TestCenterPage() {
   const [singleResult, setSingleResult] = useState<HttpSendResult>()
   const [singleNote, setSingleNote] = useState('')
   const [singleLogs, setSingleLogs] = useState<string[]>([])
-  const [scenarioSteps, setScenarioSteps] = useState<ScenarioStep[]>(() => requests.slice(0, 2).map((request, index) => ({ id: `step-${index}`, requestId: request.id, name: request.name })))
+  const [scenarioSteps, setScenarioSteps] = useState<ScenarioStep[]>(() => apiNodes.slice(0, 2).map((request, index) => ({ id: `step-${index}`, requestId: request.id, name: request.label })))
   const [scenarioLoading, setScenarioLoading] = useState(false)
   const [scenarioResults, setScenarioResults] = useState<Array<{ name: string; ok: boolean; status?: number; durationMs?: number; message?: string }>>([])
   const [loadConcurrency, setLoadConcurrency] = useState(3)
   const [loadIterations, setLoadIterations] = useState(12)
   const [loadLoading, setLoadLoading] = useState(false)
   const [loadResult, setLoadResult] = useState<{ total: number; success: number; failure: number; avg: number; p95: number; max: number }>()
+  const [lastSummary, setLastSummary] = useState<TestSummary>()
 
   useEffect(() => {
     if (!selectedRequest) return
-    setMethod(selectedRequest.method ?? 'GET')
-    setUrl(selectedRequest.url)
-    setParams(cloneFields(selectedRequest.params, 'param'))
-    setHeaders(cloneFields(selectedRequest.headers, 'header'))
-    setBody(selectedRequest.body ?? '')
+    const draft = draftKey ? readDraft(draftKey) : undefined
+    setMethod(draft?.method ?? selectedRequest.method ?? 'GET')
+    setUrl(draft?.url ?? selectedRequest.url)
+    setParams(draft?.params ? cloneFields(draft.params, 'param') : cloneFields(selectedRequest.params, 'param'))
+    setHeaders(draft?.headers ? cloneFields(draft.headers, 'header') : cloneFields(selectedRequest.headers, 'header'))
+    setBody(draft?.body ?? selectedRequest.body ?? '')
+    setAssertions(draft?.assertions?.length ? draft.assertions : createDefaultAssertions())
   }, [selectedRequest?.id])
 
   useEffect(() => {
     if (selectedRequestId) return
-    setSelectedRequestId(activeRequest?.id ?? '')
-  }, [activeRequest?.id, selectedRequestId])
+    setSelectedRequestId(activeRequestId ?? '')
+  }, [activeRequestId, selectedRequestId])
 
   useEffect(() => {
-    if (!scenarioSteps.length && requests.length) {
-      setScenarioSteps(requests.slice(0, 2).map((request, index) => ({ id: `step-${index}`, requestId: request.id, name: request.name })))
+    if (!scenarioSteps.length && apiNodes.length) {
+      setScenarioSteps(apiNodes.slice(0, 2).map((request, index) => ({ id: `step-${index}`, requestId: request.id, name: request.label })))
     }
-  }, [requests, scenarioSteps.length])
+  }, [apiNodes, scenarioSteps.length])
+
+  useEffect(() => {
+    if (!draftKey || !selectedRequest) return
+    writeDraft(draftKey, { method, url, body, params, headers, assertions })
+  }, [draftKey, selectedRequest?.id, method, url, body, params, headers, assertions])
 
   function appendSingleLog(message: string) {
     setSingleLogs((current) => [message, ...current].slice(0, 8))
@@ -125,6 +205,35 @@ export default function TestCenterPage() {
     }
   }
 
+  function evaluateAssertions(result: Extract<HttpSendResult, { ok: true }>): TestSummary {
+    const details: string[] = []
+    const bodyText = result.body ?? ''
+    const jsonBody = parseJsonBody(bodyText)
+    let ok = true
+    for (const assertion of assertions.filter((item) => item.enabled)) {
+      if (assertion.type === 'status') {
+        const expected = Number(assertion.value)
+        const pass = Number.isFinite(expected) && result.status === expected
+        details.push(pass ? `状态码符合：${result.status}` : `状态码不符合：期望 ${expected}，实际 ${result.status}`)
+        ok = ok && pass
+      }
+      if (assertion.type === 'contains') {
+        const expected = assertion.value.trim()
+        const pass = expected ? bodyText.includes(expected) : true
+        details.push(pass ? `响应包含：${expected}` : `响应不包含：${expected}`)
+        ok = ok && pass
+      }
+      if (assertion.type === 'json-path') {
+        const actual = readJsonPath(jsonBody, assertion.value)
+        const expected = assertion.expected?.trim()
+        const pass = expected ? String(actual ?? '') === expected : actual !== undefined
+        details.push(pass ? `路径命中：${assertion.value}` : `路径失败：${assertion.value}${expected ? `，期望 ${expected}` : ''}`)
+        ok = ok && pass
+      }
+    }
+    return { ok, title: ok ? '测试通过' : '测试未通过', details: details.length ? details : ['未配置校验项'] }
+  }
+
   async function sendRequest(payload: { name: string; method: HttpMethod; url: string; params: HttpFieldItem[]; headers: HttpFieldItem[]; body?: string }) {
     if (!window.desktopApi?.httpSend) throw new Error('当前环境不支持请求发送')
     const response = await window.desktopApi.httpSend({
@@ -137,17 +246,17 @@ export default function TestCenterPage() {
       followRedirects: true,
       validateCertificates: true,
     })
-      addHistory({
-        id: `history-${crypto.randomUUID()}`,
-        protocol: 'http',
-        method: payload.method,
+    addHistory({
+      id: `history-${crypto.randomUUID()}`,
+      protocol: 'http',
+      method: payload.method,
       url: resolveValue(payload.url),
       status: response.ok ? response.status : undefined,
       durationMs: response.ok ? response.durationMs : undefined,
       sizeBytes: response.ok ? response.sizeBytes : undefined,
       environmentId: activeEnvironmentId,
       createdAt: new Date().toISOString(),
-      requestSnapshot: payload,
+      requestSnapshot: buildRequestSnapshot(),
       responseSnapshot: response,
     })
     return response
@@ -159,7 +268,15 @@ export default function TestCenterPage() {
     try {
       const result = await sendRequest({ name: selectedRequest?.name ?? '未命名接口', method, url, params, headers, body })
       setSingleResult(result)
-      appendSingleLog(result.ok ? `请求成功：${result.status} / ${result.durationMs} ms` : `请求失败：${getErrorMessage(result)}`)
+      if (result.ok) {
+        const summary = evaluateAssertions(result)
+        setLastSummary(summary)
+        appendSingleLog(`请求成功：${result.status} / ${result.durationMs} ms`)
+        appendSingleLog(summary.title)
+      } else {
+        setLastSummary({ ok: false, title: '测试失败', details: [getErrorMessage(result)] })
+        appendSingleLog(`请求失败：${getErrorMessage(result)}`)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '测试失败'
       appendSingleLog(message)
@@ -176,7 +293,7 @@ export default function TestCenterPage() {
     try {
       const results: Array<{ name: string; ok: boolean; status?: number; durationMs?: number; message?: string }> = []
       for (const step of scenarioSteps) {
-        const request = requests.find((item) => item.id === step.requestId)
+        const request = requestsById.get(step.requestId)
         if (!request) {
           results.push({ name: step.name, ok: false, message: '未找到接口' })
           continue
@@ -249,15 +366,12 @@ export default function TestCenterPage() {
           <h1 className="text-sm font-semibold">测试中心</h1>
           <p className="text-xs text-zinc-500">指定接口测试、场景执行、压测分析与结果回看</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <FlaskConical className="h-4 w-4 text-cyan-300" />
-          <span>入口图标：测试含义</span>
-        </div>
+        <div />
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-72 shrink-0 border-r border-zinc-800 p-3">
-          <div className="space-y-2">
+        <aside className="flex h-full w-72 shrink-0 flex-col border-r border-zinc-800 p-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
             <div className="rounded border border-zinc-800 bg-zinc-950/60 p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300"><Wrench className="h-3.5 w-3.5 text-cyan-300" />测试入口</div>
               <div className="space-y-1">
@@ -274,12 +388,12 @@ export default function TestCenterPage() {
 
             <div className="rounded border border-zinc-800 bg-zinc-950/60 p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300"><Layers3 className="h-3.5 w-3.5 text-emerald-300" />接口选择</div>
-              <ThemedSelect className="w-full" value={selectedRequestId} options={requests.map((request) => ({ value: request.id, label: request.name }))} onChange={(value) => setSelectedRequestId(String(value))} />
-            </div>
+                <ThemedSelect className="w-full" value={selectedRequestId} options={apiNodes.map((request) => ({ value: request.id, label: request.label }))} onChange={(value) => setSelectedRequestId(String(value))} />
+              </div>
 
-            <div className="rounded border border-zinc-800 bg-zinc-950/60 p-3">
+            <div className="flex min-h-0 flex-1 flex-col rounded border border-zinc-800 bg-zinc-950/60 p-3">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300"><History className="h-3.5 w-3.5 text-violet-300" />最近历史</div>
-              <div className="space-y-2 text-[11px] text-zinc-500">
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 text-[11px] text-zinc-500">
                 {recentHistory.length ? recentHistory.map((item) => <div key={item.id} className="rounded bg-zinc-900/70 px-2 py-2">{summarizeHistory(item)}</div>) : <div className="rounded bg-zinc-900/70 px-2 py-2">暂无历史</div>}
               </div>
             </div>
@@ -325,6 +439,23 @@ export default function TestCenterPage() {
                       </div>
                     </div>
                   </div>
+                  <div className="mt-4 rounded border border-zinc-800 bg-zinc-950/70 p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs font-medium text-zinc-300">
+                      <span>结果校验</span>
+                      <button type="button" onClick={() => setAssertions(createDefaultAssertions())} className="text-zinc-500 hover:text-zinc-300">恢复默认</button>
+                    </div>
+                    <div className="space-y-2">
+                      {assertions.map((item, index) => (
+                        <div key={item.id} className="grid gap-2 md:grid-cols-[72px_120px_minmax(0,1fr)_auto]">
+                          <label className="flex items-center gap-2 text-[11px] text-zinc-400"><input type="checkbox" checked={item.enabled} onChange={(event) => setAssertions((current) => current.map((entry) => entry.id === item.id ? { ...entry, enabled: event.target.checked } : entry))} />启用</label>
+                          <ThemedSelect value={item.type} options={[{ value: 'status', label: '状态码' }, { value: 'contains', label: '内容包含' }, { value: 'json-path', label: 'JSON 路径' }]} onChange={(value) => setAssertions((current) => current.map((entry) => entry.id === item.id ? { ...entry, type: value as AssertionItem['type'] } : entry))} />
+                          <input value={item.type === 'json-path' ? item.value : item.type === 'contains' ? item.value : item.value} onChange={(event) => setAssertions((current) => current.map((entry) => entry.id === item.id ? { ...entry, value: event.target.value } : entry))} placeholder={item.type === 'status' ? '200' : item.type === 'contains' ? 'success' : '$.data.id'} className="h-8 rounded border border-zinc-700 bg-zinc-950 px-2 text-[11px] outline-none" />
+                          {item.type === 'json-path' ? <input value={item.expected ?? ''} onChange={(event) => setAssertions((current) => current.map((entry) => entry.id === item.id ? { ...entry, expected: event.target.value } : entry))} placeholder="期望值" className="h-8 rounded border border-zinc-700 bg-zinc-950 px-2 text-[11px] outline-none" /> : <button onClick={() => setAssertions((current) => current.filter((entry) => entry.id !== item.id))} className="h-8 rounded border border-zinc-700 px-3 text-[11px] text-zinc-400 hover:bg-zinc-800">删除</button>}
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setAssertions((current) => [...current, { id: `assert-${crypto.randomUUID()}`, enabled: true, type: 'contains', value: '' }])} className="mt-3 flex h-8 items-center gap-2 rounded border border-zinc-700 px-3 text-[11px] text-zinc-300 hover:bg-zinc-800"><Plus className="h-3 w-3" />新增校验</button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -341,6 +472,12 @@ export default function TestCenterPage() {
                     <div className="mb-2 text-xs font-medium text-zinc-300">执行记录</div>
                     <div className="space-y-2 text-[11px] text-zinc-500">{singleLogs.length ? singleLogs.map((item, index) => <div key={index} className="rounded bg-zinc-950/70 px-2 py-2">{item}</div>) : <div className="rounded bg-zinc-950/70 px-2 py-2">暂无记录</div>}</div>
                   </div>
+                  {lastSummary && <div className={`rounded border p-4 text-xs ${lastSummary.ok ? 'border-emerald-500/25 bg-emerald-500/6 text-emerald-100' : 'border-rose-500/25 bg-rose-500/6 text-rose-100'}`}>
+                    <div className="mb-2 font-medium">{lastSummary.title}</div>
+                    <div className="space-y-1">
+                      {lastSummary.details.map((item) => <div key={item}>{item}</div>)}
+                    </div>
+                  </div>}
                 </div>
               </div>
             </section>
@@ -353,13 +490,13 @@ export default function TestCenterPage() {
                   <h2 className="text-sm font-semibold">场景测试</h2>
                   <p className="text-xs text-zinc-500">按顺序执行多个接口</p>
                 </div>
-                <button onClick={() => setScenarioSteps((current) => [...current, { id: `step-${crypto.randomUUID()}`, requestId: requests[0]?.id ?? '', name: requests[0]?.name ?? '新步骤' }])} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 hover:bg-zinc-800"><Plus className="h-3.5 w-3.5" />新增步骤</button>
+                <button onClick={() => setScenarioSteps((current) => [...current, { id: `step-${crypto.randomUUID()}`, requestId: apiNodes[0]?.id ?? '', name: apiNodes[0]?.label ?? '新步骤' }])} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300 hover:bg-zinc-800"><Plus className="h-3.5 w-3.5" />新增步骤</button>
               </div>
               <div className="space-y-3">
                 {scenarioSteps.map((step, index) => (
                   <div key={step.id} className="grid gap-3 rounded border border-zinc-800 bg-zinc-950/70 p-3 md:grid-cols-[1fr_260px_90px]">
                     <input value={step.name} onChange={(event) => setScenarioSteps((current) => current.map((item) => item.id === step.id ? { ...item, name: event.target.value } : item))} className="h-9 rounded border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none" />
-                    <ThemedSelect value={step.requestId} options={requests.map((request) => ({ value: request.id, label: request.name }))} onChange={(value) => setScenarioSteps((current) => current.map((item) => item.id === step.id ? { ...item, requestId: String(value) } : item))} />
+                    <ThemedSelect value={step.requestId} options={apiNodes.map((request) => ({ value: request.id, label: request.label }))} onChange={(value) => setScenarioSteps((current) => current.map((item) => item.id === step.id ? { ...item, requestId: String(value) } : item))} />
                     <button onClick={() => setScenarioSteps((current) => current.filter((item) => item.id !== step.id))} className="h-9 rounded border border-rose-500/25 bg-rose-500/6 text-xs text-rose-200 hover:bg-rose-500/12">删除</button>
                     <div className="md:col-span-3 text-[11px] text-zinc-500">步骤 {index + 1}</div>
                   </div>
