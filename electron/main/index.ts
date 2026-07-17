@@ -3,12 +3,14 @@ import electronUpdater from 'electron-updater'
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
+import { execFile } from 'node:child_process'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
-import type { AiConversation, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 
 const { autoUpdater } = electronUpdater
 
@@ -229,6 +231,8 @@ const defaultWorkspace: WorkspaceSnapshot = {
 const socketConnections = new Map<string, net.Socket | dgram.Socket>()
 const httpControllers = new Map<string, AbortController>()
 const canceledHttpRequests = new Set<string>()
+const execFileAsync = promisify(execFile)
+const bashBaseDir = process.cwd()
 function emitSocket(event: Electron.IpcMainInvokeEvent, payload: { connectionId: string; type: 'open' | 'data' | 'close' | 'error'; data?: string; hex?: string; error?: string }) {
   event.sender.send('socket:event', payload)
 }
@@ -251,6 +255,17 @@ function conversationsPath() {
 
 function conversationsMetadataPath() {
   return join(conversationsPath(), 'metadata.json')
+}
+
+function isSubPath(targetPath: string, basePath: string) {
+  const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
+  return targetPath === basePath || targetPath.startsWith(normalizedBase)
+}
+
+function resolveBashCwd(cwd?: string) {
+  const basePath = resolve(bashBaseDir)
+  const targetPath = resolve(cwd ? cwd : basePath)
+  return isSubPath(targetPath, basePath) ? targetPath : basePath
 }
 
 function windowStatePath() {
@@ -648,6 +663,47 @@ ipcMain.handle('socket:send', (_event, request) => {
   return { ok: true }
 })
 ipcMain.handle('socket:close', (_event, connectionId: string) => { const socket = socketConnections.get(connectionId); if (!socket) return { ok: true }; if (socket instanceof net.Socket) socket.destroy(); else socket.close(); socketConnections.delete(connectionId); return { ok: true } })
+ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<BashExecResult> => {
+  const command = String(request.command ?? '').trim()
+  const timeout = Math.max(1000, Number(request.timeout ?? 30000))
+  const cwd = resolveBashCwd(request.cwd)
+  if (!command) return { ok: false, error: '命令不能为空', durationMs: 0 }
+  const startedAt = Date.now()
+  try {
+    const { stdout, stderr } = await execFileAsync('/bin/bash', ['-lc', command], {
+      cwd,
+      timeout,
+      maxBuffer: 1024 * 1024 * 4,
+      windowsHide: true,
+    })
+    return {
+      ok: true,
+      stdout: typeof stdout === 'string' ? stdout : String(stdout ?? ''),
+      stderr: typeof stderr === 'string' ? stderr : String(stderr ?? ''),
+      exitCode: 0,
+      signal: null,
+      durationMs: Date.now() - startedAt,
+    }
+  } catch (error) {
+    if (error && typeof error === 'object' && 'stdout' in error) {
+      const execError = error as Error & { stdout?: string; stderr?: string; code?: number | null; signal?: NodeJS.Signals | null }
+      return {
+        ok: false,
+        error: execError.message || 'bash 执行失败',
+        stdout: typeof execError.stdout === 'string' ? execError.stdout : '',
+        stderr: typeof execError.stderr === 'string' ? execError.stderr : '',
+        exitCode: typeof execError.code === 'number' ? execError.code : null,
+        signal: execError.signal ?? null,
+        durationMs: Date.now() - startedAt,
+      }
+    }
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'bash 执行失败',
+      durationMs: Date.now() - startedAt,
+    }
+  }
+})
 ipcMain.handle('http:send', async (event, request) => {
   const startedAt = Date.now()
   const timeout = request.timeout ?? 30000

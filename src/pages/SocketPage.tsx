@@ -1,31 +1,298 @@
-import { Radio, Send, Server, Unplug } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { StatusPill } from '@/components/common/StatusPill'
-import { VariableInput } from '@/components/common/VariableInput'
-import { getWorkspaceVariables, useWorkspaceStore } from '@/stores/workspace-store'
-import type { ApiTreeNode } from '@/shared/ipc-contracts'
-import { ThemedSelect } from '@/components/common/ThemedSelect'
+import { Radio, Send, Server, Unplug } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { StatusPill } from "@/components/common/StatusPill";
+import { VariableInput } from "@/components/common/VariableInput";
+import {
+  getWorkspaceVariables,
+  useWorkspaceStore,
+} from "@/stores/workspace-store";
+import type { ApiTreeNode } from "@/shared/ipc-contracts";
+import { ThemedSelect } from "@/components/common/ThemedSelect";
 
-type Log = { direction: 'IN' | 'OUT' | 'ERROR' | 'SYSTEM'; hex: string; text: string; time: string }
-const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
-const toHex = (value: string) => Array.from(new TextEncoder().encode(value)).map((item) => item.toString(16).padStart(2, '0')).join(' ').toUpperCase()
-function findNode(nodes: ApiTreeNode[], id?: string): ApiTreeNode | undefined { for (const node of nodes) { if (node.id === id) return node; const child = node.children ? findNode(node.children, id) : undefined; if (child) return child }; return undefined }
+type Log = {
+  direction: "IN" | "OUT" | "ERROR" | "SYSTEM";
+  hex: string;
+  text: string;
+  time: string;
+};
+const now = () => new Date().toLocaleTimeString("zh-CN", { hour12: false });
+const toHex = (value: string) =>
+  Array.from(new TextEncoder().encode(value))
+    .map((item) => item.toString(16).padStart(2, "0"))
+    .join(" ")
+    .toUpperCase();
+function findNode(nodes: ApiTreeNode[], id?: string): ApiTreeNode | undefined {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = node.children ? findNode(node.children, id) : undefined;
+    if (child) return child;
+  }
+  return undefined;
+}
 
 export default function SocketPage() {
-  const workspace = useWorkspaceStore((state) => state.workspace)
-  const activeApiId = useWorkspaceStore((state) => state.activeApiId)
-  const activeNode = useMemo(() => findNode(workspace?.apiTree ?? [], activeApiId), [workspace?.apiTree, activeApiId])
-  const activeRequest = useMemo(() => workspace?.requests.find((request) => request.id === activeApiId) ?? workspace?.requests.find((request) => request.name === activeNode?.name), [workspace?.requests, activeApiId, activeNode?.name])
-  const protocol = activeRequest?.url?.startsWith('udp://') || activeNode?.name.toLowerCase().includes('udp') ? 'udp' : 'tcp'
-  const target = useMemo(() => { const value = activeRequest?.url?.replace(/^\w+:\/\//, '') ?? ''; const [host, port] = value.split(':'); return { host: host || '127.0.0.1', port: port || (protocol === 'udp' ? '18081' : '18080') } }, [activeRequest?.url, protocol])
-  const variables = useMemo(() => getWorkspaceVariables(workspace, workspace?.preferences.activeEnvironmentId ?? ''), [workspace])
-  const [host, setHost] = useState(target.host); const [port, setPort] = useState(target.port); const [timeout, setTimeoutMs] = useState('3000'); const [encoding, setEncoding] = useState<'utf8' | 'hex'>('utf8'); const [payload, setPayload] = useState(activeRequest?.body || 'PING'); const [connected, setConnected] = useState(false); const [logs, setLogs] = useState<Log[]>([])
-  const connectionId = `socket-${activeApiId ?? 'page'}`
-  const add = (direction: Log['direction'], text: string, hex = toHex(text)) => setLogs((items) => [{ direction, text, hex, time: now() }, ...items])
-  useEffect(() => () => { void window.desktopApi?.socketClose(connectionId) }, [connectionId])
-  useEffect(() => { setHost(target.host); setPort(target.port); setPayload(activeRequest?.body || 'PING'); setConnected(false); setLogs([]) }, [activeApiId, target.host, target.port, activeRequest?.body])
-  useEffect(() => { const unsubscribe = window.desktopApi?.onSocketEvent?.((event) => { if (event.connectionId !== connectionId) return; if (event.type === 'open') { setConnected(true); add('SYSTEM', '连接已建立') }; if (event.type === 'data') add('IN', event.data ?? '', event.hex?.match(/.{1,2}/g)?.join(' ').toUpperCase()); if (event.type === 'close') { setConnected(false); add('SYSTEM', '连接已关闭') }; if (event.type === 'error') { setConnected(false); add('ERROR', event.error ?? '连接错误') } }); return unsubscribe }, [connectionId])
-  const connect = async () => { if (connected) { await window.desktopApi?.socketClose(connectionId); setConnected(false); return }; const result = await window.desktopApi?.socketConnect({ connectionId, protocol, host, port: Number(port), timeout: Number(timeout) }); if (result && 'error' in result) add('ERROR', result.error) }
-  const send = async () => { if (!connected) { add('ERROR', '请先建立连接'); return }; const result = await window.desktopApi?.socketSend({ connectionId, data: payload, encoding, port: Number(port), host }); if (result?.ok) add('OUT', payload, encoding === 'hex' ? payload.match(/.{1,2}/g)?.join(' ').toUpperCase() ?? '' : undefined); else if (result && 'error' in result) add('ERROR', result.error) }
-  return <div className="grid h-full grid-cols-[420px_minmax(0,1fr)] overflow-hidden bg-[#0b0f14]"><aside className="border-r border-zinc-800 p-4"><div className="mb-4 flex items-center justify-between"><div><h1 className="text-sm font-semibold">{activeNode?.name ?? 'Socket 测试'}</h1><p className="text-xs text-zinc-500">连接定义：{protocol.toUpperCase()}</p></div><StatusPill tone={connected ? 'green' : 'red'}>{connected ? `${protocol.toUpperCase()} 已连接` : `${protocol.toUpperCase()} 未连接`}</StatusPill></div><div className="mb-4 rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">{protocol.toUpperCase()} 连接</div><div className="grid grid-cols-2 gap-3"><label className="text-xs text-zinc-400">主机<VariableInput value={host} variables={variables} onChange={setHost} className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none" /></label><label className="text-xs text-zinc-400">端口<input value={port} onChange={(event) => setPort(event.target.value)} type="number" className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none" /></label><label className="text-xs text-zinc-400">超时<input value={timeout} onChange={(event) => setTimeoutMs(event.target.value)} type="number" className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none" /></label><label className="text-xs text-zinc-400">编码<ThemedSelect className="mt-2" value={encoding} options={[{ value: 'utf8' as const, label: 'UTF-8' }, { value: 'hex' as const, label: 'Hex' }]} onChange={(value) => setEncoding(value as 'utf8' | 'hex')} /></label></div><button onClick={connect} className="mt-4 flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950">{connected ? <Unplug className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}{connected ? '断开' : `连接 ${protocol.toUpperCase()}`}</button><label className="mb-2 mt-5 block text-xs text-zinc-400">发送报文</label><VariableInput multiline value={payload} variables={variables} onChange={setPayload} className="h-36 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 outline-none" /><button onClick={send} className="mt-3 flex h-9 items-center gap-2 rounded bg-emerald-400 px-3 text-xs font-semibold text-zinc-950"><Send className="h-3.5 w-3.5" />发送报文</button></aside><section className="flex min-w-0 flex-col"><div className="h-20 border-b border-zinc-800 p-4 text-xs text-zinc-500"><Radio className="mb-2 h-4 w-4 text-cyan-300" />{protocol.toUpperCase()} 实时收发日志 · {logs.length} 条</div><div className="min-h-0 flex-1 overflow-auto p-4"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-zinc-500"><tr><th className="px-3 py-2">方向</th><th className="px-3 py-2">Hex</th><th className="px-3 py-2">文本</th><th className="px-3 py-2">时间</th></tr></thead><tbody className="divide-y divide-zinc-800">{logs.map((item, index) => <tr key={`${item.time}-${index}`}><td className="px-3 py-2"><StatusPill tone={item.direction === 'IN' ? 'blue' : item.direction === 'ERROR' ? 'red' : item.direction === 'SYSTEM' ? 'amber' : 'green'}>{item.direction}</StatusPill></td><td className="px-3 py-2 font-mono text-amber-200">{item.hex}</td><td className="px-3 py-2 font-mono text-zinc-300">{item.text}</td><td className="px-3 py-2 font-mono text-zinc-500">{item.time}</td></tr>)}</tbody></table></div></section></div>
+  const workspace = useWorkspaceStore((state) => state.workspace);
+  const activeApiId = useWorkspaceStore((state) => state.activeApiId);
+  const activeNode = useMemo(
+    () => findNode(workspace?.apiTree ?? [], activeApiId),
+    [workspace?.apiTree, activeApiId],
+  );
+  const activeRequest = useMemo(
+    () =>
+      workspace?.requests.find((request) => request.id === activeApiId) ??
+      workspace?.requests.find((request) => request.name === activeNode?.name),
+    [workspace?.requests, activeApiId, activeNode?.name],
+  );
+  const protocol =
+    activeRequest?.url?.startsWith("udp://") ||
+    activeNode?.name.toLowerCase().includes("udp")
+      ? "udp"
+      : "tcp";
+  const target = useMemo(() => {
+    const value = activeRequest?.url?.replace(/^\w+:\/\//, "") ?? "";
+    const [host, port] = value.split(":");
+    return {
+      host: host || "127.0.0.1",
+      port: port || (protocol === "udp" ? "18081" : "18080"),
+    };
+  }, [activeRequest?.url, protocol]);
+  const variables = useMemo(
+    () =>
+      getWorkspaceVariables(
+        workspace,
+        workspace?.preferences.activeEnvironmentId ?? "",
+      ),
+    [workspace],
+  );
+  const [host, setHost] = useState(target.host);
+  const [port, setPort] = useState(target.port);
+  const [timeout, setTimeoutMs] = useState("3000");
+  const [encoding, setEncoding] = useState<"utf8" | "hex">("utf8");
+  const [payload, setPayload] = useState(activeRequest?.body || "PING");
+  const [connected, setConnected] = useState(false);
+  const [logs, setLogs] = useState<Log[]>([]);
+  const connectionId = `socket-${activeApiId ?? "page"}`;
+  const add = (direction: Log["direction"], text: string, hex = toHex(text)) =>
+    setLogs((items) => [{ direction, text, hex, time: now() }, ...items]);
+  useEffect(
+    () => () => {
+      void window.desktopApi?.socketClose(connectionId);
+    },
+    [connectionId],
+  );
+  useEffect(() => {
+    setHost(target.host);
+    setPort(target.port);
+    setPayload(activeRequest?.body || "PING");
+    setConnected(false);
+    setLogs([]);
+  }, [activeApiId, target.host, target.port, activeRequest?.body]);
+  useEffect(() => {
+    const unsubscribe = window.desktopApi?.onSocketEvent?.((event) => {
+      if (event.connectionId !== connectionId) return;
+      if (event.type === "open") {
+        setConnected(true);
+        add("SYSTEM", "连接已建立");
+      }
+      if (event.type === "data")
+        add(
+          "IN",
+          event.data ?? "",
+          event.hex
+            ?.match(/.{1,2}/g)
+            ?.join(" ")
+            .toUpperCase(),
+        );
+      if (event.type === "close") {
+        setConnected(false);
+        add("SYSTEM", "连接已关闭");
+      }
+      if (event.type === "error") {
+        setConnected(false);
+        add("ERROR", event.error ?? "连接错误");
+      }
+    });
+    return unsubscribe;
+  }, [connectionId]);
+  const connect = async () => {
+    if (connected) {
+      await window.desktopApi?.socketClose(connectionId);
+      setConnected(false);
+      return;
+    }
+    const result = await window.desktopApi?.socketConnect({
+      connectionId,
+      protocol,
+      host,
+      port: Number(port),
+      timeout: Number(timeout),
+    });
+    if (result && "error" in result) add("ERROR", result.error);
+  };
+  const send = async () => {
+    if (!connected) {
+      add("ERROR", "请先建立连接");
+      return;
+    }
+    const result = await window.desktopApi?.socketSend({
+      connectionId,
+      data: payload,
+      encoding,
+      port: Number(port),
+      host,
+    });
+    if (result?.ok)
+      add(
+        "OUT",
+        payload,
+        encoding === "hex"
+          ? (payload
+              .match(/.{1,2}/g)
+              ?.join(" ")
+              .toUpperCase() ?? "")
+          : undefined,
+      );
+    else if (result && "error" in result) add("ERROR", result.error);
+  };
+  return (
+    <div className="grid h-full grid-cols-[420px_minmax(0,1fr)] overflow-hidden bg-[#0b0f14]">
+      <aside className="border-r border-zinc-800 p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-sm font-semibold">
+              {activeNode?.name ?? "Socket 测试"}
+            </h1>
+            <p className="text-xs text-zinc-500">
+              连接定义：{protocol.toUpperCase()}
+            </p>
+          </div>
+          <StatusPill tone={connected ? "green" : "red"}>
+            {connected
+              ? `${protocol.toUpperCase()} 已连接`
+              : `${protocol.toUpperCase()} 未连接`}
+          </StatusPill>
+        </div>
+        <div className="mb-4 rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">
+          {protocol.toUpperCase()} 连接
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-xs text-zinc-400">
+            主机
+            <VariableInput
+              value={host}
+              variables={variables}
+              onChange={setHost}
+              className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            端口
+            <input
+              value={port}
+              onChange={(event) => setPort(event.target.value)}
+              type="number"
+              className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            超时
+            <input
+              value={timeout}
+              onChange={(event) => setTimeoutMs(event.target.value)}
+              type="number"
+              className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-zinc-200 outline-none"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            编码
+            <ThemedSelect
+              className="mt-2"
+              value={encoding}
+              options={[
+                { value: "utf8" as const, label: "UTF-8" },
+                { value: "hex" as const, label: "Hex" },
+              ]}
+              onChange={(value) => setEncoding(value as "utf8" | "hex")}
+            />
+          </label>
+        </div>
+        <button
+          onClick={connect}
+          className="mt-4 flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950"
+        >
+          {connected ? (
+            <Unplug className="h-3.5 w-3.5" />
+          ) : (
+            <Server className="h-3.5 w-3.5" />
+          )}
+          {connected ? "断开" : `连接 ${protocol.toUpperCase()}`}
+        </button>
+        <label className="mb-2 mt-5 block text-xs text-zinc-400">
+          发送报文
+        </label>
+        <VariableInput
+          multiline
+          value={payload}
+          variables={variables}
+          onChange={setPayload}
+          className="h-36 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 outline-none"
+        />
+        <button
+          onClick={send}
+          className="mt-3 flex h-9 items-center gap-2 rounded bg-emerald-400 px-3 text-xs font-semibold text-zinc-950"
+        >
+          <Send className="h-3.5 w-3.5" />
+          发送报文
+        </button>
+      </aside>
+      <section className="flex min-w-0 flex-col">
+        <div className="h-20 border-b border-zinc-800 p-4 text-xs text-zinc-500">
+          <Radio className="mb-2 h-4 w-4 text-cyan-300" />
+          {protocol.toUpperCase()} 实时收发日志 · {logs.length} 条
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-zinc-900 text-zinc-500">
+              <tr>
+                <th className="px-3 py-2">方向</th>
+                <th className="px-3 py-2">Hex</th>
+                <th className="px-3 py-2">文本</th>
+                <th className="px-3 py-2">时间</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {logs.map((item, index) => (
+                <tr key={`${item.time}-${index}`}>
+                  <td className="px-3 py-2">
+                    <StatusPill
+                      tone={
+                        item.direction === "IN"
+                          ? "blue"
+                          : item.direction === "ERROR"
+                            ? "red"
+                            : item.direction === "SYSTEM"
+                              ? "amber"
+                              : "green"
+                      }
+                    >
+                      {item.direction}
+                    </StatusPill>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-amber-200">
+                    {item.hex}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-zinc-300">
+                    {item.text}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-zinc-500">
+                    {item.time}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 }

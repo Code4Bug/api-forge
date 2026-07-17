@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AiConversation, DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
+import type { AiConversation, BashExecRequest, BashExecResult, DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
 
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
@@ -22,6 +22,7 @@ const desktopApi: DesktopApi = {
   socketConnect: (request: SocketConnectRequest) => ipcRenderer.invoke('socket:connect', request),
   socketSend: (request: SocketSendRequest) => ipcRenderer.invoke('socket:send', request),
   socketClose: (connectionId: string) => ipcRenderer.invoke('socket:close', connectionId),
+  bashExec: (request: BashExecRequest) => ipcRenderer.invoke('bash:exec', request) as Promise<BashExecResult>,
   onSocketEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: Parameters<NonNullable<DesktopApi['onSocketEvent']>>[0] extends (value: infer T) => void ? T : never) => listener(payload)
     ipcRenderer.on('socket:event', handler)
