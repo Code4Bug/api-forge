@@ -567,6 +567,10 @@ ipcMain.handle('app:get-info', () => ({
   version: resolveApplicationVersion(),
   platform: process.platform,
 }))
+ipcMain.handle('app:close-window', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.close()
+  return { ok: true as const }
+})
 ipcMain.handle('update:check', checkForUpdates)
 ipcMain.handle('update:download', async () => {
   try { await autoUpdater.downloadUpdate(); return { ok: true as const } } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : '下载更新失败' } }

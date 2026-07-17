@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 const desktopApi = {
     getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+    closeWindow: () => ipcRenderer.invoke('app:close-window'),
     checkForUpdates: () => ipcRenderer.invoke('update:check'),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
     installUpdate: () => ipcRenderer.invoke('update:install'),

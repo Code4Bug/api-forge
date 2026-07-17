@@ -3,6 +3,7 @@ import type { AiConversation, DesktopApi, HttpSendRequest, WorkspaceSnapshot, Re
 
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+  closeWindow: () => ipcRenderer.invoke('app:close-window'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),

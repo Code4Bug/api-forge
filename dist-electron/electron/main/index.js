@@ -535,6 +535,10 @@ ipcMain.handle('app:get-info', () => ({
     version: resolveApplicationVersion(),
     platform: process.platform,
 }));
+ipcMain.handle('app:close-window', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+    return { ok: true };
+});
 ipcMain.handle('update:check', checkForUpdates);
 ipcMain.handle('update:download', async () => {
     try {

@@ -362,6 +362,15 @@ export function WorkspaceLayout() {
       }).catch(() => undefined)
     }
     function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'w') {
+        event.preventDefault()
+        if (activeApiId && openApiIds.includes(activeApiId)) closeApi(activeApiId)
+        else if (openApiIds.length === 0) {
+          if (window.desktopApi) void window.desktopApi.closeWindow()
+          else window.close()
+        }
+        return
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         if (location.pathname === '/settings') {
@@ -393,7 +402,7 @@ export function WorkspaceLayout() {
       window.removeEventListener('keydown', handleShortcut)
       window.removeEventListener('api-forge:new-api', handleNewApi)
     }
-  }, [activeApiId, location.pathname, saveNow, workspace])
+  }, [activeApiId, location.pathname, openApiIds, saveNow, workspace])
 
   const apiNodes = workspace ? flattenApiNodes(workspace.apiTree) : []
   // 按持久化的 ID 顺序恢复标签，接口树的目录排序不应影响标签顺序。
@@ -519,7 +528,10 @@ export function WorkspaceLayout() {
 
   function closeApi(id: string) {
     const next = openApiIds.filter((item) => item !== id)
-    const nextActiveApiId = activeApiId === id ? next[next.length - 1] : activeApiId
+    const closedIndex = openApiIds.indexOf(id)
+    const nextActiveApiId = activeApiId === id
+      ? next[closedIndex] ?? next[closedIndex - 1]
+      : activeApiId
     updateOpenApiIds(next, nextActiveApiId)
     if (activeApiId === id) {
       const node = apiNodes.find((item) => item.id === nextActiveApiId)
