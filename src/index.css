@@ -627,8 +627,8 @@ html[data-theme] button.http-split-resize-handle:active:not(:disabled) {
 /* 分隔线使用主题色，悬停时由中间向两侧渐隐并适度加宽。 */
 .resize-line {
   display: block;
-  width: 2px;
-  background: color-mix(in srgb, var(--app-border) 72%, var(--app-text));
+  width: 1px;
+  background: var(--app-border);
   transition: width 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
