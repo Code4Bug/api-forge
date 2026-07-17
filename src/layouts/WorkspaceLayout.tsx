@@ -729,10 +729,12 @@ export function WorkspaceLayout() {
                   <span role="button" tabIndex={0} aria-label={`关闭${api.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeApi(api.id) }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); closeApi(api.id) } }} className="rounded p-0.5 text-zinc-500 transition-colors hover:bg-white/10 hover:text-zinc-100"><X className="h-3 w-3" /></span>
                 </NavLink>
               ))}
-              <button className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增标签"><Plus className="h-3.5 w-3.5" /></button>
+              <button onClick={() => openDialog({ mode: 'api' })} className="rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100" title="新增 API" aria-label="新增 API">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
             </div>
-            {hasPreviousApiTabs && <button onClick={() => apiTabsRef.current?.scrollBy({ left: -180, behavior: 'smooth' })} className="absolute left-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded bg-[#111821]/90 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="显示前面的标签" aria-label="显示前面的标签"><ChevronRight className="h-4 w-4 rotate-180" /></button>}
-            {hasMoreApiTabs && <button onClick={() => apiTabsRef.current?.scrollBy({ left: 180, behavior: 'smooth' })} className="absolute right-0 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded bg-[#111821]/90 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="显示更多标签" aria-label="显示更多标签"><ChevronRight className="h-4 w-4" /></button>}
+            {hasPreviousApiTabs && <button type="button" onClick={() => apiTabsRef.current?.scrollBy({ left: -180, behavior: 'smooth' })} className="api-tab-scroll-button absolute left-0 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded bg-[#111821]/90 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="显示前面的标签" aria-label="显示前面的标签"><ChevronRight className="h-4 w-4 rotate-180" /></button>}
+            {hasMoreApiTabs && <button type="button" onClick={() => apiTabsRef.current?.scrollBy({ left: 180, behavior: 'smooth' })} className="api-tab-scroll-button absolute right-0 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded bg-[#111821]/90 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100" title="显示更多标签" aria-label="显示更多标签"><ChevronRight className="h-4 w-4" /></button>}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">

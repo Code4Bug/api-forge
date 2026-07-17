@@ -170,6 +170,10 @@ html[data-theme] button.http-split-resize-handle:active:not(:disabled) {
   transform: translateX(-50%);
 }
 
+html[data-theme] button.api-tab-scroll-button:active:not(:disabled) {
+  transform: translateY(-50%);
+}
+
 /* 分隔线使用主题色，悬停时由中间向两侧渐隐并适度加宽。 */
 .resize-line {
   display: block;
