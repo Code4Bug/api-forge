@@ -11,6 +11,7 @@ import logo from '@/assets/icons/favicon.svg'
 import lightLogo from '@/assets/icons/favicon-light.svg'
 import { ThemedSelect } from '@/components/common/ThemedSelect'
 import { Modal } from '@/components/common/Modal'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 type AppMenuAction = 'about' | 'new-api' | 'new-folder' | 'save-current' | 'import-curl' | 'export-workspace' | 'open-http' | 'open-websocket' | 'open-socket' | 'open-environments' | 'open-history' | 'open-ai' | 'open-settings' | 'shortcuts' | 'guide'
 
@@ -293,7 +294,6 @@ export function WorkspaceLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const [resizingSidebar, setResizingSidebar] = useState(false)
   const sidebarResizeOffsetRef = useRef(0)
-  const deleteConfirmingRef = useRef(false)
   const apiTabsRef = useRef<HTMLDivElement>(null)
   const scrollNewApiTabToEndRef = useRef(false)
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false)
@@ -302,6 +302,7 @@ export function WorkspaceLayout() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [deleteDialog, setDeleteDialog] = useState<{ node: ApiTreeNode; confirmed?: boolean }>()
   const navigate = useNavigate()
   const location = useLocation()
   const statusContent = saveStatusContent[saveStatus]
@@ -664,16 +665,14 @@ export function WorkspaceLayout() {
   }
 
   function requestDelete(node: ApiTreeNode) {
-    if (deleteConfirmingRef.current) return
-    deleteConfirmingRef.current = true
-    const confirmed = window.confirm(`确定删除${node.type === 'folder' ? '目录及其全部内容' : '接口'}“${node.name}”吗？`)
-    if (confirmed) {
-      deleteNode(node.id)
-      const deletedIds = new Set(flattenNodeIds(node))
-      const next = openApiIds.filter((id) => !deletedIds.has(id))
-      updateOpenApiIds(next, activeApiId && !deletedIds.has(activeApiId) ? activeApiId : next[next.length - 1])
-    }
-    window.setTimeout(() => { deleteConfirmingRef.current = false }, 0)
+    setDeleteDialog({ node })
+  }
+
+  function confirmDeleteNode(node: ApiTreeNode) {
+    deleteNode(node.id)
+    const deletedIds = new Set(flattenNodeIds(node))
+    const next = openApiIds.filter((id) => !deletedIds.has(id))
+    updateOpenApiIds(next, activeApiId && !deletedIds.has(activeApiId) ? activeApiId : next[next.length - 1])
   }
 
   function setFolderExpanded(folderId: string, expanded: boolean) {
@@ -854,6 +853,18 @@ export function WorkspaceLayout() {
           <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setDialog(undefined)} className="h-9 rounded border border-zinc-700 px-4 text-xs text-zinc-300 hover:bg-zinc-800">取消</button><button type="submit" disabled={!dialogName.trim()} className="h-9 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 disabled:opacity-40">保存</button></div>
         </form>}
       </Modal>
+      <ConfirmModal
+        open={Boolean(deleteDialog)}
+        title={deleteDialog ? '确认删除' : ''}
+        description={deleteDialog ? `确定删除${deleteDialog.node.type === 'folder' ? '目录及其全部内容' : '接口'}“${deleteDialog.node.name}”吗？` : ''}
+        confirmText="删除"
+        onCancel={() => setDeleteDialog(undefined)}
+        onConfirm={() => {
+          if (!deleteDialog) return
+          confirmDeleteNode(deleteDialog.node)
+          setDeleteDialog(undefined)
+        }}
+      />
       <Modal open={aboutOpen} title="关于 API-forge" onClose={() => setAboutOpen(false)} className="max-w-lg">
         <div className="space-y-3 p-5 text-xs leading-6 text-zinc-300">
           <p>本地 API 调试与工作区管理工具。</p>

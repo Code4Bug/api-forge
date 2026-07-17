@@ -5,6 +5,7 @@ import type { EnvironmentVariable, ProcessVariable } from '@/shared/ipc-contract
 import { StatusPill } from '@/components/common/StatusPill'
 import { ThemedSelect } from '@/components/common/ThemedSelect'
 import { Modal } from '@/components/common/Modal'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 const emptyVariable = (): EnvironmentVariable => ({ id: `var-${crypto.randomUUID()}`, key: '', value: '', type: 'text', scope: 'environment' })
 const emptyProcessVariable = (): ProcessVariable => ({ id: `process-${crypto.randomUUID()}`, key: '', sourceRequestId: '', jsonPath: '$.' })
@@ -22,6 +23,11 @@ export default function EnvironmentPage() {
   const [variableDialog, setVariableDialog] = useState<EnvironmentVariable>()
   const [processDialog, setProcessDialog] = useState<ProcessVariable>()
   const [dialogError, setDialogError] = useState('')
+  const [deleteDialog, setDeleteDialog] = useState<
+    | { type: 'environment'; id: string; name: string }
+    | { type: 'environment-variable'; environmentId: string; id: string; name: string }
+    | { type: 'process-variable'; id: string; name: string }
+  >()
 
   function submitEnvironment() {
     if (!envDialog?.name.trim()) return
@@ -43,6 +49,27 @@ export default function EnvironmentPage() {
     updateProcessVariable(processDialog)
     setProcessDialog(undefined)
     setDialogError('')
+  }
+
+  function requestDeleteEnvironment(id: string, name: string) {
+    setDeleteDialog({ type: 'environment', id, name })
+  }
+
+  function requestDeleteEnvironmentVariable(id: string, name: string) {
+    if (!activeEnvironment) return
+    setDeleteDialog({ type: 'environment-variable', environmentId: activeEnvironment.id, id, name })
+  }
+
+  function requestDeleteProcessVariable(id: string, name: string) {
+    setDeleteDialog({ type: 'process-variable', id, name })
+  }
+
+  function confirmDelete() {
+    if (!deleteDialog) return
+    if (deleteDialog.type === 'environment') deleteEnvironment(deleteDialog.id)
+    if (deleteDialog.type === 'environment-variable') deleteEnvironmentVariable(deleteDialog.environmentId, deleteDialog.id)
+    if (deleteDialog.type === 'process-variable') deleteProcessVariable(deleteDialog.id)
+    setDeleteDialog(undefined)
   }
 
   function exportEnvironments() {
@@ -78,11 +105,11 @@ export default function EnvironmentPage() {
   return <div className="flex h-full flex-col overflow-hidden bg-[var(--app-bg)]">
     <div className="flex h-14 items-center justify-between border-b border-zinc-800 px-4"><div><h1 className="text-sm font-semibold">变量管理</h1><p className="text-xs text-zinc-500">维护环境变量和接口响应生成的过程变量</p></div><div className="flex gap-2"><input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => { void importEnvironments(event.target.files?.[0]); event.currentTarget.value = '' }} /><button onClick={() => fileInputRef.current?.click()} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300"><Upload className="h-3.5 w-3.5" />导入</button><button onClick={exportEnvironments} className="flex h-9 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300"><Download className="h-3.5 w-3.5" />导出</button><button onClick={saveNow} className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950"><Save className="h-3.5 w-3.5" />保存</button></div></div>
     <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)_320px] overflow-hidden">
-      <aside className="min-h-0 overflow-y-auto border-r border-zinc-800 p-3"><div className="mb-2 flex items-center justify-between px-2 text-xs font-medium text-zinc-400"><span>环境列表</span><button onClick={() => setEnvDialog({ name: '' })} className="rounded p-1 text-zinc-400 hover:bg-zinc-800" title="新增环境"><Plus className="h-4 w-4" /></button></div><div className="space-y-1">{workspace?.environments.map((env) => <div key={env.id} className="flex items-center gap-1"><button onClick={() => setActiveEnvironmentId(env.id)} className={env.id === activeEnvironment?.id ? 'h-8 min-w-0 flex-1 rounded bg-cyan-400/15 px-3 text-left text-xs text-cyan-100' : 'h-8 min-w-0 flex-1 rounded px-3 text-left text-xs text-zinc-500 hover:bg-zinc-800'}>{env.name}</button><button onClick={() => setEnvDialog({ id: env.id, name: env.name })} className="rounded p-1 text-zinc-500 hover:bg-zinc-800" title="重命名环境"><Edit3 className="h-3 w-3" /></button><button disabled={workspace.environments.length <= 1} onClick={() => deleteEnvironment(env.id)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20 disabled:opacity-30" title="删除环境"><Trash2 className="h-3 w-3" /></button></div>)}</div></aside>
+      <aside className="min-h-0 overflow-y-auto border-r border-zinc-800 p-3"><div className="mb-2 flex items-center justify-between px-2 text-xs font-medium text-zinc-400"><span>环境列表</span><button onClick={() => setEnvDialog({ name: '' })} className="rounded p-1 text-zinc-400 hover:bg-zinc-800" title="新增环境"><Plus className="h-4 w-4" /></button></div><div className="space-y-1">{workspace?.environments.map((env) => <div key={env.id} className="flex items-center gap-1"><button onClick={() => setActiveEnvironmentId(env.id)} className={env.id === activeEnvironment?.id ? 'h-8 min-w-0 flex-1 rounded bg-cyan-400/15 px-3 text-left text-xs text-cyan-100' : 'h-8 min-w-0 flex-1 rounded px-3 text-left text-xs text-zinc-500 hover:bg-zinc-800'}>{env.name}</button><button onClick={() => setEnvDialog({ id: env.id, name: env.name })} className="rounded p-1 text-zinc-500 hover:bg-zinc-800" title="重命名环境"><Edit3 className="h-3 w-3" /></button><button disabled={workspace.environments.length <= 1} onClick={() => requestDeleteEnvironment(env.id, env.name)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20 disabled:opacity-30" title="删除环境"><Trash2 className="h-3 w-3" /></button></div>)}</div></aside>
       <section className="min-w-0 overflow-auto p-4">
         <div className="mb-4 flex items-center justify-between gap-3"><div className="inline-flex rounded border border-zinc-700 bg-zinc-950 p-1"><button onClick={() => setActiveVariableType('environment')} className={`flex h-7 items-center gap-2 rounded px-3 text-xs ${activeVariableType === 'environment' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}><Database className="h-3.5 w-3.5" />环境变量</button><button onClick={() => setActiveVariableType('process')} className={`flex h-7 items-center gap-2 rounded px-3 text-xs ${activeVariableType === 'process' ? 'bg-cyan-400/15 text-cyan-200' : 'text-zinc-500 hover:text-zinc-300'}`}><Braces className="h-3.5 w-3.5" />过程变量</button></div><button onClick={() => activeVariableType === 'environment' ? setVariableDialog(emptyVariable()) : setProcessDialog(emptyProcessVariable())} className="flex h-8 items-center gap-2 rounded border border-zinc-700 px-3 text-xs text-zinc-300"><Plus className="h-3.5 w-3.5" />新增变量</button></div>
-        {activeVariableType === 'environment' ? <div className="overflow-hidden rounded border border-zinc-800"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-zinc-500"><tr><th className="px-3 py-2">键名</th><th className="px-3 py-2">当前值</th><th className="px-3 py-2">类型</th><th className="px-3 py-2">描述</th><th className="px-3 py-2">操作</th></tr></thead><tbody className="divide-y divide-zinc-800">{activeEnvironment?.variables.map((item) => <tr key={item.id} className="bg-zinc-950/60"><td className="px-3 py-2 font-mono text-cyan-200">{item.key}</td><td className="max-w-64 truncate px-3 py-2 font-mono text-zinc-300">{item.type === 'secret' ? '********' : item.value}</td><td className="px-3 py-2">{item.type === 'secret' ? <StatusPill tone="amber"><EyeOff className="mr-1 h-3 w-3" />密钥</StatusPill> : <StatusPill tone="zinc">文本</StatusPill>}</td><td className="px-3 py-2 text-zinc-500">{item.description ?? '-'}</td><td className="px-3 py-2"><button onClick={() => setVariableDialog(item)} className="mr-1 rounded p-1 text-zinc-500 hover:bg-zinc-800" title="编辑变量"><Edit3 className="h-3 w-3" /></button><button onClick={() => deleteEnvironmentVariable(activeEnvironment.id, item.id)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20" title="删除变量"><Trash2 className="h-3 w-3" /></button></td></tr>)}</tbody></table></div>
-          : <div className="overflow-hidden rounded border border-zinc-800"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-zinc-500"><tr><th className="px-3 py-2">键名</th><th className="px-3 py-2">来源接口</th><th className="px-3 py-2">JSONPath</th><th className="px-3 py-2">当前值</th><th className="px-3 py-2">状态</th><th className="px-3 py-2">操作</th></tr></thead><tbody className="divide-y divide-zinc-800">{processVariables.map((item) => <tr key={item.id} className="bg-zinc-950/60"><td className="px-3 py-2 font-mono text-cyan-200">{item.key}</td><td className="max-w-48 truncate px-3 py-2 text-zinc-300">{sourceName(item.sourceRequestId)}</td><td className="px-3 py-2 font-mono text-amber-200">{item.jsonPath}</td><td className="max-w-56 truncate px-3 py-2 font-mono text-zinc-300" title={item.currentValue}>{item.currentValue ?? '-'}</td><td className="px-3 py-2">{item.lastError ? <StatusPill tone="red">提取失败</StatusPill> : item.currentValue !== undefined ? <StatusPill tone="green">已获取</StatusPill> : <StatusPill tone="zinc">待调用</StatusPill>}</td><td className="px-3 py-2"><button onClick={() => { setDialogError(''); setProcessDialog(item) }} className="mr-1 rounded p-1 text-zinc-500 hover:bg-zinc-800" title="编辑过程变量"><Edit3 className="h-3 w-3" /></button><button onClick={() => deleteProcessVariable(item.id)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20" title="删除过程变量"><Trash2 className="h-3 w-3" /></button></td></tr>)}{processVariables.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-600">暂无过程变量</td></tr>}</tbody></table></div>}
+        {activeVariableType === 'environment' ? <div className="overflow-hidden rounded border border-zinc-800"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-zinc-500"><tr><th className="px-3 py-2">键名</th><th className="px-3 py-2">当前值</th><th className="px-3 py-2">类型</th><th className="px-3 py-2">描述</th><th className="px-3 py-2">操作</th></tr></thead><tbody className="divide-y divide-zinc-800">{activeEnvironment?.variables.map((item) => <tr key={item.id} className="bg-zinc-950/60"><td className="px-3 py-2 font-mono text-cyan-200">{item.key}</td><td className="max-w-64 truncate px-3 py-2 font-mono text-zinc-300">{item.type === 'secret' ? '********' : item.value}</td><td className="px-3 py-2">{item.type === 'secret' ? <StatusPill tone="amber"><EyeOff className="mr-1 h-3 w-3" />密钥</StatusPill> : <StatusPill tone="zinc">文本</StatusPill>}</td><td className="px-3 py-2 text-zinc-500">{item.description ?? '-'}</td><td className="px-3 py-2"><button onClick={() => setVariableDialog(item)} className="mr-1 rounded p-1 text-zinc-500 hover:bg-zinc-800" title="编辑变量"><Edit3 className="h-3 w-3" /></button><button onClick={() => requestDeleteEnvironmentVariable(item.id, item.key)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20" title="删除变量"><Trash2 className="h-3 w-3" /></button></td></tr>)}</tbody></table></div>
+          : <div className="overflow-hidden rounded border border-zinc-800"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-zinc-500"><tr><th className="px-3 py-2">键名</th><th className="px-3 py-2">来源接口</th><th className="px-3 py-2">JSONPath</th><th className="px-3 py-2">当前值</th><th className="px-3 py-2">状态</th><th className="px-3 py-2">操作</th></tr></thead><tbody className="divide-y divide-zinc-800">{processVariables.map((item) => <tr key={item.id} className="bg-zinc-950/60"><td className="px-3 py-2 font-mono text-cyan-200">{item.key}</td><td className="max-w-48 truncate px-3 py-2 text-zinc-300">{sourceName(item.sourceRequestId)}</td><td className="px-3 py-2 font-mono text-amber-200">{item.jsonPath}</td><td className="max-w-56 truncate px-3 py-2 font-mono text-zinc-300" title={item.currentValue}>{item.currentValue ?? '-'}</td><td className="px-3 py-2">{item.lastError ? <StatusPill tone="red">提取失败</StatusPill> : item.currentValue !== undefined ? <StatusPill tone="green">已获取</StatusPill> : <StatusPill tone="zinc">待调用</StatusPill>}</td><td className="px-3 py-2"><button onClick={() => { setDialogError(''); setProcessDialog(item) }} className="mr-1 rounded p-1 text-zinc-500 hover:bg-zinc-800" title="编辑过程变量"><Edit3 className="h-3 w-3" /></button><button onClick={() => requestDeleteProcessVariable(item.id, item.key)} className="rounded p-1 text-zinc-500 hover:bg-rose-500/20" title="删除过程变量"><Trash2 className="h-3 w-3" /></button></td></tr>)}{processVariables.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-zinc-600">暂无过程变量</td></tr>}</tbody></table></div>}
       </section>
       <aside className="overflow-y-auto border-l border-zinc-800 p-4"><div className="mb-3 text-xs font-medium text-zinc-300">引用方式</div><div className="rounded border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs leading-6 text-zinc-300"><div className="text-zinc-500">请求中输入</div><div>{'Authorization: Bearer {{access_token}}'}</div><div className="mt-3 text-zinc-500">来源响应路径</div><div className="text-amber-200">$.data.accessToken</div></div><div className="mt-4 text-[11px] leading-5 text-zinc-500"><p>调用来源接口成功后，系统会从 JSON 响应中提取最新值。</p><p className="mt-2">支持点号属性和数组下标，例如 <code className="text-cyan-300">$.data.items[0].id</code>。</p>{activeVariableType === 'process' && processVariables.some((item) => item.lastError) && <div className="mt-4 space-y-2">{processVariables.filter((item) => item.lastError).map((item) => <div key={item.id} className="flex gap-2 rounded border border-rose-500/20 bg-rose-500/5 p-2 text-rose-300"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span><strong>{item.key}</strong>：{item.lastError}</span></div>)}</div>}</div></aside>
     </div>
@@ -111,5 +138,13 @@ export default function EnvironmentPage() {
         <button className="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded bg-cyan-400 text-xs font-semibold text-zinc-950"><Check className="h-3.5 w-3.5" />保存过程变量</button>
       </form>}
     </Modal>
+    <ConfirmModal
+      open={Boolean(deleteDialog)}
+      title={deleteDialog?.type === 'environment' ? '删除环境' : deleteDialog?.type === 'environment-variable' ? '删除变量' : '删除过程变量'}
+      description={deleteDialog ? `确定删除“${deleteDialog.name}”吗？此操作不可撤销。` : ''}
+      confirmText="删除"
+      onCancel={() => setDeleteDialog(undefined)}
+      onConfirm={confirmDelete}
+    />
   </div>
 }

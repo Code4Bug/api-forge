@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { getActiveLightModel, type LargeModelConfig, type LightModelConfig } from '@/shared/ipc-contracts'
 import type { UpdateStatus } from '@/shared/ipc-contracts'
 import { ThemedSelect } from '@/components/common/ThemedSelect'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 const themes: Array<{ id: Theme; name: string; description: string; icon: typeof Sun }> = [
   { id: 'dark', name: '深色', description: '适合低光环境', icon: Moon },
@@ -98,6 +99,11 @@ export default function SettingsPage() {
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
+  const [deleteDialog, setDeleteDialog] = useState<
+    | { type: 'large-model'; id: string; name: string }
+    | { type: 'light-model'; id: string; name: string }
+    | { type: 'custom-theme'; id: string; name: string }
+  >()
   const settingsFileInputRef = useRef<HTMLInputElement>(null)
   const customColorMode = getThemeMode(customColors)
 
@@ -160,13 +166,13 @@ export default function SettingsPage() {
   }
 
   function removeLargeModel() {
-    if (!modelConfig.id || !window.confirm(`确认删除“${modelConfig.name}”吗？`)) return
-    deleteLargeModelConfig(modelConfig.id)
+    if (!modelConfig.id) return
+    setDeleteDialog({ type: 'large-model', id: modelConfig.id, name: modelConfig.name })
   }
 
   function removeLightModel() {
-    if (!lightModelConfig.id || !window.confirm(`确认删除“${lightModelConfig.name}”吗？`)) return
-    deleteLightModelConfig(lightModelConfig.id)
+    if (!lightModelConfig.id) return
+    setDeleteDialog({ type: 'light-model', id: lightModelConfig.id, name: lightModelConfig.name })
   }
 
   function selectLargeProvider(provider: string) {
@@ -193,7 +199,15 @@ export default function SettingsPage() {
   }
 
   function removeCustomTheme(id: string, name: string) {
-    if (window.confirm(`确认删除自定义主题“${name}”吗？`)) deleteCustomTheme(id)
+    setDeleteDialog({ type: 'custom-theme', id, name })
+  }
+
+  function confirmDelete() {
+    if (!deleteDialog) return
+    if (deleteDialog.type === 'large-model') deleteLargeModelConfig(deleteDialog.id)
+    if (deleteDialog.type === 'light-model') deleteLightModelConfig(deleteDialog.id)
+    if (deleteDialog.type === 'custom-theme') deleteCustomTheme(deleteDialog.id)
+    setDeleteDialog(undefined)
   }
 
   function updateCursorGlow(enabled: boolean) {
@@ -385,6 +399,14 @@ export default function SettingsPage() {
         </div>
       </section>
       </>}
+      <ConfirmModal
+        open={Boolean(deleteDialog)}
+        title={deleteDialog?.type === 'custom-theme' ? '删除主题' : '确认删除'}
+        description={deleteDialog ? `确定删除“${deleteDialog.name}”吗？此操作不可撤销。` : ''}
+        confirmText="删除"
+        onCancel={() => setDeleteDialog(undefined)}
+        onConfirm={confirmDelete}
+      />
       {activeCategory === 'model' && <>
       <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
         <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Bot className="h-4 w-4 text-violet-300" /><h2 className="text-sm font-medium">大模型配置</h2></div><button type="button" onClick={addLargeModel} title="新增大模型配置" className="model-add-button model-add-button-large group flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors"><Plus className="h-4 w-4 text-current transition-transform group-hover:rotate-90" />新增配置</button></div>
