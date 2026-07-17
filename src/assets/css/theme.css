@@ -1,0 +1,482 @@
+:root {
+  --app-bg: #0a0a0a;
+  --app-surface: #111111;
+  --app-raised: #1b1b1b;
+  --app-border: #303030;
+  --app-text: #f2f2f2;
+  --app-muted: #969696;
+  --app-accent: #a3a3a3;
+  --app-accent-soft: rgba(163, 163, 163, .14);
+  --app-accent-border: #666666;
+  --app-input: #151515;
+  --app-hover: #2b2b2b;
+  --app-selection: rgba(163, 163, 163, .28);
+  --app-glow-primary: rgba(163, 163, 163, .24);
+  --app-glow-secondary: rgba(163, 163, 163, .14);
+  --app-glow-grid: rgba(163, 163, 163, .10);
+  color-scheme: dark;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.process-variable-notice {
+  background: color-mix(in srgb, #10b981 12%, var(--app-surface));
+  border-color: color-mix(in srgb, #10b981 48%, var(--app-border));
+  color: color-mix(in srgb, #10b981 72%, var(--app-text));
+}
+
+html.light {
+  color-scheme: light;
+  --app-bg: #e9e9e9;
+}
+
+html.dim {
+  --app-bg: #101722;
+}
+
+html.light body,
+html.light #root {
+  background: var(--app-bg);
+  color: #1f2937;
+}
+
+html.light [class*="bg-zinc-950"],
+html.light [class*="bg-[#"] {
+  background-color: #fafafa !important;
+}
+
+html.light [class*="bg-zinc-900"] {
+  background-color: #f0f0f0 !important;
+}
+
+html.light [class*="bg-zinc-800"] {
+  background-color: #e3e3e3 !important;
+}
+
+html.light [class*="border-zinc-800"],
+html.light [class*="border-zinc-700"] {
+  border-color: #c4c4c4 !important;
+}
+
+html.light [class*="text-zinc-100"],
+html.light [class*="text-zinc-200"],
+html.light [class*="text-zinc-300"] {
+  color: #202020 !important;
+}
+
+html[data-theme] [class*="bg-zinc-950"],
+html[data-theme] [class*="bg-[#"] {
+  background-color: var(--app-surface) !important;
+}
+
+html[data-theme] [class*="bg-zinc-900"] {
+  background-color: var(--app-raised) !important;
+}
+
+html[data-theme] [class*="bg-zinc-800"] {
+  background-color: color-mix(in srgb, var(--app-raised) 78%, var(--app-bg)) !important;
+}
+
+html[data-theme] [class*="border-zinc-800"],
+html[data-theme] [class*="border-zinc-700"] {
+  border-color: var(--app-border) !important;
+}
+
+html[data-theme] [class*="text-zinc-100"],
+html[data-theme] [class*="text-zinc-200"],
+html[data-theme] [class*="text-zinc-300"] {
+  color: var(--app-text) !important;
+}
+
+html[data-theme] [class*="text-zinc-500"],
+html[data-theme] [class*="text-zinc-400"] {
+  color: var(--app-muted) !important;
+}
+
+html[data-theme] .variable-input-overlay {
+  color: transparent !important;
+}
+
+html[data-theme] .variable-input-field,
+html[data-theme] .variable-input-preview {
+  line-height: inherit;
+}
+
+.variable-input-preview {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  color: var(--app-text);
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+  transform: none !important;
+  zoom: 1 !important;
+}
+
+.variable-input-preview-multiline {
+  display: block;
+}
+
+.variable-input-preview > span {
+  display: block;
+  min-width: 0;
+  margin: 0;
+}
+
+.variable-input-overlay {
+  line-height: inherit;
+  -webkit-text-fill-color: transparent !important;
+  text-indent: 0;
+}
+
+.variable-input-field::placeholder {
+  color: transparent;
+}
+
+html[data-theme] body,
+html[data-theme] #root {
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+/* 所有按钮统一提供主题色驱动的悬停、按下和键盘聚焦反馈。 */
+html[data-theme] button {
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 100ms ease, box-shadow 160ms ease;
+}
+
+html[data-theme] button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+html[data-theme] button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(.98);
+}
+
+/* 全局按钮按下位移不能覆盖分隔条自身的横向定位。 */
+html[data-theme] button.sidebar-resize-handle:active:not(:disabled) {
+  transform: translateX(50%);
+}
+
+html[data-theme] button.http-split-resize-handle:active:not(:disabled) {
+  transform: translateX(-50%);
+}
+
+/* 分隔线使用主题色，悬停时由中间向两侧渐隐并适度加宽。 */
+.resize-line {
+  display: block;
+  width: 1px;
+  background: var(--app-border);
+  transition: width 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.resize-handle:hover .resize-line {
+  width: 4px;
+  background: linear-gradient(to right, transparent, var(--app-accent), transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 32%, transparent);
+}
+
+.resize-line.is-resizing {
+  width: 4px;
+  background: linear-gradient(to right, transparent, var(--app-accent), transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--app-accent) 42%, transparent);
+}
+
+html[data-theme] button:focus-visible {
+  outline: 2px solid var(--app-accent-border);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+html[data-theme] button:disabled {
+  cursor: not-allowed;
+}
+
+/* 顶栏 AI 入口使用主题表面承载强调色，避免亮色图标在深色背景上显得突兀。 */
+.ai-entry-button {
+  border: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-raised) 82%, var(--app-bg));
+  color: color-mix(in srgb, var(--app-accent) 86%, var(--app-text));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-text) 7%, transparent);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 100ms ease;
+}
+
+@keyframes ai-entry-breathe {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: .88; }
+  50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+}
+
+.ai-entry-icon {
+  animation: ai-entry-breathe 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.ai-entry-button:hover:not(.is-disabled) {
+  border-color: var(--app-accent-border);
+  background: var(--app-hover);
+  color: var(--app-text);
+  box-shadow: 0 0 0 3px var(--app-accent-soft), inset 0 1px 0 color-mix(in srgb, var(--app-text) 9%, transparent);
+}
+
+.ai-entry-button:hover:not(.is-disabled) .ai-entry-icon {
+  animation: ai-entry-breathe 720ms ease-in-out infinite;
+}
+
+.ai-entry-button.is-active {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  box-shadow: 0 0 0 3px var(--app-accent-soft);
+}
+
+.ai-entry-button.is-disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-entry-icon,
+  .ai-entry-button:hover:not(.is-disabled) .ai-entry-icon {
+    animation: none;
+  }
+}
+
+/* 主题通用控件层：避免页面内的固定 zinc 色值破坏主题层次。 */
+html[data-theme] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme] select,
+html[data-theme] textarea {
+  background-color: var(--app-input);
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+html[data-theme] input:not([type="checkbox"]):not([type="radio"]):focus,
+html[data-theme] select:focus,
+html[data-theme] textarea:focus {
+  border-color: var(--app-accent-border);
+  outline: 2px solid var(--app-accent-soft);
+  outline-offset: 0;
+}
+
+/* 复选框使用当前主题色，避免固定的 cyan 强调色破坏主题一致性。 */
+html[data-theme] input[type="checkbox"] {
+  accent-color: var(--app-accent) !important;
+  background-color: var(--app-input);
+  border-color: var(--app-border);
+}
+
+html[data-theme] ::selection {
+  background: var(--app-selection);
+  color: var(--app-text);
+}
+
+html[data-theme] ::-webkit-scrollbar-track {
+  background: var(--app-surface);
+}
+
+html[data-theme] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--app-border) 88%, var(--app-text));
+  border-color: var(--app-surface);
+}
+
+html[data-theme] ::-webkit-scrollbar-thumb:hover {
+  background: var(--app-accent-border);
+}
+
+html[data-theme] [class~="bg-cyan-400"] {
+  background-color: var(--app-accent) !important;
+}
+
+html[data-theme] [class~="bg-emerald-400"],
+html[data-theme] [class~="bg-violet-400"] {
+  background-color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="hover:bg-cyan-300"]:hover,
+html[data-theme] [class*="hover:bg-emerald-300"]:hover,
+html[data-theme] [class*="hover:bg-violet-300"]:hover {
+  background-color: color-mix(in srgb, var(--app-accent) 86%, white) !important;
+}
+
+html[data-theme] [class*="hover:bg-cyan-400"]:hover,
+html[data-theme] [class*="hover:bg-emerald-400"]:hover,
+html[data-theme] [class*="hover:bg-violet-400"]:hover {
+  background-color: color-mix(in srgb, var(--app-accent) 86%, white) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/"] {
+  background-color: color-mix(in srgb, var(--app-accent) 15%, transparent) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/10"],
+html[data-theme] [class*="bg-cyan-400/15"],
+html[data-theme] [class*="bg-cyan-400/20"] {
+  background-color: var(--app-accent-soft) !important;
+}
+
+html[data-theme] [class*="border-cyan-400"] {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, transparent) !important;
+}
+
+html[data-theme] [class*="border-emerald-400"],
+html[data-theme] [class*="border-violet-400"] {
+  border-color: color-mix(in srgb, var(--app-accent) 70%, transparent) !important;
+}
+
+html[data-theme] [class*="hover:border-cyan-400"]:hover,
+html[data-theme] [class*="hover:border-emerald-400"]:hover,
+html[data-theme] [class*="hover:border-violet-400"]:hover {
+  border-color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="text-cyan-300"],
+html[data-theme] [class*="text-cyan-200"],
+html[data-theme] [class*="text-cyan-100"] {
+  color: var(--app-accent) !important;
+}
+
+html[data-theme] [class*="bg-emerald-400"][class*="text-zinc-950"],
+html[data-theme] [class*="bg-violet-400"][class*="text-zinc-950"] {
+  color: var(--app-bg) !important;
+}
+
+html[data-theme] [class*="bg-cyan-400/"][class*="text-cyan-100"],
+html[data-theme] [class*="bg-cyan-400/"][class*="text-cyan-200"] {
+  color: var(--app-text) !important;
+}
+
+/* 描边按钮需要和页面背景拉开层次，避免深色主题下按钮不可见。 */
+html[data-theme] button[class*="border-zinc-700"],
+html[data-theme] button[class*="border-zinc-800"] {
+  background-color: var(--app-raised) !important;
+}
+
+html[data-theme] button[class*="border-zinc-700"]:hover,
+html[data-theme] button[class*="border-zinc-800"]:hover,
+html[data-theme] button[class*="hover:bg-zinc-800"]:hover {
+  background-color: var(--app-hover) !important;
+}
+
+html[data-theme] [class*="ring-cyan-400"],
+html[data-theme] [class*="ring-cyan-500"] {
+  --tw-ring-color: var(--app-accent-border) !important;
+}
+
+html[data-theme] [class*="divide-zinc-800"] > :not([hidden]) ~ :not([hidden]),
+html[data-theme] [class*="border-t-zinc-800"],
+html[data-theme] [class*="border-b-zinc-800"] {
+  border-color: var(--app-border) !important;
+}
+
+html.light [class*="text-emerald-300"],
+html.light [class*="text-emerald-200"] {
+  color: #047857 !important;
+}
+
+html.light [class*="text-amber-300"],
+html.light [class*="text-amber-200"] {
+  color: #b45309 !important;
+}
+
+html.light [class*="text-blue-300"],
+html.light [class*="text-blue-200"] {
+  color: #2563eb !important;
+}
+
+html.light [class*="text-violet-300"],
+html.light [class*="text-violet-200"] {
+  color: #7c3aed !important;
+}
+
+html.light [class*="text-rose-200"],
+html.light [class*="text-red-400"] {
+  color: #be123c !important;
+}
+
+html.light [class*="text-zinc-950"] {
+  color: #ffffff !important;
+}
+
+/* 蓝色浅色主题中的请求方法标签使用深色文字，确保在浅色底色上清晰可见。 */
+html[data-theme="lightBlue"] [class*="text-emerald-200"],
+html[data-theme="lightBlue"] [class*="text-emerald-300"] {
+  color: #047857 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-blue-200"],
+html[data-theme="lightBlue"] [class*="text-blue-300"] {
+  color: #1d4ed8 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-amber-200"],
+html[data-theme="lightBlue"] [class*="text-amber-300"] {
+  color: #b45309 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-violet-200"],
+html[data-theme="lightBlue"] [class*="text-violet-300"] {
+  color: #6d28d9 !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-rose-200"],
+html[data-theme="lightBlue"] [class*="text-rose-300"] {
+  color: #be123c !important;
+}
+
+html[data-theme="lightBlue"] [class*="text-cyan-200"],
+html[data-theme="lightBlue"] [class*="text-cyan-300"] {
+  color: #0e7490 !important;
+}
+
+/* 浅色蓝色主题的强调控件统一使用蓝底白色前景。 */
+html[data-theme="lightBlue"] [class~="bg-cyan-400"][class*="text-zinc-950"] {
+  color: #ffffff !important;
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"] {
+  display: grid;
+  appearance: none;
+  place-content: center;
+  border: 1px solid var(--app-border);
+  border-radius: .25rem;
+  background: var(--app-input);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]::before {
+  width: .625rem;
+  height: .625rem;
+  background: #ffffff;
+  clip-path: polygon(14% 44%, 0 65%, 43% 100%, 100% 16%, 80% 0, 40% 62%);
+  content: '';
+  transform: scale(0);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]:checked {
+  border-color: var(--app-accent);
+  background: var(--app-accent);
+}
+
+html[data-theme="lightBlue"] input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+html.light select,
+html.light input,
+html.light textarea {
+  color: #1f2937;
+  caret-color: #0e7490;
+}
+
+html.light option {
+  background: #ffffff;
+  color: #1f2937;
+}
+

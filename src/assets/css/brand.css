@@ -1,0 +1,54 @@
+/* 品牌区轻量反馈：悬停时扫过一次，保持工具界面的克制感。 */
+.api-forge-brand {
+  position: relative;
+  overflow: hidden;
+}
+
+.api-forge-brand::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -36%;
+  width: 22%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(66, 217, 255, .16), rgba(50, 240, 140, .2), transparent);
+  transform: skewX(-18deg);
+  opacity: 0;
+}
+
+.api-forge-brand:hover::after {
+  animation: api-forge-scan 720ms cubic-bezier(.22, .61, .36, 1) both;
+}
+
+.api-forge-brand-mark {
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.api-forge-brand:hover .api-forge-brand-mark {
+  filter: drop-shadow(0 0 7px rgba(50, 240, 140, .3));
+  transform: translateY(-1px);
+}
+
+@keyframes api-forge-scan {
+  0% { left: -36%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { left: 122%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .api-forge-brand:hover::after {
+    animation: none;
+  }
+
+  .api-forge-brand-mark {
+    transition: none;
+  }
+
+  .api-forge-brand:hover .api-forge-brand-mark {
+    filter: none;
+    transform: none;
+  }
+}
+

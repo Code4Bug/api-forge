@@ -1,0 +1,14 @@
+.api-forge-slogan {
+  max-width: 15rem;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--app-muted, #71717a);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+.api-forge-slogan-shimmer { background: linear-gradient(90deg, currentColor 20%, var(--app-text, #e4e4e7) 50%, currentColor 80%); background-size: 200% auto; background-clip: text; -webkit-background-clip: text; color: transparent; animation: api-forge-slogan-shimmer 2.8s linear infinite; }
+.api-forge-slogan-breathe { animation: api-forge-slogan-breathe 2.4s ease-in-out infinite; }
+.api-forge-slogan-marquee { animation: api-forge-slogan-marquee 7s ease-in-out infinite alternate; text-overflow: clip; }
+@keyframes api-forge-slogan-shimmer { to { background-position: -200% center; } }
+@keyframes api-forge-slogan-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes api-forge-slogan-marquee { from { transform: translateX(0); } to { transform: translateX(min(0px, calc(15rem - 100%))); } }

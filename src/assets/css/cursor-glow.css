@@ -1,0 +1,108 @@
+/* 光标附近的像素化光晕，仅作为背景反馈，不参与交互。 */
+.cursor-mosaic-glow {
+  position: fixed;
+  /* 光晕覆盖侧栏和内容面板，但 pointer-events:none 不阻断交互。 */
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 240px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  outline: 0;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(calc(var(--cursor-x) - 120px), calc(var(--cursor-y) - 120px), 0);
+  transition: opacity 260ms ease;
+}
+
+.cursor-mosaic-glow-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: inherit;
+  outline: 0;
+  transform-origin: center;
+  background-image:
+    radial-gradient(circle at center, var(--app-glow-primary) 0 9%, var(--app-glow-secondary) 24%, transparent 66%),
+    linear-gradient(var(--app-glow-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-glow-grid) 1px, transparent 1px);
+  background-size: 100% 100%, 12px 12px, 12px 12px;
+  mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
+  -webkit-mask-image: radial-gradient(circle, #000 0 38%, transparent 74%);
+  mix-blend-mode: screen;
+}
+.cursor-mosaic-glow-surface[data-texture="dots"] { background-image: radial-gradient(circle, var(--app-glow-primary) 1px, transparent 2px); background-size: 10px 10px; }
+.cursor-mosaic-glow-surface[data-texture="soft"] { background-image: radial-gradient(circle at center, var(--app-glow-primary) 0 18%, var(--app-glow-secondary) 42%, transparent 72%); }
+.cursor-mosaic-glow-surface[data-color="cyan"] { --app-glow-primary: rgba(34, 211, 238, .32); --app-glow-secondary: rgba(14, 165, 233, .18); --app-glow-grid: rgba(34, 211, 238, .14); }
+.cursor-mosaic-glow-surface[data-color="amber"] { --app-glow-primary: rgba(245, 158, 11, .32); --app-glow-secondary: rgba(234, 88, 12, .18); --app-glow-grid: rgba(245, 158, 11, .14); }
+.cursor-mosaic-glow-surface[data-color="spectrum"] { background-image: conic-gradient(from 0deg, rgba(34,211,238,.24), rgba(168,85,247,.22), rgba(245,158,11,.24), rgba(34,211,238,.24)); }
+
+.cursor-mosaic-glow[data-visible="true"] {
+  opacity: 1;
+}
+
+@keyframes cursor-glow-breathe { 0%, 100% { scale: .92; opacity: .72; } 50% { scale: 1.08; opacity: 1; } }
+@keyframes cursor-glow-expand { 0%, 100% { scale: .78; } 50% { scale: 1.22; } }
+@keyframes cursor-glow-contract { 0%, 100% { scale: 1.18; } 50% { scale: .78; } }
+@keyframes cursor-glow-rotate { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes cursor-glow-drift { 0%, 100% { translate: -4px 0; } 50% { translate: 4px -5px; } }
+@keyframes cursor-glow-bounce { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+@keyframes cursor-glow-blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes cursor-glow-ripple { 0%, 100% { scale: .86; filter: blur(0); } 50% { scale: 1.14; filter: blur(1px); } }
+@keyframes cursor-glow-heartbeat { 0%, 45%, 100% { scale: 1; } 12% { scale: 1.14; } 24% { scale: .96; } }
+/* 非移动动效只改变自身形态，始终围绕光标中心变化。 */
+@keyframes cursor-glow-center-expand { 0%, 100% { scale: .72; opacity: .55; } 50% { scale: 1.28; opacity: 1; } }
+@keyframes cursor-glow-center-contract { 0%, 100% { scale: 1.25; opacity: .95; } 50% { scale: .72; opacity: .55; } }
+@keyframes cursor-glow-mirror-pulse { 0%, 100% { scale: 1 .78; } 50% { scale: .78 1.2; } }
+@keyframes cursor-glow-orbit { from { rotate: 0deg; translate: 8px -5px; } 50% { translate: -8px 5px; } to { rotate: 360deg; translate: 8px -5px; } }
+@keyframes cursor-glow-slide-x { 0%, 100% { translate: -12px 0; } 50% { translate: 12px 0; } }
+@keyframes cursor-glow-slide-y { 0%, 100% { translate: 0 -12px; } 50% { translate: 0 12px; } }
+.cursor-mosaic-glow-surface[data-effect="breathe"] { animation: cursor-glow-breathe 2.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="expand"] { animation: cursor-glow-expand 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="contract"] { animation: cursor-glow-contract 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="rotate"] { animation: cursor-glow-rotate 7s linear infinite; }
+.cursor-mosaic-glow-surface[data-effect="drift"] { animation: cursor-glow-drift 3s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="bounce"] { animation: cursor-glow-bounce 1.7s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="blink"] { animation: cursor-glow-blink 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="ripple"] { animation: cursor-glow-ripple 2.2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="heartbeat"] { animation: cursor-glow-heartbeat 1.8s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="centerExpand"] { animation: cursor-glow-center-expand 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="centerContract"] { animation: cursor-glow-center-contract 2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="mirrorPulse"] { animation: cursor-glow-mirror-pulse 2.2s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="orbit"] { animation: cursor-glow-orbit 4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="slideX"] { animation: cursor-glow-slide-x 2.4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="slideY"] { animation: cursor-glow-slide-y 2.4s ease-in-out infinite; }
+.cursor-mosaic-glow-surface[data-effect="steady"] { opacity: .82; }
+
+/* 中心不动类不允许叠加移动动效留下的位移。 */
+.cursor-mosaic-glow-surface[data-effect="breathe"],
+.cursor-mosaic-glow-surface[data-effect="expand"],
+.cursor-mosaic-glow-surface[data-effect="contract"],
+.cursor-mosaic-glow-surface[data-effect="blink"],
+.cursor-mosaic-glow-surface[data-effect="steady"],
+.cursor-mosaic-glow-surface[data-effect="centerExpand"],
+.cursor-mosaic-glow-surface[data-effect="centerContract"],
+.cursor-mosaic-glow-surface[data-effect="mirrorPulse"],
+.cursor-mosaic-glow-surface[data-effect="rotate"],
+.cursor-mosaic-glow-surface[data-effect="ripple"] {
+  translate: 0 0 !important;
+}
+
+/* 浅色背景改用正片叠底，避免 screen 混合后与白底失去对比。 */
+html.light .cursor-mosaic-glow {
+  mix-blend-mode: multiply;
+}
+
+html[data-theme="lightBlue"] .cursor-mosaic-glow {
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor-mosaic-glow {
+    display: none;
+  }
+}
+
