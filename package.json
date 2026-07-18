@@ -78,6 +78,7 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
+      "src/skills/**/*",
       "package.json"
     ],
     "mac": {
