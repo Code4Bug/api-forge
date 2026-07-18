@@ -403,6 +403,102 @@ function buildConversationContext(messages: Message[]): ModelMessage[] {
     }));
 }
 
+function estimateMessageTokens(message: Pick<ModelMessage, "content">) {
+  return Math.ceil((message.content?.length ?? 0) / 4);
+}
+
+function estimateMessagesTokens(messages: Array<Pick<ModelMessage, "content">>) {
+  return messages.reduce(
+    (total, message) => total + estimateMessageTokens(message),
+    0,
+  );
+}
+
+function buildRuntimeContextText(
+  appInfo: AppInfo | undefined,
+  toolsEnabled: boolean,
+  nodes: ApiTreeNode[],
+) {
+  const runtimeContext = appInfo
+    ? {
+        应用信息: {
+          名称: appInfo.name,
+          版本: appInfo.version,
+          平台: appInfo.platform,
+          架构: appInfo.arch,
+          系统类型: appInfo.osType,
+          系统版本: appInfo.osRelease,
+        },
+      }
+    : {};
+  return `\n当前运行时上下文：${json(runtimeContext)}${
+    toolsEnabled
+      ? `\n当前工作区上下文：${json({ directories: nodes.filter((n) => n.type === "folder").map(({ id, name, parentId }) => ({ id, name, parentId })), apis: nodes.filter((n) => n.type === "api").map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })) })}`
+      : ""
+  }`;
+}
+
+function buildSystemPrompt({
+  appInfo,
+  toolsEnabled,
+  scriptToolName,
+  networkAuthorized,
+  contextText,
+  toolCatalogText,
+}: {
+  appInfo: AppInfo | undefined;
+  toolsEnabled: boolean;
+  scriptToolName: ReturnType<typeof getScriptToolName>;
+  networkAuthorized: boolean;
+  contextText: string;
+  toolCatalogText: string;
+}) {
+  return `你是 API-forge 的接口测试助手。${
+    toolsEnabled
+      ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。查询“当前 IP、本机网卡、系统信息、进程、目录、文件内容”时，优先调用脚本工具 ${scriptToolName ?? ""}，不要误用接口查询工具，也不要把自然语言问题当成接口 id。${
+          networkAuthorized
+            ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。"
+            : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"
+        } 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.`
+      : "当前为普通问答模式，不要调用工具。"
+  }${contextText}${toolCatalogText}`;
+}
+
+function buildModelMessages(args: {
+  appInfo: AppInfo | undefined;
+  toolsEnabled: boolean;
+  nodes: ApiTreeNode[];
+  conversationMessages: Message[];
+  userText: string;
+  activeToolNames: ToolName[];
+  networkAuthorized: boolean;
+}) {
+  const scriptToolName = getScriptToolName(args.appInfo?.platform);
+  const contextText = buildRuntimeContextText(
+    args.appInfo,
+    args.toolsEnabled,
+    args.nodes,
+  );
+  const toolCatalogText = args.toolsEnabled
+    ? `\n工具清单：${buildToolCatalog(args.activeToolNames)}`
+    : "";
+  return [
+    {
+      role: "system" as const,
+      content: buildSystemPrompt({
+        appInfo: args.appInfo,
+        toolsEnabled: args.toolsEnabled,
+        scriptToolName,
+        networkAuthorized: args.networkAuthorized,
+        contextText,
+        toolCatalogText,
+      }),
+    },
+    ...buildConversationContext(args.conversationMessages),
+    { role: "user" as const, content: args.userText },
+  ];
+}
+
 function buildThinkingParams(config: LargeModelConfig | undefined) {
   const enabled = config?.thinkingEnabled === true;
   // Qwen/vLLM 等 OpenAI 兼容服务分别读取这两个位置，显式传 false 也能关闭服务端默认思考。
@@ -753,11 +849,31 @@ export default function AIAssistantPage() {
     [conversations],
   );
   const contextLimit = Math.max(1, modelConfig?.maxContextTokens ?? 128000);
-  const contextTokens =
-    Math.ceil(
-      messages.reduce((total, message) => total + message.content.length, 0) /
-        4,
-    ) + Math.ceil(input.length / 4);
+  const previewMessages = useMemo(
+    () =>
+      limitContext(
+        buildModelMessages({
+          appInfo,
+          toolsEnabled,
+          nodes,
+          conversationMessages: messages,
+          userText: input,
+          activeToolNames,
+          networkAuthorized: hasNetworkAuthorization(input),
+        }),
+        contextLimit,
+      ),
+    [
+      activeToolNames,
+      appInfo,
+      contextLimit,
+      input,
+      messages,
+      nodes,
+      toolsEnabled,
+    ],
+  );
+  const contextTokens = estimateMessagesTokens(previewMessages);
   const contextRatio = Math.min(1, contextTokens / contextLimit);
   const contextPercent = Math.round(contextRatio * 100);
   const contextTone =
@@ -1547,59 +1663,18 @@ export default function AIAssistantPage() {
     conversationMessages: Message[],
   ) {
     const networkAuthorized = hasNetworkAuthorization(userText);
-    const scriptToolName = getScriptToolName(appInfo?.platform);
-    const activeToolNames = [
-      "list_directories",
-      "get_directory",
-      "get_directory_details",
-      "create_directory",
-      "edit_directory",
-      "delete_directory",
-      "list_apis",
-      "get_api_details",
-      "create_api",
-      "edit_api",
-      "delete_api",
-      "get_app_version",
-      "get_usage_help",
-      "test_http_api",
-      "test_http_api_load",
-      "test_websocket",
-      "test_socket",
-      ...(scriptToolName ? [scriptToolName] : []),
-    ] as ToolName[];
     const toolDefinitions = toolsEnabled
       ? buildToolDefinitions(activeToolNames)
       : [];
-    const conversationContext = buildConversationContext(conversationMessages);
-    const runtimeContext = appInfo
-      ? {
-          应用信息: {
-            名称: appInfo.name,
-            版本: appInfo.version,
-            平台: appInfo.platform,
-            架构: appInfo.arch,
-            系统类型: appInfo.osType,
-            系统版本: appInfo.osRelease,
-          },
-        }
-      : {};
-    const contextText = `\n当前运行时上下文：${json(runtimeContext)}${
-      toolsEnabled
-        ? `\n当前工作区上下文：${json({ directories: nodes.filter((n) => n.type === "folder").map(({ id, name, parentId }) => ({ id, name, parentId })), apis: nodes.filter((n) => n.type === "api").map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })) })}`
-        : ""
-    }`;
-    const toolCatalogText = toolsEnabled
-      ? `\n工具清单：${buildToolCatalog(activeToolNames)}`
-      : "";
-    const modelMessages: ModelMessage[] = [
-      {
-        role: "system",
-        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。查询“当前 IP、本机网卡、系统信息、进程、目录、文件内容”时，优先调用脚本工具 ${scriptToolName ?? ""}，不要误用接口查询工具，也不要把自然语言问题当成接口 id。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
-      },
-      ...conversationContext,
-      { role: "user", content: userText },
-    ];
+    const modelMessages: ModelMessage[] = buildModelMessages({
+      appInfo,
+      toolsEnabled,
+      nodes,
+      conversationMessages,
+      userText,
+      activeToolNames,
+      networkAuthorized,
+    });
     while (true) {
       let streamedText = "";
       let streamedReasoning = "";
