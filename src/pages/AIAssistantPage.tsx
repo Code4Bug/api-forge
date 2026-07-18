@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
   Check,
@@ -92,6 +92,30 @@ const toolLabels: Record<ToolName, string> = {
 function getScriptToolName(platform: string | undefined): "bash_exec" | "cmd_exec" | undefined {
   if (!platform) return undefined;
   return platform === "win32" ? "cmd_exec" : "bash_exec";
+}
+
+function getActiveToolNames(platform: string | undefined) {
+  const scriptToolName = getScriptToolName(platform);
+  return [
+    "list_directories",
+    "get_directory",
+    "get_directory_details",
+    "create_directory",
+    "edit_directory",
+    "delete_directory",
+    "list_apis",
+    "get_api_details",
+    "create_api",
+    "edit_api",
+    "delete_api",
+    "get_app_version",
+    "get_usage_help",
+    "test_http_api",
+    "test_http_api_load",
+    "test_websocket",
+    "test_socket",
+    ...(scriptToolName ? [scriptToolName] : []),
+  ] as ToolName[];
 }
 
 function toolParameters(name: ToolName) {
@@ -397,6 +421,17 @@ function formatToolCallMessage(
   return `调用工具：${toolLabels[toolName]}\n工具标识：${toolName}\n参数：\n${payload}`;
 }
 
+function expandSlashToolCommand(text: string) {
+  return text.replace(
+    /(^|\n)\/([a-z_]+)(?=\s|$)/g,
+    (full, prefix: string, toolName: string) => {
+      if (!(toolName in toolLabels)) return full;
+      const name = toolName as ToolName;
+      return `${prefix}请调用工具：${toolLabels[name]}\n工具标识：${name}\n参数：\n`;
+    },
+  );
+}
+
 function resolveFields(
   fields: HttpFieldItem[],
   variables: Record<string, string>,
@@ -599,6 +634,11 @@ export default function AIAssistantPage() {
   const [exportFeedback, setExportFeedback] = useState<"copied" | "exported">();
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [editingMessageId, setEditingMessageId] = useState<string>();
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [toolMenuQuery, setToolMenuQuery] = useState("");
+  const [toolMenuIndex, setToolMenuIndex] = useState(0);
+  const [toolMenuRange, setToolMenuRange] = useState({ start: 0, end: 0 });
+  const [conversationsLoaded, setConversationsLoaded] = useState(false);
   const [expandedToolIds, setExpandedToolIds] = useState<Set<string>>(
     new Set(),
   );
@@ -610,9 +650,27 @@ export default function AIAssistantPage() {
   const reasoningContentRefs = useRef<Record<string, HTMLDivElement | null>>(
     {},
   );
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const toolMenuListRef = useRef<HTMLDivElement>(null);
+  const toolMenuItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldFollowRef = useRef(true);
+  const lastConversationIdRef = useRef<string>("");
+  const activeToolNames = useMemo(
+    () => getActiveToolNames(appInfo?.platform),
+    [appInfo?.platform],
+  );
+  const toolMenuItems = useMemo(() => {
+    const query = toolMenuQuery.trim().toLowerCase();
+    return activeToolNames.filter((name) => {
+      if (!query) return true;
+      return (
+        name.toLowerCase().includes(query) ||
+        toolLabels[name].toLowerCase().includes(query)
+      );
+    });
+  }, [activeToolNames, toolMenuQuery]);
 
   useEffect(() => {
     const desktopApi = window.desktopApi;
@@ -634,6 +692,7 @@ export default function AIAssistantPage() {
             : (next[0]?.id ?? ""),
         );
         if (stored.length === 0) await desktopApi.saveConversations(next);
+        setConversationsLoaded(true);
         localStorage.removeItem("ai-chat-conversations");
         localStorage.removeItem("ai-chat-messages");
       })
@@ -659,10 +718,15 @@ export default function AIAssistantPage() {
     conversations.find((item) => item.id === activeConversationId) ??
     conversations[0];
   const messages = activeConversation?.messages ?? [];
-  const promptHistory = messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content)
-    .reverse();
+  const promptHistory = useMemo(
+    () =>
+      conversations
+        .flatMap((conversation) => conversation.messages)
+        .filter((message) => message.role === "user")
+        .map((message) => message.content)
+        .reverse(),
+    [conversations],
+  );
   const contextLimit = Math.max(1, modelConfig?.maxContextTokens ?? 128000);
   const contextTokens =
     Math.ceil(
@@ -677,17 +741,40 @@ export default function AIAssistantPage() {
       : contextRatio >= 0.75
         ? "warning"
         : "normal";
-  useEffect(() => {
-    if (shouldFollowRef.current)
-      messagesEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
+  useLayoutEffect(() => {
+    if (!conversationsLoaded) return;
+    if (!activeConversationId) return;
+    if (lastConversationIdRef.current === activeConversationId) return;
+    lastConversationIdRef.current = activeConversationId;
+    if (!shouldFollowRef.current) return;
+    const element = messagesContainerRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+  }, [activeConversationId, conversationsLoaded]);
+  useLayoutEffect(() => {
+    if (!conversationsLoaded) return;
+    if (!shouldFollowRef.current) return;
+    if (lastConversationIdRef.current !== activeConversationId) return;
+    const element = messagesContainerRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
   }, [
     activeConversationId,
+    conversationsLoaded,
     messages.length,
     messages[messages.length - 1]?.content,
   ]);
+  useEffect(() => {
+    setHistoryIndex(-1);
+  }, [activeConversationId]);
+  useEffect(() => {
+    if (!toolMenuOpen) return;
+    const activeName = toolMenuItems[toolMenuIndex];
+    if (!activeName) return;
+    toolMenuItemRefs.current[activeName]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [toolMenuIndex, toolMenuItems, toolMenuOpen]);
   useEffect(() => {
     const reasoning = messages.find(
       (message) => message.role === "reasoning" && !message.reasoningDone,
@@ -1373,25 +1460,9 @@ export default function AIAssistantPage() {
     }
   }
 
-  const toolDefinitionsFallback = buildToolDefinitions([
-    "list_directories",
-    "get_directory",
-    "get_directory_details",
-    "create_directory",
-    "edit_directory",
-    "delete_directory",
-    "list_apis",
-    "get_api_details",
-    "create_api",
-    "edit_api",
-    "delete_api",
-    "get_app_version",
-    "get_usage_help",
-    "test_http_api",
-    "test_http_api_load",
-    "test_websocket",
-    "test_socket",
-  ]);
+  const toolDefinitionsFallback = buildToolDefinitions(
+    getActiveToolNames(undefined),
+  );
 
   async function generateConversationTitle(userText: string) {
     const fallback = normalizeConversationTitle("", userText);
@@ -1600,9 +1671,40 @@ export default function AIAssistantPage() {
     );
   }
 
+  function openToolMenu() {
+    const field = inputRef.current;
+    const start = field?.selectionStart ?? input.length;
+    const end = field?.selectionEnd ?? input.length;
+    setToolMenuRange({ start, end });
+    setToolMenuQuery("");
+    setToolMenuIndex(0);
+    setToolMenuOpen(true);
+  }
+
+  function closeToolMenu() {
+    setToolMenuOpen(false);
+    setToolMenuQuery("");
+    setToolMenuIndex(0);
+  }
+
+  function insertToolPrompt(name: ToolName) {
+    const prompt = `/${name}`;
+    const next = `${input.slice(0, toolMenuRange.start)}${prompt}${input.slice(toolMenuRange.end)}`;
+    setInput(next);
+    closeToolMenu();
+    window.requestAnimationFrame(() => {
+      const field = inputRef.current;
+      if (!field) return;
+      field.focus();
+      const caret = toolMenuRange.start + prompt.length;
+      field.setSelectionRange(caret, caret);
+    });
+  }
+
   async function submit(textOverride?: string, baseMessages = messages) {
-    const text = (textOverride ?? input).trim();
-    if (!text || busy) return;
+    const rawText = (textOverride ?? input).trim();
+    const text = expandSlashToolCommand(rawText);
+    if (!rawText || busy) return;
     if (!activeConversation) return;
     shouldFollowRef.current = true;
     const editingIndex = editingMessageId
@@ -1610,8 +1712,8 @@ export default function AIAssistantPage() {
       : -1;
     const userMessage =
       editingIndex >= 0
-        ? { ...baseMessages[editingIndex], content: text }
-        : { id: crypto.randomUUID(), role: "user" as const, content: text };
+        ? { ...baseMessages[editingIndex], content: rawText }
+        : { id: crypto.randomUUID(), role: "user" as const, content: rawText };
     let transcript =
       editingIndex >= 0
         ? [...baseMessages.slice(0, editingIndex), userMessage]
@@ -1624,10 +1726,10 @@ export default function AIAssistantPage() {
     if (shouldGenerateTitle)
       renameConversationTitle(
         activeConversation.id,
-        normalizeConversationTitle("", text),
+        normalizeConversationTitle("", rawText),
       );
     const titleTask = shouldGenerateTitle
-      ? generateConversationTitle(text).then((title) =>
+      ? generateConversationTitle(rawText).then((title) =>
           renameConversationTitle(activeConversation.id, title),
         )
       : Promise.resolve();
@@ -1967,6 +2069,7 @@ export default function AIAssistantPage() {
               </div>
             )}
             <textarea
+              ref={inputRef}
               value={input}
               onCompositionStart={() => {
                 isComposingRef.current = true;
@@ -1977,8 +2080,50 @@ export default function AIAssistantPage() {
               onChange={(e) => {
                 setInput(e.target.value);
                 if (!editingMessageId) setHistoryIndex(-1);
+                if (toolMenuOpen) closeToolMenu();
               }}
               onKeyDown={(e) => {
+                if (toolMenuOpen) {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeToolMenu();
+                    return;
+                  }
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setToolMenuIndex((current) =>
+                      Math.min(
+                        current + 1,
+                        Math.max(toolMenuItems.length - 1, 0),
+                      ),
+                    );
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setToolMenuIndex((current) => Math.max(current - 1, 0));
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    const target =
+                      toolMenuItems[toolMenuIndex] ?? toolMenuItems[0];
+                    if (target) insertToolPrompt(target);
+                    else closeToolMenu();
+                    return;
+                  }
+                  if (
+                    e.key.length === 1 &&
+                    !e.metaKey &&
+                    !e.ctrlKey &&
+                    !e.altKey
+                  ) {
+                    e.preventDefault();
+                    setToolMenuQuery((current) => `${current}${e.key}`);
+                    setToolMenuIndex(0);
+                    return;
+                  }
+                }
                 if (
                   e.key === "Enter" &&
                   (e.nativeEvent.isComposing ||
@@ -2014,6 +2159,17 @@ export default function AIAssistantPage() {
                   setInput(next >= 0 ? promptHistory[next] : "");
                   return;
                 }
+                if (
+                  e.key === "/" &&
+                  !e.shiftKey &&
+                  !e.metaKey &&
+                  !e.ctrlKey &&
+                  !e.altKey
+                ) {
+                  e.preventDefault();
+                  openToolMenu();
+                  return;
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void submit();
@@ -2022,6 +2178,58 @@ export default function AIAssistantPage() {
               placeholder="输入指令，AI 将规划并执行工具..."
               className="min-h-16 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-zinc-600"
             />
+            {toolMenuOpen && (
+              <div className="relative">
+                <div className="absolute bottom-full left-0 right-0 z-20 mb-2 rounded-lg border border-zinc-700 bg-[#0f151d] p-2 shadow-2xl shadow-black/40">
+                  <div className="mb-2 flex items-center justify-between px-1 text-[11px] text-zinc-500">
+                    <span>输入工具名筛选，回车插入工具提示</span>
+                    <button
+                      onClick={closeToolMenu}
+                      className="text-zinc-500 hover:text-zinc-300"
+                    >
+                      关闭
+                    </button>
+                  </div>
+                  <div
+                    ref={toolMenuListRef}
+                    className="max-h-56 overflow-auto"
+                  >
+                    {toolMenuItems.length > 0 ? (
+                      toolMenuItems.map((name, index) => (
+                        <button
+                          key={name}
+                          type="button"
+                          ref={(element) => {
+                            toolMenuItemRefs.current[name] = element;
+                          }}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => insertToolPrompt(name)}
+                          className={`flex w-full items-start gap-2 rounded px-2 py-2 text-left transition-colors ${index === toolMenuIndex ? "bg-cyan-400/15 text-cyan-100" : "text-zinc-300 hover:bg-zinc-800"}`}
+                        >
+                          <span className="mt-0.5 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                            {name}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs">
+                              {toolLabels[name]}
+                            </span>
+                            <span className="block text-[10px] text-zinc-500">
+                              {toolParameters(name).required?.length
+                                ? `必填参数：${toolParameters(name).required.join("、")}`
+                                : "无必填参数"}
+                            </span>
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-2 py-3 text-xs text-zinc-500">
+                        没有匹配的工具
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setToolsEnabled((value) => !value)}
