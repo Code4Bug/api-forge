@@ -1955,11 +1955,6 @@ export default function HttpDebugPage() {
               </div>
             </div>
           )}
-          {inputError && (
-            <p className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
-              {inputError}
-            </p>
-          )}
           {!available && (
             <p className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
               当前环境不可用：请启动 Electron 桌面端后发送真实 HTTP 请求。
@@ -2047,6 +2042,11 @@ export default function HttpDebugPage() {
           </button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+          {inputError && (
+            <p className="rounded border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+              {inputError}
+            </p>
+          )}
           {!result && !loading && (
             <p className="rounded border border-dashed border-zinc-800 p-6 text-center text-xs text-zinc-600">
               发送请求后显示真实响应

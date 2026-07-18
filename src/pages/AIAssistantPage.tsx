@@ -391,6 +391,18 @@ function limitContext(
   return result;
 }
 
+function buildConversationContext(messages: Message[]): ModelMessage[] {
+  return messages
+    .filter(
+      (message): message is Message & { role: "user" | "assistant" } =>
+        message.role === "user" || message.role === "assistant",
+    )
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+    }));
+}
+
 function buildThinkingParams(config: LargeModelConfig | undefined) {
   const enabled = config?.thinkingEnabled === true;
   // Qwen/vLLM 等 OpenAI 兼容服务分别读取这两个位置，显式传 false 也能关闭服务端默认思考。
@@ -1532,6 +1544,7 @@ export default function AIAssistantPage() {
   async function runAgent(
     userText: string,
     append: (message: Message) => void,
+    conversationMessages: Message[],
   ) {
     const networkAuthorized = hasNetworkAuthorization(userText);
     const scriptToolName = getScriptToolName(appInfo?.platform);
@@ -1558,6 +1571,7 @@ export default function AIAssistantPage() {
     const toolDefinitions = toolsEnabled
       ? buildToolDefinitions(activeToolNames)
       : [];
+    const conversationContext = buildConversationContext(conversationMessages);
     const runtimeContext = appInfo
       ? {
           应用信息: {
@@ -1583,6 +1597,7 @@ export default function AIAssistantPage() {
         role: "system",
         content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。查询“当前 IP、本机网卡、系统信息、进程、目录、文件内容”时，优先调用脚本工具 ${scriptToolName ?? ""}，不要误用接口查询工具，也不要把自然语言问题当成接口 id。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
       },
+      ...conversationContext,
       { role: "user", content: userText },
     ];
     while (true) {
@@ -1753,7 +1768,7 @@ export default function AIAssistantPage() {
       persistMessages(transcript);
     };
     try {
-      await Promise.all([runAgent(text, append), titleTask]);
+      await Promise.all([runAgent(text, append, transcript.slice(0, -1)), titleTask]);
     } catch (error) {
       if (!(error instanceof Error && error.name === "AbortError"))
         append({
