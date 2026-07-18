@@ -285,7 +285,17 @@ function isReadOnlyQueryCommand(command: string) {
     />|>>|<|\btee\b|\bmktemp\b|\bdd\b|\btar\b.*\b(create|append|update)\b/i,
   ]
   if (forbidden.some((pattern) => pattern.test(trimmed))) return false
-  return /\b(ls|pwd|cat|head|tail|find|grep|rg|git\s+status|git\s+log|git\s+diff|git\s+show|git\s+branch|git\s+remote|ps|top|htop|env|printenv|node\s+-v|npm\s+-v|pnpm\s+-v|python3?\s+--version|java\s+-version|javac\s+-version|go\s+version|rustc\s+--version|which|where|uname|df|du|whoami|id|date|stat|file)\b/i.test(trimmed)
+  return /\b(ls|pwd|cat|head|tail|find|grep|rg|git\s+status|git\s+log|git\s+diff|git\s+show|git\s+branch|git\s+remote|ps|top|htop|env|printenv|node\s+-v|npm\s+-v|pnpm\s+-v|python3?\s+--version|java\s+-version|javac\s+-version|go\s+version|rustc\s+--version|which|where|uname|df|du|whoami|id|date|stat|file|ifconfig|ipconfig|scutil|networksetup|hostname)\b/i.test(trimmed)
+}
+
+function summarizeLogText(value: string | undefined, maxLength = 240) {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
+}
+
+function formatDebugLog(label: string, payload: Record<string, unknown>) {
+  return `${label} ${JSON.stringify(payload)}`
 }
 
 function windowStatePath() {
@@ -690,8 +700,16 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
   const command = String(request.command ?? '').trim()
   const timeout = Math.max(1000, Number(request.timeout ?? 30000))
   const cwd = resolveBashCwd(request.cwd)
+  console.info(formatDebugLog('bash:exec 收到请求', {
+    command,
+    cwd,
+    timeout,
+    isReadOnly: isReadOnlyQueryCommand(command),
+    isNetwork: isNetworkCommand(command),
+  }))
   if (!command) return { ok: false, error: '命令不能为空', durationMs: 0 }
   if (!isReadOnlyQueryCommand(command)) {
+    console.warn(formatDebugLog('bash:exec 命令被白名单拒绝', { command }))
     return {
       ok: false,
       error: '仅允许执行查询类命令，涉及修改文件、目录或环境的命令会被拒绝',
@@ -700,6 +718,7 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
     }
   }
   if (isNetworkCommand(command)) {
+    console.warn(formatDebugLog('bash:exec 命令需要网络授权', { command }))
     return {
       ok: false,
       error: '该命令包含网络访问行为，需要用户在消息中明确授权后再执行',
@@ -716,6 +735,12 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
       maxBuffer: 1024 * 1024 * 4,
       windowsHide: true,
     })
+    console.info(formatDebugLog('bash:exec 执行成功', {
+      command,
+      durationMs: Date.now() - startedAt,
+      stdoutPreview: summarizeLogText(typeof stdout === 'string' ? stdout : String(stdout ?? '')),
+      stderrPreview: summarizeLogText(typeof stderr === 'string' ? stderr : String(stderr ?? '')),
+    }))
     return {
       ok: true,
       stdout: typeof stdout === 'string' ? stdout : String(stdout ?? ''),
@@ -727,6 +752,15 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
   } catch (error) {
     if (error && typeof error === 'object' && 'stdout' in error) {
       const execError = error as Error & { stdout?: string; stderr?: string; code?: number | null; signal?: NodeJS.Signals | null }
+      console.error(formatDebugLog('bash:exec 执行失败', {
+        command,
+        error: execError.message,
+        exitCode: typeof execError.code === 'number' ? execError.code : null,
+        signal: execError.signal ?? null,
+        durationMs: Date.now() - startedAt,
+        stdoutPreview: summarizeLogText(execError.stdout),
+        stderrPreview: summarizeLogText(execError.stderr),
+      }))
       return {
         ok: false,
         error: execError.message || 'bash 执行失败',
@@ -737,6 +771,11 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
         durationMs: Date.now() - startedAt,
       }
     }
+    console.error(formatDebugLog('bash:exec 执行异常', {
+      command,
+      error: error instanceof Error ? error.message : String(error),
+      durationMs: Date.now() - startedAt,
+    }))
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'bash 执行失败',

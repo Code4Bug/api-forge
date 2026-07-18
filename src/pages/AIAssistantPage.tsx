@@ -203,7 +203,11 @@ function toolParameters(name: ToolName) {
       return {
         type: "object",
         properties: {
-          command: { type: "string" },
+          command: {
+            type: "string",
+            description:
+              "只允许本机查询类命令，例如 pwd、ls、cat、rg、ps、date、ifconfig、ipconfig、scutil、hostname。不要传接口 id。",
+          },
           cwd: { type: "string" },
           timeout: { type: "number" },
         },
@@ -419,6 +423,40 @@ function formatToolCallMessage(
 ) {
   const payload = Object.keys(args).length > 0 ? json(args) : "（无参数）";
   return `调用工具：${toolLabels[toolName]}\n工具标识：${toolName}\n参数：\n${payload}`;
+}
+
+function formatToolObservationMessage(
+  toolName: ToolName,
+  args: Record<string, unknown>,
+  result: string,
+) {
+  const payload = Object.keys(args).length > 0 ? json(args) : "（无参数）";
+  return `Observation\n工具标识：${toolName}\n调用参数：\n${payload}\n原始结果：\n${result}`;
+}
+
+function summarizeDebugValue(value: unknown, maxLength = 240) {
+  const text =
+    typeof value === "string"
+      ? value
+      : (() => {
+          try {
+            return json(value);
+          } catch {
+            return String(value);
+          }
+        })();
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength)}...`
+    : normalized;
+}
+
+function formatDebugLog(
+  label: string,
+  payload: Record<string, unknown>,
+) {
+  return `${label} ${json(payload)}`;
 }
 
 function expandSlashToolCommand(text: string) {
@@ -1046,14 +1084,14 @@ export default function AIAssistantPage() {
       });
       return id ? `已新增接口 ${id}` : "新增接口失败";
     }
-    const id = String(args.id || "");
-    const node = nodes.find((item) => item.id === id);
-    if (!node) return `未找到接口 ${id}`;
-    if (name === "delete_api") {
-      deleteNode(id);
-      return `已删除接口 ${node.name}`;
-    }
-    if (name === "edit_api") {
+    if (name === "delete_api" || name === "edit_api") {
+      const id = String(args.id || "");
+      const node = nodes.find((item) => item.id === id);
+      if (!node) return `未找到接口 ${id}`;
+      if (name === "delete_api") {
+        deleteNode(id);
+        return `已删除接口 ${node.name}`;
+      }
       if (args.name) renameNode(id, String(args.name));
       const request = workspace.requests.find((item) => item.id === id);
       if (request && (args.url || args.method || args.body))
@@ -1270,13 +1308,28 @@ export default function AIAssistantPage() {
       if (isNetworkCommand(command) && !options?.networkAuthorized) {
         return "该命令包含网络访问行为，必须先在对话中明确获得用户授权后再执行";
       }
+      console.info(formatDebugLog("[AI工具] 准备执行脚本工具", {
+        toolName: name,
+        command,
+        cwd: String(args.cwd || "").trim() || undefined,
+        timeout: Number(args.timeout || 30000),
+      }));
       const result = await window.desktopApi.bashExec({
         command,
         cwd: String(args.cwd || "").trim() || undefined,
         timeout: Number(args.timeout || 30000),
       });
+      console.info(formatDebugLog("[AI工具] 脚本工具执行完成", {
+        toolName: name,
+        command,
+        resultPreview: summarizeDebugValue(result),
+      }));
       return json(result);
     }
+    console.warn(formatDebugLog("[AI工具] 未命中专用工具分支，返回默认结果", {
+      toolName: name,
+      argsPreview: summarizeDebugValue(args),
+    }));
     return "工具执行完成";
   }
 
@@ -1568,7 +1621,7 @@ export default function AIAssistantPage() {
     const modelMessages: ModelMessage[] = [
       {
         role: "system",
-        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
+        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。查询“当前 IP、本机网卡、系统信息、进程、目录、文件内容”时，优先调用脚本工具 ${scriptToolName ?? ""}，不要误用接口查询工具，也不要把自然语言问题当成接口 id。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
       },
       { role: "user", content: userText },
     ];
@@ -1618,7 +1671,14 @@ export default function AIAssistantPage() {
       }
       for (const call of calls) {
         const toolName = call.function.name as ToolName;
+        console.info(formatDebugLog("[AI工具] 模型请求调用工具", {
+          toolName,
+          rawArguments: call.function.arguments || "{}",
+        }));
         if (!toolLabels[toolName]) {
+          console.warn(
+            formatDebugLog("[AI工具] 模型返回未知工具", { toolName }),
+          );
           modelMessages.push({
             role: "tool",
             tool_call_id: call.id,
@@ -1643,11 +1703,16 @@ export default function AIAssistantPage() {
           content: formatToolCallMessage(toolName, args),
         });
         const result = await runTool(toolName, args, { networkAuthorized });
+        console.info(formatDebugLog("[AI工具] 工具执行返回", {
+          toolName,
+          argsPreview: summarizeDebugValue(args),
+          resultPreview: summarizeDebugValue(result),
+        }));
         append({
           id: crypto.randomUUID(),
           role: "tool",
           tool: toolName,
-          content: `Observation：${result}`,
+          content: formatToolObservationMessage(toolName, args, result),
         });
         modelMessages.push({
           role: "tool",
@@ -1999,8 +2064,8 @@ export default function AIAssistantPage() {
                       <Wrench className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">
                         {m.content.startsWith("Observation")
-                          ? "工具结果"
-                          : "调用工具"}
+                          ? `工具结果 · ${m.tool ?? "未知工具"}`
+                          : `调用工具 · ${m.tool ?? "未知工具"}`}
                       </span>
                       {expandedToolIds.has(m.id) ? (
                         <ChevronDown className="ml-auto h-3.5 w-3.5" />
