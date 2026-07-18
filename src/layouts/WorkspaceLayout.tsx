@@ -124,6 +124,23 @@ function escapeHtml(value: string) {
   );
 }
 
+function escapeMarkdownCell(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, "<br>")
+    .trim();
+}
+
+function createMarkdownAnchor(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
 function escapeInlineJson(value: unknown) {
   return JSON.stringify(value)
     .replace(/</g, "\\u003c")
@@ -1099,6 +1116,12 @@ export function WorkspaceLayout() {
     const apis = flattenTreeApis(folder);
     const title = `${folder.name} API 文档`;
     if (format === "markdown") {
+      const toc = apis
+        .map((api, index) => {
+          const anchor = createMarkdownAnchor(`${index + 1}-${api.name}`);
+          return `${index + 1}. [${api.name}](#${anchor})`;
+        })
+        .join("\n");
       const sections = apis.map((api, index) => {
         const request = requests.get(api.id);
         const method = request?.method ?? api.method ?? "";
@@ -1106,18 +1129,20 @@ export function WorkspaceLayout() {
           request?.params?.filter((item) => item.enabled && item.key) ?? [];
         const headers =
           request?.headers?.filter((item) => item.enabled && item.key) ?? [];
+        const anchor = createMarkdownAnchor(`${index + 1}-${api.name}`);
         const lines = [
+          `<a id="${anchor}"></a>`,
           `## ${index + 1}. ${api.name}`,
           "",
           "| 项目 | 内容 |",
           "| --- | --- |",
-          `| 协议 | ${(request?.protocol ?? api.protocol ?? "").toUpperCase() || "-"} |`,
-          ...(method ? [`| 方法 | \`${method}\` |`] : []),
-          `| 地址 | \`${request?.url || "未设置"}\` |`,
+          `| 协议 | ${escapeMarkdownCell((request?.protocol ?? api.protocol ?? "").toUpperCase() || "-")} |`,
+          ...(method ? [`| 方法 | \`${escapeMarkdownCell(method)}\` |`] : []),
+          `| 地址 | \`${escapeMarkdownCell(request?.url || "未设置")}\` |`,
         ];
         if (request?.description)
           lines.push(
-            `| 说明 | ${request.description.replace(/\n/g, "<br>")} |`,
+            `| 说明 | ${escapeMarkdownCell(request.description)} |`,
           );
         if (params.length)
           lines.push(
@@ -1128,7 +1153,7 @@ export function WorkspaceLayout() {
             "| --- | --- |",
             ...params.map(
               (item) =>
-                `| \`${item.key}\` | ${String(item.value).replace(/\n/g, "<br>")} |`,
+                `| \`${escapeMarkdownCell(item.key)}\` | ${escapeMarkdownCell(String(item.value))} |`,
             ),
           );
         if (headers.length)
@@ -1140,19 +1165,19 @@ export function WorkspaceLayout() {
             "| --- | --- |",
             ...headers.map(
               (item) =>
-                `| \`${item.key}\` | ${String(item.value).replace(/\n/g, "<br>")} |`,
+                `| \`${escapeMarkdownCell(item.key)}\` | ${escapeMarkdownCell(String(item.value))} |`,
             ),
           );
         if (request?.body)
           lines.push("", "### 请求体", "", "```json", request.body, "```");
         return lines.join("\n");
       });
-      const toc = apis
+      const tocText = apis
         .map((api, index) => `${index + 1}. ${api.name}`)
         .join("\n");
       downloadFile(
         `${folder.name}-api-docs.md`,
-        `# API-forge\n\n## ${title}\n\n> 共 ${apis.length} 个接口 · 导出时间：${new Date().toLocaleString("zh-CN")}\n\n## 接口目录\n\n${toc || "该目录暂无接口。"}\n\n${sections.join("\n\n---\n\n")}`,
+        `# ${title}\n\n> 共 ${apis.length} 个接口 · 导出时间：${new Date().toLocaleString("zh-CN")}\n\n## 接口目录\n\n${toc || "该目录暂无接口。"}\n\n${sections.join("\n\n---\n\n")}`,
         "text/markdown;charset=utf-8",
       );
       return;
