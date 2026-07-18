@@ -434,31 +434,6 @@ function formatToolObservationMessage(
   return `Observation\n工具标识：${toolName}\n调用参数：\n${payload}\n原始结果：\n${result}`;
 }
 
-function summarizeDebugValue(value: unknown, maxLength = 240) {
-  const text =
-    typeof value === "string"
-      ? value
-      : (() => {
-          try {
-            return json(value);
-          } catch {
-            return String(value);
-          }
-        })();
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength)}...`
-    : normalized;
-}
-
-function formatDebugLog(
-  label: string,
-  payload: Record<string, unknown>,
-) {
-  return `${label} ${json(payload)}`;
-}
-
 function expandSlashToolCommand(text: string) {
   return text.replace(
     /(^|\n)\/([a-z_]+)(?=\s|$)/g,
@@ -1308,28 +1283,13 @@ export default function AIAssistantPage() {
       if (isNetworkCommand(command) && !options?.networkAuthorized) {
         return "该命令包含网络访问行为，必须先在对话中明确获得用户授权后再执行";
       }
-      console.info(formatDebugLog("[AI工具] 准备执行脚本工具", {
-        toolName: name,
-        command,
-        cwd: String(args.cwd || "").trim() || undefined,
-        timeout: Number(args.timeout || 30000),
-      }));
       const result = await window.desktopApi.bashExec({
         command,
         cwd: String(args.cwd || "").trim() || undefined,
         timeout: Number(args.timeout || 30000),
       });
-      console.info(formatDebugLog("[AI工具] 脚本工具执行完成", {
-        toolName: name,
-        command,
-        resultPreview: summarizeDebugValue(result),
-      }));
       return json(result);
     }
-    console.warn(formatDebugLog("[AI工具] 未命中专用工具分支，返回默认结果", {
-      toolName: name,
-      argsPreview: summarizeDebugValue(args),
-    }));
     return "工具执行完成";
   }
 
@@ -1671,14 +1631,7 @@ export default function AIAssistantPage() {
       }
       for (const call of calls) {
         const toolName = call.function.name as ToolName;
-        console.info(formatDebugLog("[AI工具] 模型请求调用工具", {
-          toolName,
-          rawArguments: call.function.arguments || "{}",
-        }));
         if (!toolLabels[toolName]) {
-          console.warn(
-            formatDebugLog("[AI工具] 模型返回未知工具", { toolName }),
-          );
           modelMessages.push({
             role: "tool",
             tool_call_id: call.id,
@@ -1703,11 +1656,6 @@ export default function AIAssistantPage() {
           content: formatToolCallMessage(toolName, args),
         });
         const result = await runTool(toolName, args, { networkAuthorized });
-        console.info(formatDebugLog("[AI工具] 工具执行返回", {
-          toolName,
-          argsPreview: summarizeDebugValue(args),
-          resultPreview: summarizeDebugValue(result),
-        }));
         append({
           id: crypto.randomUUID(),
           role: "tool",
@@ -2229,7 +2177,9 @@ export default function AIAssistantPage() {
                   !e.shiftKey &&
                   !e.metaKey &&
                   !e.ctrlKey &&
-                  !e.altKey
+                  !e.altKey &&
+                  (e.currentTarget.selectionStart ?? 0) === 0 &&
+                  (e.currentTarget.selectionEnd ?? 0) === 0
                 ) {
                   e.preventDefault();
                   openToolMenu();
