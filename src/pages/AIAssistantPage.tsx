@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
+  type AppInfo,
   getActiveLargeModel,
   getActiveLightModel,
   type AiConversation,
@@ -52,7 +53,8 @@ type ToolName =
   | "test_http_api_load"
   | "test_websocket"
   | "test_socket"
-  | "script_exec";
+  | "bash_exec"
+  | "cmd_exec";
 type ModelMessage = {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
@@ -83,8 +85,14 @@ const toolLabels: Record<ToolName, string> = {
   test_http_api_load: "测试 HTTP 接口压测（并发发送并返回核心指标）",
   test_websocket: "测试 WebSocket（连接、发送消息并返回帧日志）",
   test_socket: "测试 Socket（连接 TCP/UDP 并发送报文）",
-  script_exec: "执行系统脚本（仅限查询类命令；网络命令需用户授权）",
+  bash_exec: "执行 macOS/Linux Bash 脚本（仅限查询类命令；网络命令需用户授权）",
+  cmd_exec: "执行 Windows CMD 脚本（仅限查询类命令；网络命令需用户授权）",
 };
+
+function getScriptToolName(platform: string | undefined): "bash_exec" | "cmd_exec" | undefined {
+  if (!platform) return undefined;
+  return platform === "win32" ? "cmd_exec" : "bash_exec";
+}
 
 function toolParameters(name: ToolName) {
   switch (name) {
@@ -166,7 +174,8 @@ function toolParameters(name: ToolName) {
         },
         required: ["protocol", "host", "port", "data"],
       };
-    case "script_exec":
+    case "bash_exec":
+    case "cmd_exec":
       return {
         type: "object",
         properties: {
@@ -189,18 +198,20 @@ function hasNetworkAuthorization(text: string) {
   return /(?:授权|允许|同意|可以|请)?(?:联网|网络查询|网络访问|联网查询)|(?:网络|联网).*(?:授权|允许|同意)/i.test(text);
 }
 
-const toolDefinitions = (Object.keys(toolLabels) as ToolName[]).map((name) => ({
-  type: "function",
-  function: {
-    name,
-    description: toolLabels[name],
-    parameters: toolParameters(name),
-  },
-}));
+function buildToolDefinitions(names: ToolName[]) {
+  return names.map((name) => ({
+    type: "function" as const,
+    function: {
+      name,
+      description: toolLabels[name],
+      parameters: toolParameters(name),
+    },
+  }));
+}
 
-function buildToolCatalog() {
+function buildToolCatalog(names: ToolName[]) {
   return JSON.stringify(
-    (Object.keys(toolLabels) as ToolName[]).map((name) => ({
+    names.map((name) => ({
       name,
       description: toolLabels[name],
       parameters: toolParameters(name),
@@ -583,6 +594,7 @@ export default function AIAssistantPage() {
   const conversationsRef = useRef(conversations);
   const aiRequestIdRef = useRef<string>();
   const [toolsEnabled, setToolsEnabled] = useState(true);
+  const [appInfo, setAppInfo] = useState<AppInfo>();
   const [copiedMessageId, setCopiedMessageId] = useState<string>();
   const [exportFeedback, setExportFeedback] = useState<"copied" | "exported">();
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -626,6 +638,10 @@ export default function AIAssistantPage() {
         localStorage.removeItem("ai-chat-messages");
       })
       .catch((error) => console.error("加载 AI 对话失败:", error));
+    void desktopApi
+      .getAppInfo()
+      .then((info) => setAppInfo(info))
+      .catch((error) => console.error("加载应用信息失败:", error));
     return () => {
       canceled = true;
     };
@@ -1155,8 +1171,13 @@ export default function AIAssistantPage() {
       await window.desktopApi.socketClose(connectionId);
       return json({ ok: sent.ok, protocol, host, port, data, encoding });
     }
-    if (name === "script_exec") {
-      if (!window.desktopApi?.bashExec) return "当前环境不支持 Bash 执行";
+    if (name === "bash_exec" || name === "cmd_exec") {
+      if (!window.desktopApi?.bashExec) return "当前环境不支持脚本执行";
+      const currentPlatform = appInfo?.platform ?? "";
+      if (name === "bash_exec" && currentPlatform === "win32")
+        return "当前系统不是 macOS/Linux，不能执行 Bash 工具";
+      if (name === "cmd_exec" && currentPlatform !== "win32")
+        return "当前系统不是 Windows，不能执行 CMD 工具";
       const command = String(args.command || "").trim();
       if (!command) return "命令不能为空";
       if (isNetworkCommand(command) && !options?.networkAuthorized) {
@@ -1175,9 +1196,11 @@ export default function AIAssistantPage() {
   async function requestModel(
     modelMessages: ModelMessage[],
     onText: (text: string, reasoning?: string) => void,
+    toolDefinitions?: ReturnType<typeof buildToolDefinitions>,
   ) {
     if (!window.desktopApi?.httpSend)
       throw new Error("AI 对话需要在 Electron 桌面端运行");
+    const activeToolDefinitions = toolDefinitions ?? toolDefinitionsFallback;
     const requestBody = {
       model: modelConfig?.model,
       temperature: modelConfig?.temperature ?? 0.7,
@@ -1188,7 +1211,9 @@ export default function AIAssistantPage() {
         modelMessages,
         modelConfig?.maxContextTokens ?? 128000,
       ),
-      ...(toolsEnabled ? { tools: toolDefinitions, tool_choice: "auto" } : {}),
+      ...(toolsEnabled
+        ? { tools: activeToolDefinitions, tool_choice: "auto" }
+        : {}),
     };
     const requestId = crypto.randomUUID();
     aiRequestIdRef.current = requestId;
@@ -1348,6 +1373,26 @@ export default function AIAssistantPage() {
     }
   }
 
+  const toolDefinitionsFallback = buildToolDefinitions([
+    "list_directories",
+    "get_directory",
+    "get_directory_details",
+    "create_directory",
+    "edit_directory",
+    "delete_directory",
+    "list_apis",
+    "get_api_details",
+    "create_api",
+    "edit_api",
+    "delete_api",
+    "get_app_version",
+    "get_usage_help",
+    "test_http_api",
+    "test_http_api_load",
+    "test_websocket",
+    "test_socket",
+  ]);
+
   async function generateConversationTitle(userText: string) {
     const fallback = normalizeConversationTitle("", userText);
     if (
@@ -1405,16 +1450,54 @@ export default function AIAssistantPage() {
     append: (message: Message) => void,
   ) {
     const networkAuthorized = hasNetworkAuthorization(userText);
-    const contextText = toolsEnabled
-      ? `\n当前工作区上下文：${json({ directories: nodes.filter((n) => n.type === "folder").map(({ id, name, parentId }) => ({ id, name, parentId })), apis: nodes.filter((n) => n.type === "api").map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })) })}`
-      : "";
+    const scriptToolName = getScriptToolName(appInfo?.platform);
+    const activeToolNames = [
+      "list_directories",
+      "get_directory",
+      "get_directory_details",
+      "create_directory",
+      "edit_directory",
+      "delete_directory",
+      "list_apis",
+      "get_api_details",
+      "create_api",
+      "edit_api",
+      "delete_api",
+      "get_app_version",
+      "get_usage_help",
+      "test_http_api",
+      "test_http_api_load",
+      "test_websocket",
+      "test_socket",
+      ...(scriptToolName ? [scriptToolName] : []),
+    ] as ToolName[];
+    const toolDefinitions = toolsEnabled
+      ? buildToolDefinitions(activeToolNames)
+      : [];
+    const runtimeContext = appInfo
+      ? {
+          应用信息: {
+            名称: appInfo.name,
+            版本: appInfo.version,
+            平台: appInfo.platform,
+            架构: appInfo.arch,
+            系统类型: appInfo.osType,
+            系统版本: appInfo.osRelease,
+          },
+        }
+      : {};
+    const contextText = `\n当前运行时上下文：${json(runtimeContext)}${
+      toolsEnabled
+        ? `\n当前工作区上下文：${json({ directories: nodes.filter((n) => n.type === "folder").map(({ id, name, parentId }) => ({ id, name, parentId })), apis: nodes.filter((n) => n.type === "api").map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })) })}`
+        : ""
+    }`;
     const toolCatalogText = toolsEnabled
-      ? `\n工具清单：${buildToolCatalog()}`
+      ? `\n工具清单：${buildToolCatalog(activeToolNames)}`
       : "";
     const modelMessages: ModelMessage[] = [
       {
         role: "system",
-        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} ` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
+        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} 当前设备运行在 ${appInfo?.platform ?? "未知平台"} 上，脚本工具已按平台动态暴露：${scriptToolName ?? "未就绪"}.` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
       },
       { role: "user", content: userText },
     ];
@@ -1442,6 +1525,7 @@ export default function AIAssistantPage() {
               content: streamedText,
             });
         },
+        toolDefinitions,
       );
       modelMessages.push(modelMessage);
       if (streamedReasoning.trim())
@@ -1585,8 +1669,17 @@ export default function AIAssistantPage() {
     setInput("");
   }
 
-  async function copyAllConversations() {
-    const transcript = buildConversationExport(conversationsRef.current);
+  function getCurrentConversationTranscript() {
+    const currentConversation =
+      conversationsRef.current.find((item) => item.id === activeConversationId) ??
+      conversationsRef.current[0];
+    return currentConversation
+      ? buildConversationExport([currentConversation])
+      : "# AI 工作台对话记录\n\n（暂无会话）";
+  }
+
+  async function copyCurrentConversation() {
+    const transcript = getCurrentConversationTranscript();
     try {
       await navigator.clipboard?.writeText(transcript);
       setExportFeedback("copied");
@@ -1596,8 +1689,8 @@ export default function AIAssistantPage() {
     }
   }
 
-  function exportAllConversations() {
-    const transcript = buildConversationExport(conversationsRef.current);
+  function exportCurrentConversation() {
+    const transcript = getCurrentConversationTranscript();
     const blob = new Blob([transcript], {
       type: "text/markdown;charset=utf-8",
     });
@@ -1691,31 +1784,27 @@ export default function AIAssistantPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => void copyAllConversations()}
+              onClick={() => void copyCurrentConversation()}
               disabled={
-                !conversations.some(
-                  (conversation) => conversation.messages.length,
-                )
+                !activeConversation || activeConversation.messages.length === 0
               }
               className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-[11px] text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-              title="复制所有对话上下文"
+              title="复制当前会话上下文"
             >
               {exportFeedback === "copied" ? (
                 <Check className="h-3.5 w-3.5 text-emerald-300" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}
-              {exportFeedback === "copied" ? "已复制" : "复制全部"}
+              {exportFeedback === "copied" ? "已复制" : "复制当前"}
             </button>
             <button
-              onClick={exportAllConversations}
+              onClick={exportCurrentConversation}
               disabled={
-                !conversations.some(
-                  (conversation) => conversation.messages.length,
-                )
+                !activeConversation || activeConversation.messages.length === 0
               }
               className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-[11px] text-zinc-300 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-              title="导出所有对话上下文"
+              title="导出当前会话上下文"
             >
               {exportFeedback === "exported" ? (
                 <Check className="h-3.5 w-3.5 text-emerald-300" />

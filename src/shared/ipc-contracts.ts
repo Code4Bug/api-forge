@@ -167,6 +167,9 @@ export interface AppInfo {
   name: string;
   version: string;
   platform: string;
+  arch: string;
+  osType: string;
+  osRelease: string;
 }
 
 export interface AiMessage {

@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
-import { homedir, platform } from 'node:os'
+import { homedir, platform, release, type as osType } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
@@ -627,6 +627,9 @@ ipcMain.handle('app:get-info', () => ({
   name: app.getName(),
   version: resolveApplicationVersion(),
   platform: process.platform,
+  arch: process.arch,
+  osType: osType(),
+  osRelease: release(),
 }))
 ipcMain.handle('app:close-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
