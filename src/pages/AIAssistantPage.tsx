@@ -83,7 +83,7 @@ const toolLabels: Record<ToolName, string> = {
   test_http_api_load: "测试 HTTP 接口压测（并发发送并返回核心指标）",
   test_websocket: "测试 WebSocket（连接、发送消息并返回帧日志）",
   test_socket: "测试 Socket（连接 TCP/UDP 并发送报文）",
-  script_exec: "执行系统脚本（受限于当前工作区）",
+  script_exec: "执行系统脚本（仅限查询类命令；网络命令需用户授权）",
 };
 
 function toolParameters(name: ToolName) {
@@ -179,6 +179,14 @@ function toolParameters(name: ToolName) {
     default:
       return { type: "object", properties: {} };
   }
+}
+
+function isNetworkCommand(command: string) {
+  return /\b(curl|wget|ping|nc|ncat|netcat|ssh|scp|rsync|telnet|ftp|nslookup|dig|host|traceroute|mtr|npm\s+install|npm\s+add|pnpm\s+add|pnpm\s+install|yarn\s+add|yarn\s+install|pip\s+install|pip3\s+install|brew\s+install|apt(-get)?\s+install|yum\s+install|dnf\s+install|choco\s+install|scoop\s+install)\b/i.test(command);
+}
+
+function hasNetworkAuthorization(text: string) {
+  return /(?:授权|允许|同意|可以|请)?(?:联网|网络查询|网络访问|联网查询)|(?:网络|联网).*(?:授权|允许|同意)/i.test(text);
 }
 
 const toolDefinitions = (Object.keys(toolLabels) as ToolName[]).map((name) => ({
@@ -744,7 +752,11 @@ export default function AIAssistantPage() {
     setHistoryIndex(-1);
   }
 
-  async function runTool(name: ToolName, args: Record<string, unknown>) {
+  async function runTool(
+    name: ToolName,
+    args: Record<string, unknown>,
+    options?: { networkAuthorized?: boolean },
+  ) {
     if (name === "get_app_version") {
       const info = await window.desktopApi?.getAppInfo();
       return info
@@ -1147,6 +1159,9 @@ export default function AIAssistantPage() {
       if (!window.desktopApi?.bashExec) return "当前环境不支持 Bash 执行";
       const command = String(args.command || "").trim();
       if (!command) return "命令不能为空";
+      if (isNetworkCommand(command) && !options?.networkAuthorized) {
+        return "该命令包含网络访问行为，必须先在对话中明确获得用户授权后再执行";
+      }
       const result = await window.desktopApi.bashExec({
         command,
         cwd: String(args.cwd || "").trim() || undefined,
@@ -1389,6 +1404,7 @@ export default function AIAssistantPage() {
     userText: string,
     append: (message: Message) => void,
   ) {
+    const networkAuthorized = hasNetworkAuthorization(userText);
     const contextText = toolsEnabled
       ? `\n当前工作区上下文：${json({ directories: nodes.filter((n) => n.type === "folder").map(({ id, name, parentId }) => ({ id, name, parentId })), apis: nodes.filter((n) => n.type === "api").map(({ id, name, method, protocol, parentId }) => ({ id, name, method, protocol, parentId })) })}`
       : "";
@@ -1398,7 +1414,7 @@ export default function AIAssistantPage() {
     const modelMessages: ModelMessage[] = [
       {
         role: "system",
-        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? "你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。" : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
+        content: `你是 API-forge 的接口测试助手。${toolsEnabled ? `你必须通过工具完成工作区操作，工具结果返回后继续推理。需要用户确认的破坏性操作（删除）先询问，不要直接调用。脚本工具仅允许执行查询类命令；凡是包含网络访问的命令，必须先在对话中获得用户明确授权，再调用工具。${networkAuthorized ? "当前用户已明确授权网络查询，可以执行网络访问类查询命令。" : "当前用户尚未授权网络查询，遇到网络访问命令必须先请求授权。"} ` : "当前为普通问答模式，不要调用工具。"}${contextText}${toolCatalogText}`,
       },
       { role: "user", content: userText },
     ];
@@ -1471,7 +1487,7 @@ export default function AIAssistantPage() {
           tool: toolName,
           content: formatToolCallMessage(toolName, args),
         });
-        const result = await runTool(toolName, args);
+        const result = await runTool(toolName, args, { networkAuthorized });
         append({
           id: crypto.randomUUID(),
           role: "tool",

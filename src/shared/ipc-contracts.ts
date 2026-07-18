@@ -280,6 +280,7 @@ export type BashExecResult =
   | {
       ok: false;
       error: string;
+      code?: "FORBIDDEN_COMMAND" | "REQUIRES_CONFIRMATION" | "UNSUPPORTED_PLATFORM";
       stdout?: string;
       stderr?: string;
       exitCode?: number | null;

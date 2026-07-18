@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, platform } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
@@ -266,6 +266,26 @@ function resolveBashCwd(cwd?: string) {
   const basePath = resolve(bashBaseDir)
   const targetPath = resolve(cwd ? cwd : basePath)
   return isSubPath(targetPath, basePath) ? targetPath : basePath
+}
+
+function getShellCommand(platformName: string, command: string) {
+  if (platformName === 'win32') return { file: 'cmd.exe', args: ['/d', '/s', '/c', command] }
+  return { file: '/bin/bash', args: ['-lc', command] }
+}
+
+function isNetworkCommand(command: string) {
+  return /\b(curl|wget|ping|nc|ncat|netcat|ssh|scp|rsync|telnet|ftp|nslookup|dig|host|traceroute|mtr|npm\s+install|npm\s+add|pnpm\s+add|pnpm\s+install|yarn\s+add|yarn\s+install|pip\s+install|pip3\s+install|brew\s+install|apt(-get)?\s+install|yum\s+install|dnf\s+install|choco\s+install|scoop\s+install)\b/i.test(command)
+}
+
+function isReadOnlyQueryCommand(command: string) {
+  const trimmed = command.trim()
+  if (!trimmed) return false
+  const forbidden = [
+    /\b(rm|mv|cp|touch|mkdir|rmdir|chmod|chown|chgrp|ln|truncate|sed\s+-i|perl\s+-i|python.*-c|node\s+-e|bash\s+-c|sh\s+-c|zsh\s+-c)\b/i,
+    />|>>|<|\btee\b|\bmktemp\b|\bdd\b|\btar\b.*\b(create|append|update)\b/i,
+  ]
+  if (forbidden.some((pattern) => pattern.test(trimmed))) return false
+  return /\b(ls|pwd|cat|head|tail|find|grep|rg|git\s+status|git\s+log|git\s+diff|git\s+show|git\s+branch|git\s+remote|ps|top|htop|env|printenv|node\s+-v|npm\s+-v|pnpm\s+-v|python3?\s+--version|java\s+-version|javac\s+-version|go\s+version|rustc\s+--version|which|where|uname|df|du|whoami|id|date|stat|file)\b/i.test(trimmed)
 }
 
 function windowStatePath() {
@@ -668,9 +688,26 @@ ipcMain.handle('bash:exec', async (_event, request: BashExecRequest): Promise<Ba
   const timeout = Math.max(1000, Number(request.timeout ?? 30000))
   const cwd = resolveBashCwd(request.cwd)
   if (!command) return { ok: false, error: '命令不能为空', durationMs: 0 }
+  if (!isReadOnlyQueryCommand(command)) {
+    return {
+      ok: false,
+      error: '仅允许执行查询类命令，涉及修改文件、目录或环境的命令会被拒绝',
+      code: 'FORBIDDEN_COMMAND',
+      durationMs: 0,
+    }
+  }
+  if (isNetworkCommand(command)) {
+    return {
+      ok: false,
+      error: '该命令包含网络访问行为，需要用户在消息中明确授权后再执行',
+      code: 'REQUIRES_CONFIRMATION',
+      durationMs: 0,
+    }
+  }
   const startedAt = Date.now()
   try {
-    const { stdout, stderr } = await execFileAsync('/bin/bash', ['-lc', command], {
+    const shell = getShellCommand(platform(), command)
+    const { stdout, stderr } = await execFileAsync(shell.file, shell.args, {
       cwd,
       timeout,
       maxBuffer: 1024 * 1024 * 4,
