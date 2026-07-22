@@ -2120,7 +2120,9 @@ export default function AIAssistantPage() {
                     {m.role === "assistant" ? (
                       <MarkdownText value={m.content} />
                     ) : (
-                      m.content
+                      <span className="whitespace-pre-wrap break-words">
+                        {m.content}
+                      </span>
                     )}
                   </div>
                 )}
