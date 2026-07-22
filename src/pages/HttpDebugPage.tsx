@@ -36,6 +36,24 @@ import type {
 } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 
+interface CachedHttpResponse {
+  requestId: string;
+  apiId: string;
+  completedAt: string;
+  result: HttpSendResult;
+  streamBody: string;
+  streamSse: boolean;
+  requestLogs: Array<{
+    time: string;
+    level: "info" | "success" | "error";
+    message: string;
+  }>;
+  assertionResult?: {
+    ok: boolean;
+    message: string;
+  };
+}
+
 const initialParams: HttpFieldItem[] = [
   { id: "param-page", key: "page", value: "1", enabled: true },
   { id: "param-size", key: "size", value: "20", enabled: true },
@@ -533,6 +551,7 @@ export default function HttpDebugPage() {
     "stream",
   );
   const requestIdRef = useRef("");
+  const responseCacheRef = useRef<Record<string, CachedHttpResponse>>({});
   const [inputError, setInputError] = useState("");
   const [activeResponseTab, setActiveResponseTab] = useState<
     "Body" | "Headers" | "Cookies" | "日志"
@@ -748,6 +767,31 @@ export default function HttpDebugPage() {
     );
   }
 
+  function cacheResponse(
+    apiId: string,
+    payload: Omit<CachedHttpResponse, "apiId" | "completedAt">,
+  ) {
+    responseCacheRef.current[apiId] = {
+      apiId,
+      completedAt: new Date().toISOString(),
+      ...payload,
+    };
+  }
+
+  function clearCachedResponse(apiId?: string) {
+    if (apiId) {
+      delete responseCacheRef.current[apiId];
+    }
+    requestIdRef.current = "";
+    setResult(undefined);
+    setRequestLogs([]);
+    setStreamBody("");
+    setStreamSse(false);
+    setAssertionResult(undefined);
+    setInputError("");
+    setSseDisplayMode("stream");
+  }
+
   useEffect(() => {
     const unsubscribe = window.desktopApi?.onHttpChunk?.((payload) => {
       if (payload.requestId !== requestIdRef.current) return;
@@ -758,14 +802,37 @@ export default function HttpDebugPage() {
   }, []);
 
   useEffect(() => {
-    setResult(undefined);
-    setRequestLogs([]);
-    setStreamBody("");
-    setStreamSse(false);
-    setAssertionResult(undefined);
+    const cached = activeApiId ? responseCacheRef.current[activeApiId] : undefined;
+    setResult(cached?.result);
+    setRequestLogs(cached?.requestLogs ?? []);
+    setStreamBody(cached?.streamBody ?? "");
+    setStreamSse(cached?.streamSse ?? false);
+    setAssertionResult(cached?.assertionResult);
     setInputError("");
     setProcessVariableDialog(undefined);
   }, [activeApiId]);
+
+  useEffect(() => {
+    if (!activeApiId) return;
+    if (!result) {
+      return;
+    }
+    cacheResponse(activeApiId, {
+      requestId: requestIdRef.current || `cached-${crypto.randomUUID()}`,
+      result,
+      streamBody,
+      streamSse,
+      requestLogs,
+      assertionResult,
+    });
+  }, [
+    activeApiId,
+    result,
+    requestLogs,
+    streamBody,
+    streamSse,
+    assertionResult,
+  ]);
 
   useEffect(() => {
     if (!activeApiId) {
@@ -1093,6 +1160,16 @@ export default function HttpDebugPage() {
       ),
     );
 
+    if (activeApiId && result) {
+      cacheResponse(activeApiId, {
+        requestId: requestIdRef.current || `cached-${crypto.randomUUID()}`,
+        result,
+        streamBody,
+        streamSse,
+        requestLogs,
+        assertionResult,
+      });
+    }
     setInputError("");
     setLoading(true);
     setResult(undefined);
@@ -2017,6 +2094,14 @@ export default function HttpDebugPage() {
             )}
             {errorCode && <StatusPill tone="red">{errorCode}</StatusPill>}
           </div>
+          <button
+            type="button"
+            onClick={() => clearCachedResponse(activeApiId)}
+            disabled={!result && requestLogs.length === 0 && !streamBody}
+            className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            清空
+          </button>
         </div>
         <div className="flex h-12 shrink-0 items-end justify-between border-b border-zinc-800 px-4 text-sm text-zinc-500">
           <div className="flex items-end gap-5">
