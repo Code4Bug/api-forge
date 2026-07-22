@@ -11,12 +11,14 @@ type HeaderSuggestInputProps = Omit<
 > & {
   value: string;
   options: readonly string[];
+  variables?: Record<string, string>;
   onChange: (value: string) => void;
 };
 
 export function HeaderSuggestInput({
   value,
   options,
+  variables = {},
   onChange,
   className = "",
   onFocus,
@@ -27,19 +29,40 @@ export function HeaderSuggestInput({
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   const query = value.trim().toLowerCase();
-  const suggestions = useMemo(() => {
-    if (!query) return options;
-    return options.filter((item) => item.toLowerCase().includes(query));
-  }, [options, query]);
+  const variableMatch = value.match(/\{\{([^{}]*)$/);
+  const hasVariableQuery = Boolean(variableMatch);
+  const variableQuery = variableMatch?.[1] ?? "";
+  const variableSuggestions = useMemo(
+    () =>
+      Object.keys(variables).filter((key) =>
+        key.toLowerCase().includes(variableQuery.toLowerCase()),
+      ),
+    [variables, variableQuery],
+  );
+  const suggestions = useMemo(
+    () =>
+      hasVariableQuery
+        ? variableSuggestions.map((key) => `{{${key}}}`)
+        : !query
+          ? options
+          : options.filter((item) => item.toLowerCase().includes(query)),
+    [hasVariableQuery, options, query, variableSuggestions],
+  );
 
   function update(next: string) {
     onChange(next);
-    setOpen(Boolean(next.trim()));
+    setOpen(Boolean(next.trim()) || next.endsWith("{{"));
     setIndex(0);
   }
 
   function insert(next: string) {
-    update(next);
+    if (hasVariableQuery) {
+      const match = value.match(/\{\{([^{}]*)$/);
+      const start = match?.index ?? value.length;
+      update(`${value.slice(0, start)}${next}`);
+    } else {
+      update(next);
+    }
     setOpen(false);
   }
 
@@ -98,6 +121,11 @@ export function HeaderSuggestInput({
               className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs ${suggestionIndex === index ? "bg-cyan-400/15 text-cyan-100" : "text-zinc-300 hover:bg-zinc-800"}`}
             >
               <span>{item}</span>
+              {hasVariableQuery && (
+                <span className="ml-3 truncate text-[10px] text-zinc-500">
+                  {variables[item.slice(2, -2)]}
+                </span>
+              )}
             </button>
           ))}
         </div>

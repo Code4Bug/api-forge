@@ -1518,6 +1518,7 @@ export default function HttpDebugPage() {
                     <HeaderSuggestInput
                       value={item.key}
                       options={headerKeyOptions}
+                      variables={variables}
                       onChange={(value) =>
                         setHeaders((current) =>
                           current.map((entry, currentIndex) =>
@@ -1539,6 +1540,7 @@ export default function HttpDebugPage() {
                             ? headerValueOptions.Authorization
                             : []
                       }
+                      variables={variables}
                       onChange={(value) =>
                         setHeaders((current) =>
                           current.map((entry, currentIndex) =>
