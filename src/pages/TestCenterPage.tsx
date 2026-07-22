@@ -52,6 +52,10 @@ type TestSummary = {
   ok: boolean;
   title: string;
   details: string[];
+  checks: Array<{
+    label: string;
+    ok: boolean;
+  }>;
 };
 
 function cloneFields(
@@ -74,12 +78,6 @@ function formatBody(body: unknown) {
   } catch {
     return body;
   }
-}
-
-function summarizeHistory(item: RequestHistoryItem) {
-  const status = item.status ? `${item.status}` : "失败";
-  const cost = item.durationMs ? `${item.durationMs} ms` : "-";
-  return `${item.method ?? item.protocol.toUpperCase()} ${item.url} · ${status} · ${cost}`;
 }
 
 function formatBytes(value?: number) {
@@ -493,6 +491,7 @@ export default function TestCenterPage() {
     result: Extract<HttpSendResult, { ok: true }>,
   ): TestSummary {
     const details: string[] = [];
+    const checks: TestSummary["checks"] = [];
     const bodyText = result.body ?? "";
     const jsonBody = parseJsonBody(bodyText);
     let ok = true;
@@ -505,6 +504,12 @@ export default function TestCenterPage() {
             ? `状态码符合：${result.status}`
             : `状态码不符合：期望 ${expected}，实际 ${result.status}`,
         );
+        checks.push({
+          ok: pass,
+          label: pass
+            ? `状态码 = ${result.status}`
+            : `状态码期望 ${expected}，实际 ${result.status}`,
+        });
         ok = ok && pass;
       }
       if (assertion.type === "contains") {
@@ -513,6 +518,14 @@ export default function TestCenterPage() {
         details.push(
           pass ? `响应包含：${expected}` : `响应不包含：${expected}`,
         );
+        checks.push({
+          ok: pass,
+          label: expected
+            ? pass
+              ? `响应包含“${expected}”`
+              : `响应未包含“${expected}”`
+            : "内容包含校验未填写期望值",
+        });
         ok = ok && pass;
       }
       if (assertion.type === "json-path") {
@@ -526,6 +539,12 @@ export default function TestCenterPage() {
             ? `路径命中：${assertion.value}`
             : `路径失败：${assertion.value}${expected ? `，期望 ${expected}` : ""}`,
         );
+        checks.push({
+          ok: pass,
+          label: pass
+            ? `JSON 路径 ${assertion.value} 校验通过`
+            : `JSON 路径 ${assertion.value} 校验失败`,
+        });
         ok = ok && pass;
       }
     }
@@ -533,6 +552,9 @@ export default function TestCenterPage() {
       ok,
       title: ok ? "测试通过" : "测试未通过",
       details: details.length ? details : ["未配置校验项"],
+      checks: checks.length
+        ? checks
+        : [{ ok: true, label: "未配置校验项，仅记录请求结果" }],
     };
   }
 
@@ -604,6 +626,7 @@ export default function TestCenterPage() {
           ok: false,
           title: "测试失败",
           details: [getErrorMessage(result)],
+          checks: [{ ok: false, label: getErrorMessage(result) }],
         });
         appendSingleLog(`请求失败：${getErrorMessage(result)}`);
       }
@@ -611,6 +634,12 @@ export default function TestCenterPage() {
       const message = error instanceof Error ? error.message : "测试失败";
       appendSingleLog(message);
       setSingleResult({ ok: false, error: { code: "UNKNOWN_ERROR", message } });
+      setLastSummary({
+        ok: false,
+        title: "测试失败",
+        details: [message],
+        checks: [{ ok: false, label: message }],
+      });
     } finally {
       setSingleLoading(false);
     }
@@ -786,9 +815,14 @@ export default function TestCenterPage() {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col rounded border border-zinc-800 bg-zinc-950/60 p-3">
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300">
+              <div className="mb-2 flex items-center justify-between text-xs font-medium text-zinc-300">
+                <div className="flex items-center gap-2">
                 <History className="h-3.5 w-3.5 text-violet-300" />
-                最近历史
+                  最近历史
+                </div>
+                <span className="text-[10px] font-normal text-zinc-600">
+                  {history.length} 条
+                </span>
               </div>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 text-[11px] text-zinc-500">
                 {recentHistory.length ? (
@@ -797,7 +831,15 @@ export default function TestCenterPage() {
                       key={item.id}
                       className="rounded bg-zinc-900/70 px-2 py-2"
                     >
-                      {summarizeHistory(item)}
+                      <div className="truncate text-zinc-400" title={item.url}>
+                        {item.method ?? item.protocol.toUpperCase()} {item.url}
+                      </div>
+                      <div className="mt-1 flex justify-between text-[10px]">
+                        <span className={item.status !== undefined ? "text-emerald-400" : "text-rose-400"}>
+                          {item.status ?? "失败"}
+                        </span>
+                        <span>{item.durationMs !== undefined ? `${item.durationMs} ms` : formatReportTime(item.createdAt)}</span>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -815,23 +857,39 @@ export default function TestCenterPage() {
             <section className="space-y-4">
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
                 <div className="rounded border border-zinc-800 bg-[#111821] p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h2 className="text-sm font-semibold">单次测试</h2>
-                      <p className="text-xs text-zinc-500">
-                        基于已保存接口直接发起请求
-                      </p>
+                  <div className="mb-4 rounded border border-cyan-500/15 bg-gradient-to-r from-cyan-400/8 to-transparent p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-sm font-semibold">单次测试</h2>
+                          {selectedRequest && (
+                            <span className="truncate text-[11px] text-cyan-300">
+                              {selectedRequest.name}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 truncate text-xs text-zinc-500">
+                          {selectedRequest?.url || "选择接口后开始配置请求"}
+                        </p>
+                      </div>
+                      <StatusPill tone={singleLoading ? "amber" : singleResult?.ok ? "green" : singleResult ? "red" : "zinc"}>
+                        {singleLoading ? "执行中" : singleResult?.ok ? "请求成功" : singleResult ? "请求失败" : "待执行"}
+                      </StatusPill>
                     </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+                      <span className="rounded bg-zinc-950/70 px-2 py-1 text-cyan-200">{method}</span>
+                      <span>环境：{activeEnvironmentId || "默认环境"}</span>
+                      <span>参数 {params.filter((item) => item.enabled && item.key.trim()).length}</span>
+                      <span>请求头 {headers.filter((item) => item.enabled && item.key.trim()).length}</span>
+                    </div>
+                  </div>
+                  <div className="mb-4 flex justify-end">
                     <button
                       onClick={() => void runSingleTest()}
                       disabled={singleLoading || !selectedRequest}
-                      className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950 disabled:opacity-40"
+                      className="flex h-9 items-center gap-2 rounded bg-cyan-400 px-4 text-xs font-semibold text-zinc-950 disabled:opacity-40"
                     >
-                      {singleLoading ? (
-                        <Square className="h-3.5 w-3.5" />
-                      ) : (
-                        <Play className="h-3.5 w-3.5" />
-                      )}
+                      {singleLoading ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                       {singleLoading ? "执行中" : "开始测试"}
                     </button>
                   </div>
@@ -1070,11 +1128,11 @@ export default function TestCenterPage() {
                     {singleResult ? (
                       singleResult.ok ? (
                         <div className="space-y-3 text-xs text-zinc-300">
-                          <StatusPill tone="green">
-                            {singleResult.status}
-                          </StatusPill>
-                          <div>耗时：{singleResult.durationMs} ms</div>
-                          <div>响应大小：{singleResult.sizeBytes} bytes</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="rounded bg-emerald-400/8 p-2"><div className="text-[10px] text-zinc-500">状态码</div><div className="mt-1 font-semibold text-emerald-300">{singleResult.status}</div></div>
+                            <div className="rounded bg-zinc-950/70 p-2"><div className="text-[10px] text-zinc-500">耗时</div><div className="mt-1 font-semibold text-zinc-200">{singleResult.durationMs} ms</div></div>
+                            <div className="rounded bg-zinc-950/70 p-2"><div className="text-[10px] text-zinc-500">响应大小</div><div className="mt-1 font-semibold text-zinc-200">{formatBytes(singleResult.sizeBytes)}</div></div>
+                          </div>
                           <pre className="max-h-72 overflow-auto rounded bg-zinc-950 p-3 text-[11px] text-zinc-200">
                             {formatBody(singleResult.body)}
                           </pre>
@@ -1089,40 +1147,58 @@ export default function TestCenterPage() {
                     )}
                   </div>
                   <div className="rounded border border-zinc-800 bg-[#111821] p-4">
-                    <div className="mb-2 text-xs font-medium text-zinc-300">
-                      执行记录
-                    </div>
-                    <div className="space-y-2 text-[11px] text-zinc-500">
-                      {singleLogs.length ? (
-                        singleLogs.map((item, index) => (
-                          <div
-                            key={index}
-                            className="rounded bg-zinc-950/70 px-2 py-2"
-                          >
-                            {item}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="rounded bg-zinc-950/70 px-2 py-2">
-                          暂无记录
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
+                          <History className="h-3.5 w-3.5 text-violet-300" />
+                          请求记录
                         </div>
+                        <p className="mt-1 text-[10px] text-zinc-600">
+                          基于当前结果校验配置生成验证信息
+                        </p>
+                      </div>
+                      {lastSummary && (
+                        <StatusPill tone={lastSummary.ok ? "green" : "red"}>
+                          {lastSummary.title}
+                        </StatusPill>
                       )}
                     </div>
-                  </div>
-                  {lastSummary && (
-                    <div
-                      className={`rounded border p-4 text-xs ${lastSummary.ok ? "border-emerald-500/25 bg-emerald-500/6 text-emerald-100" : "border-rose-500/25 bg-rose-500/6 text-rose-100"}`}
-                    >
-                      <div className="mb-2 font-medium">
-                        {lastSummary.title}
+                    <div className="mb-3 rounded bg-zinc-950/70 px-3 py-2 text-[11px]">
+                      <div className="truncate text-zinc-300" title={url}>
+                        {method} {url || "未配置请求地址"}
                       </div>
-                      <div className="space-y-1">
-                        {lastSummary.details.map((item) => (
-                          <div key={item}>{item}</div>
-                        ))}
+                      <div className="mt-1 flex justify-between text-[10px] text-zinc-600">
+                        <span>已启用校验 {assertions.filter((item) => item.enabled).length} 条</span>
+                        <span>{singleResult ? "已生成结果" : "等待执行"}</span>
                       </div>
                     </div>
-                  )}
+                    {lastSummary ? (
+                      <div className="space-y-2">
+                        {lastSummary.checks.map((check, index) => (
+                          <div
+                            key={`${check.label}-${index}`}
+                            className={`flex items-start gap-2 rounded px-2.5 py-2 text-[11px] ${check.ok ? "bg-emerald-400/6 text-emerald-100" : "bg-rose-400/6 text-rose-100"}`}
+                          >
+                            {check.ok ? (
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+                            ) : (
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300" />
+                            )}
+                            <span>{check.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded bg-zinc-950/70 px-3 py-3 text-[11px] text-zinc-600">
+                        执行请求后，这里会展示每条结果校验的通过状态、期望值与实际结果。
+                      </div>
+                    )}
+                    {singleLogs.length > 0 && (
+                      <div className="mt-3 border-t border-zinc-800 pt-3 text-[10px] text-zinc-600">
+                        {singleLogs[0]}
+                      </div>
+                    )}
+                    </div>
                 </div>
               </div>
             </section>

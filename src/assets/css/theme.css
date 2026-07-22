@@ -502,7 +502,8 @@ html[data-theme] [class*="border-b-zinc-800"] {
 }
 
 html.light [class*="text-emerald-300"],
-html.light [class*="text-emerald-200"] {
+html.light [class*="text-emerald-200"],
+html.light [class*="text-emerald-100"] {
   color: #047857 !important;
 }
 
@@ -522,6 +523,7 @@ html.light [class*="text-violet-200"] {
 }
 
 html.light [class*="text-rose-200"],
+html.light [class*="text-rose-100"],
 html.light [class*="text-red-400"] {
   color: #be123c !important;
 }
