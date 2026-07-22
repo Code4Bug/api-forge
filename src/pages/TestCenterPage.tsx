@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  AlertTriangle,
   BarChart3,
   CheckCircle2,
+  Clock3,
   FlaskConical,
+  Gauge,
   History,
   Layers3,
   Play,
   Plus,
   Square,
   Trash2,
+  Zap,
   Wrench,
 } from "lucide-react";
 import {
@@ -75,6 +80,25 @@ function summarizeHistory(item: RequestHistoryItem) {
   const status = item.status ? `${item.status}` : "失败";
   const cost = item.durationMs ? `${item.durationMs} ms` : "-";
   return `${item.method ?? item.protocol.toUpperCase()} ${item.url} · ${status} · ${cost}`;
+}
+
+function formatBytes(value?: number) {
+  if (value === undefined) return "-";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatReportTime(value?: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function isHttpSendError(
@@ -276,8 +300,113 @@ export default function TestCenterPage() {
     avg: number;
     p95: number;
     max: number;
+    durations: number[];
+    errors: string[];
+    startedAt: string;
+    finishedAt: string;
   }>();
   const [lastSummary, setLastSummary] = useState<TestSummary>();
+
+  const reportData = useMemo(() => {
+    const items = history.slice(0, 30);
+    const successful = items.filter((item) => item.status !== undefined);
+    const failed = items.length - successful.length;
+    const durations = successful
+      .map((item) => item.durationMs)
+      .filter((value): value is number => value !== undefined);
+    const sortedDurations = [...durations].sort((a, b) => a - b);
+    const totalDuration = durations.reduce((sum, value) => sum + value, 0);
+    const totalSize = successful.reduce(
+      (sum, item) => sum + (item.sizeBytes ?? 0),
+      0,
+    );
+    const endpointMap = new Map<
+      string,
+      { name: string; total: number; success: number; durations: number[] }
+    >();
+
+    items.forEach((item) => {
+      const endpoint = item.url;
+      const current = endpointMap.get(endpoint) ?? {
+        name: endpoint,
+        total: 0,
+        success: 0,
+        durations: [],
+      };
+      current.total += 1;
+      if (item.status !== undefined) current.success += 1;
+      if (item.durationMs !== undefined) current.durations.push(item.durationMs);
+      endpointMap.set(endpoint, current);
+    });
+
+    const endpoints = [...endpointMap.values()]
+      .map((item) => ({
+        ...item,
+        successRate: item.total ? Math.round((item.success / item.total) * 100) : 0,
+        avg: item.durations.length
+          ? Math.round(
+              item.durations.reduce((sum, value) => sum + value, 0) /
+                item.durations.length,
+            )
+          : 0,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
+    return {
+      items,
+      successful,
+      failed,
+      successRate: items.length ? Math.round((successful.length / items.length) * 100) : 0,
+      avg: durations.length ? Math.round(totalDuration / durations.length) : 0,
+      p95: sortedDurations.length
+        ? sortedDurations[
+            Math.min(sortedDurations.length - 1, Math.ceil(sortedDurations.length * 0.95) - 1)
+          ]
+        : 0,
+      max: sortedDurations.at(-1) ?? 0,
+      totalSize,
+      endpoints,
+    };
+  }, [history]);
+
+  const loadViewData = useMemo(() => {
+    if (!loadResult) return undefined;
+    const sorted = [...loadResult.durations].sort((a, b) => a - b);
+    const elapsedMs =
+      new Date(loadResult.finishedAt).getTime() -
+      new Date(loadResult.startedAt).getTime();
+    const errorGroups = [...new Set(loadResult.errors)].map((message) => ({
+      message,
+      count: loadResult.errors.filter((item) => item === message).length,
+    }));
+    const bucketCount = 8;
+    const max = Math.max(loadResult.max, 1);
+    const buckets = Array.from({ length: bucketCount }, (_, index) => {
+      const min = Math.round((index / bucketCount) * max);
+      const upper = Math.round(((index + 1) / bucketCount) * max);
+      const count = loadResult.durations.filter(
+        (duration) =>
+          duration >= min &&
+          (index === bucketCount - 1 ? duration <= upper : duration < upper),
+      ).length;
+      return { label: `${min}-${upper}`, count };
+    });
+    return {
+      successRate: loadResult.total
+        ? Math.round((loadResult.success / loadResult.total) * 100)
+        : 0,
+      throughput:
+        elapsedMs > 0
+          ? Math.round((loadResult.total / (elapsedMs / 1000)) * 10) / 10
+          : 0,
+      min: sorted[0] ?? 0,
+      p50: sorted.length ? sorted[Math.floor(sorted.length * 0.5)] : 0,
+      elapsedMs,
+      errorGroups,
+      buckets,
+    };
+  }, [loadResult]);
 
   useEffect(() => {
     if (!selectedRequest) return;
@@ -538,8 +667,10 @@ export default function TestCenterPage() {
     if (!selectedRequest || loadIterations <= 0) return;
     setLoadLoading(true);
     setLoadResult(undefined);
+    const startedAt = new Date().toISOString();
     try {
       const durations: number[] = [];
+      const errors: string[] = [];
       let success = 0;
       let failure = 0;
       let cursor = 0;
@@ -563,6 +694,7 @@ export default function TestCenterPage() {
               durations.push(response.durationMs);
             } else {
               failure += 1;
+              errors.push(getErrorMessage(response));
             }
           }
         },
@@ -578,7 +710,18 @@ export default function TestCenterPage() {
         ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
         : 0;
       const max = sorted.length ? sorted[sorted.length - 1] : 0;
-      setLoadResult({ total: loadIterations, success, failure, avg, p95, max });
+      setLoadResult({
+        total: loadIterations,
+        success,
+        failure,
+        avg,
+        p95,
+        max,
+        durations,
+        errors,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      });
     } finally {
       setLoadLoading(false);
     }
@@ -1104,115 +1247,365 @@ export default function TestCenterPage() {
           )}
 
           {tab === "load" && (
-            <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-              <div className="rounded border border-zinc-800 bg-[#111821] p-4">
-                <div className="mb-4">
-                  <h2 className="text-sm font-semibold">压测</h2>
-                  <p className="text-xs text-zinc-500">
-                    对指定接口做并发和次数压测
+            <section className="space-y-4">
+              <div className="flex items-start justify-between rounded border border-amber-500/20 bg-gradient-to-br from-amber-400/10 via-[#111821] to-[#111821] p-5">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-amber-300">
+                    <Gauge className="h-3.5 w-3.5" />
+                    Load test
+                  </div>
+                  <h2 className="text-lg font-semibold text-zinc-50">接口压力测试</h2>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    通过并发请求观察接口的吞吐能力、响应延迟与错误情况
                   </p>
                 </div>
-                <label className="mb-3 block text-xs text-zinc-400">
-                  并发数
-                  <input
-                    type="number"
-                    min={1}
-                    value={loadConcurrency}
-                    onChange={(event) =>
-                      setLoadConcurrency(
-                        Math.max(1, Number(event.target.value) || 1),
-                      )
-                    }
-                    className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none"
-                  />
-                </label>
-                <label className="mb-4 block text-xs text-zinc-400">
-                  请求次数
-                  <input
-                    type="number"
-                    min={1}
-                    value={loadIterations}
-                    onChange={(event) =>
-                      setLoadIterations(
-                        Math.max(1, Number(event.target.value) || 1),
-                      )
-                    }
-                    className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none"
-                  />
-                </label>
-                <button
-                  onClick={() => void runLoadTest()}
-                  disabled={loadLoading || !selectedRequest}
-                  className="flex h-9 w-full items-center justify-center gap-2 rounded bg-cyan-400 px-3 text-xs font-semibold text-zinc-950 disabled:opacity-40"
-                >
-                  {loadLoading ? (
-                    <Square className="h-3.5 w-3.5" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
-                  )}
-                  {loadLoading ? "压测中" : "开始压测"}
-                </button>
+                <StatusPill tone={loadLoading ? "amber" : loadResult ? "green" : "zinc"}>
+                  {loadLoading ? "执行中" : loadResult ? "已完成" : "待执行"}
+                </StatusPill>
               </div>
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-3">
-                  {(
-                    [
-                      ["总请求", loadResult?.total ?? loadIterations],
-                      ["成功", loadResult?.success ?? 0],
-                      ["失败", loadResult?.failure ?? 0],
-                      ["平均耗时", loadResult ? `${loadResult.avg} ms` : "-"],
-                      ["P95", loadResult ? `${loadResult.p95} ms` : "-"],
-                      ["最大耗时", loadResult ? `${loadResult.max} ms` : "-"],
-                    ] as Array<[string, string | number]>
-                  ).map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded border border-zinc-800 bg-[#111821] p-4"
-                    >
-                      <div className="text-[11px] text-zinc-500">{label}</div>
-                      <div className="mt-1 text-lg font-semibold text-zinc-100">
-                        {value}
+
+              <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                  <div className="mb-4 flex items-center gap-2 text-xs font-semibold text-zinc-200">
+                    <FlaskConical className="h-3.5 w-3.5 text-amber-300" />
+                    测试配置
+                  </div>
+                  <div className="mb-4 rounded bg-zinc-950/70 p-3">
+                    <div className="text-[10px] text-zinc-600">测试目标</div>
+                    <div className="mt-1 truncate text-xs text-zinc-200">
+                      {selectedRequest
+                        ? `${selectedRequest.method ?? "GET"} ${selectedRequest.name}`
+                        : "请选择接口"}
+                    </div>
+                    <div className="mt-1 truncate text-[10px] text-zinc-600">
+                      {selectedRequest?.url ?? "未选择接口"}
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                    <label className="block text-xs text-zinc-400">
+                      并发数
+                      <input
+                        type="number"
+                        min={1}
+                        value={loadConcurrency}
+                        onChange={(event) =>
+                          setLoadConcurrency(
+                            Math.max(1, Number(event.target.value) || 1),
+                          )
+                        }
+                        className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none focus:border-amber-400/60"
+                      />
+                    </label>
+                    <label className="block text-xs text-zinc-400">
+                      请求次数
+                      <input
+                        type="number"
+                        min={1}
+                        value={loadIterations}
+                        onChange={(event) =>
+                          setLoadIterations(
+                            Math.max(1, Number(event.target.value) || 1),
+                          )
+                        }
+                        className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-xs outline-none focus:border-amber-400/60"
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 rounded border border-zinc-800 p-3 text-[11px] text-zinc-500">
+                    <div className="flex justify-between"><span>预计并发工作数</span><span className="text-zinc-300">{Math.min(loadConcurrency, loadIterations)}</span></div>
+                    <div className="mt-2 flex justify-between"><span>当前环境</span><span className="max-w-[150px] truncate text-zinc-300">{activeEnvironmentId || "默认环境"}</span></div>
+                  </div>
+                  <button
+                    onClick={() => void runLoadTest()}
+                    disabled={loadLoading || !selectedRequest}
+                    className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded bg-amber-300 px-3 text-xs font-semibold text-zinc-950 disabled:opacity-40"
+                  >
+                    {loadLoading ? (
+                      <Square className="h-3.5 w-3.5" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    {loadLoading ? "压测中" : "开始压测"}
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ["成功率", loadViewData ? `${loadViewData.successRate}%` : "-", "请求通过比例", "text-emerald-300"],
+                      ["吞吐量", loadViewData ? `${loadViewData.throughput} req/s` : "-", "按本次执行耗时估算", "text-cyan-300"],
+                      ["P95 延迟", loadResult ? `${loadResult.p95} ms` : "-", "95% 请求低于此值", "text-violet-300"],
+                      ["总请求", loadResult?.total ?? loadIterations, "本次计划执行量", "text-amber-300"],
+                    ].map(([label, value, hint, color]) => (
+                      <div key={label} className="rounded border border-zinc-800 bg-[#111821] p-4">
+                        <div className="text-[11px] text-zinc-500">{label}</div>
+                        <div className={`mt-2 text-xl font-semibold ${color}`}>{value}</div>
+                        <div className="mt-1 text-[10px] text-zinc-600">{hint}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xs font-semibold text-zinc-200">响应耗时分布</h3>
+                          <p className="mt-1 text-[11px] text-zinc-500">根据本次成功请求的耗时样本统计</p>
+                        </div>
+                        <BarChart3 className="h-4 w-4 text-amber-300" />
+                      </div>
+                      {loadViewData ? (
+                        <div className="flex h-44 items-end gap-2 border-b border-zinc-800 px-2">
+                          {loadViewData.buckets.map((bucket) => {
+                            const peak = Math.max(...loadViewData.buckets.map((item) => item.count), 1);
+                            return (
+                              <div key={bucket.label} className="group flex h-full flex-1 flex-col justify-end">
+                                <div className="mb-1 text-center text-[10px] text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100">{bucket.count}</div>
+                                <div className="rounded-t bg-amber-300/75 transition-colors group-hover:bg-amber-200" style={{ height: `${Math.max(bucket.count ? 8 : 2, (bucket.count / peak) * 100)}%` }} />
+                                <div className="mt-2 truncate text-center text-[9px] text-zinc-600">{bucket.label}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="flex h-44 items-center justify-center text-xs text-zinc-600">执行压测后显示耗时分布</div>
+                      )}
+                    </div>
+
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-4 flex items-center gap-2">
+                        <Zap className="h-3.5 w-3.5 text-cyan-300" />
+                        <h3 className="text-xs font-semibold text-zinc-200">延迟概览</h3>
+                      </div>
+                      <div className="space-y-3 text-xs">
+                        {[
+                          ["最快", loadViewData ? `${loadViewData.min} ms` : "-"],
+                          ["P50 中位数", loadViewData ? `${loadViewData.p50} ms` : "-"],
+                          ["平均耗时", loadResult ? `${loadResult.avg} ms` : "-"],
+                          ["最大耗时", loadResult ? `${loadResult.max} ms` : "-"],
+                        ].map(([label, value]) => (
+                          <div key={label} className="flex items-center justify-between border-b border-zinc-800/70 pb-2 last:border-0 last:pb-0">
+                            <span className="text-zinc-500">{label}</span>
+                            <span className="font-medium text-zinc-200">{value}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div className="rounded border border-zinc-800 bg-[#111821] p-4">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-medium text-zinc-300">
-                    <BarChart3 className="h-3.5 w-3.5 text-cyan-300" />
-                    结果说明
                   </div>
-                  <p className="text-xs leading-6 text-zinc-500">
-                    当前版本先提供可用的压测执行和核心指标，后续可以继续加错误分布、耗时分位图和导出报告。
-                  </p>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-xs font-semibold text-zinc-200">执行结果</h3>
+                        {loadResult && <span className="text-[10px] text-zinc-600">{formatReportTime(loadResult.finishedAt)}</span>}
+                      </div>
+                      {loadResult ? (
+                        <div className="space-y-3">
+                          <div className="flex h-3 overflow-hidden rounded-full bg-zinc-800">
+                            <div className="bg-emerald-400" style={{ width: `${loadViewData?.successRate ?? 0}%` }} />
+                            <div className="bg-rose-400" style={{ width: `${100 - (loadViewData?.successRate ?? 0)}%` }} />
+                          </div>
+                          <div className="flex justify-between text-[11px]"><span className="text-emerald-300">成功 {loadResult.success}</span><span className="text-rose-300">失败 {loadResult.failure}</span></div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
+                            <div className="rounded bg-zinc-950/70 p-2">执行时长 <span className="float-right text-zinc-300">{loadViewData?.elapsedMs ?? 0} ms</span></div>
+                            <div className="rounded bg-zinc-950/70 p-2">并发配置 <span className="float-right text-zinc-300">{loadConcurrency}</span></div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-xs text-zinc-600">暂无压测结果</div>
+                      )}
+                    </div>
+
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-rose-300" />
+                        <h3 className="text-xs font-semibold text-zinc-200">失败原因</h3>
+                      </div>
+                      {loadViewData?.errorGroups.length ? (
+                        <div className="space-y-2">
+                          {loadViewData.errorGroups.slice(0, 4).map((item) => (
+                            <div key={item.message} className="flex items-center justify-between gap-3 rounded bg-rose-400/5 px-3 py-2 text-[11px]">
+                              <span className="truncate text-rose-200" title={item.message}>{item.message}</span>
+                              <span className="shrink-0 text-rose-300">{item.count} 次</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-xs text-zinc-600">{loadResult ? "本次没有失败请求" : "执行压测后显示失败原因"}</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
           )}
 
           {tab === "report" && (
-            <section className="rounded border border-zinc-800 bg-[#111821] p-4">
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold">报告</h2>
-                <p className="text-xs text-zinc-500">
-                  查看最近执行记录和测试结果摘要
-                </p>
-              </div>
-              <div className="space-y-2">
-                {history.length ? (
-                  history.slice(0, 12).map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded border border-zinc-800 bg-zinc-950/70 px-3 py-3 text-xs text-zinc-300"
-                    >
-                      {summarizeHistory(item)}
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded border border-zinc-800 bg-zinc-950/70 px-3 py-3 text-xs text-zinc-500">
-                    暂无历史记录
+            <section className="space-y-4">
+              <div className="flex items-start justify-between rounded border border-cyan-500/20 bg-gradient-to-br from-cyan-400/10 via-[#111821] to-[#111821] p-5">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-cyan-300">
+                    <Activity className="h-3.5 w-3.5" />
+                    Test report
                   </div>
-                )}
+                  <h2 className="text-lg font-semibold text-zinc-50">测试执行报告</h2>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    汇总最近 30 次请求，帮助快速定位稳定性与性能问题
+                  </p>
+                </div>
+                <div className="text-right text-[11px] text-zinc-500">
+                  <div>统计范围</div>
+                  <div className="mt-1 text-zinc-300">最近 {reportData.items.length} 次执行</div>
+                </div>
               </div>
+
+              {!reportData.items.length ? (
+                <div className="rounded border border-zinc-800 bg-[#111821] px-5 py-16 text-center">
+                  <BarChart3 className="mx-auto h-8 w-8 text-zinc-700" />
+                  <div className="mt-3 text-sm text-zinc-300">暂无可生成的报告</div>
+                  <p className="mt-1 text-xs text-zinc-500">先执行一次单次测试、场景测试或压测。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    {[
+                      ["成功率", `${reportData.successRate}%`, "基于请求是否返回响应", "text-emerald-300"],
+                      ["总请求", `${reportData.items.length}`, "最近 30 次执行", "text-cyan-300"],
+                      ["平均耗时", `${reportData.avg} ms`, "仅统计成功请求", "text-amber-300"],
+                      ["P95 耗时", `${reportData.p95} ms`, "95% 请求低于此值", "text-violet-300"],
+                      ["响应总量", formatBytes(reportData.totalSize), "成功请求响应大小", "text-sky-300"],
+                    ].map(([label, value, hint, color]) => (
+                      <div key={label} className="rounded border border-zinc-800 bg-[#111821] p-4">
+                        <div className="text-[11px] text-zinc-500">{label}</div>
+                        <div className={`mt-2 text-xl font-semibold ${color}`}>{value}</div>
+                        <div className="mt-1 text-[10px] text-zinc-600">{hint}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xs font-semibold text-zinc-200">最近执行趋势</h3>
+                          <p className="mt-1 text-[11px] text-zinc-500">按执行顺序展示响应耗时，越高代表越慢</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+                          <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-400" />成功</span>
+                          <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-400" />失败</span>
+                        </div>
+                      </div>
+                      <div className="flex h-44 items-end gap-1.5 border-b border-zinc-800 px-1">
+                        {reportData.items
+                          .slice(0, 18)
+                          .reverse()
+                          .map((item) => {
+                            const height = item.durationMs
+                              ? Math.max(8, Math.round((item.durationMs / Math.max(reportData.max, 1)) * 100))
+                              : 8;
+                            return (
+                              <div key={item.id} className="group relative flex h-full flex-1 items-end">
+                                <div
+                                  className={`w-full rounded-t-sm transition-opacity group-hover:opacity-70 ${item.status !== undefined ? "bg-emerald-400/75" : "bg-rose-400/75"}`}
+                                  style={{ height: `${height}%` }}
+                                />
+                                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-[10px] text-zinc-300 group-hover:block">
+                                  {item.durationMs !== undefined ? `${item.durationMs} ms` : "请求失败"}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                      <div className="mt-3 flex justify-between text-[10px] text-zinc-600">
+                        <span>最新</span>
+                        <span>最慢 {reportData.max} ms</span>
+                        <span>较早</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-4 flex items-center gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-300" />
+                        <h3 className="text-xs font-semibold text-zinc-200">执行状态</h3>
+                      </div>
+                      <div className="mb-4 flex items-center gap-4">
+                        <div className="relative flex h-24 w-24 items-center justify-center rounded-full" style={{ background: `conic-gradient(#34d399 ${reportData.successRate}%, #fb7185 0)` }}>
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#111821] text-lg font-semibold text-zinc-100">{reportData.successRate}%</div>
+                        </div>
+                        <div className="space-y-3 text-xs">
+                          <div><span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-400" />成功 <b className="ml-3 text-zinc-200">{reportData.successful.length}</b></div>
+                          <div><span className="mr-2 inline-block h-2 w-2 rounded-full bg-rose-400" />失败 <b className="ml-3 text-zinc-200">{reportData.failed}</b></div>
+                        </div>
+                      </div>
+                      <div className="border-t border-zinc-800 pt-3 text-[11px] text-zinc-500">
+                        最大耗时 <span className="float-right text-zinc-300">{reportData.max} ms</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-xs font-semibold text-zinc-200">接口健康排行</h3>
+                        <span className="text-[10px] text-zinc-600">按调用次数排序</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[520px] text-left text-[11px]">
+                          <thead className="border-b border-zinc-800 text-zinc-600">
+                            <tr><th className="pb-2 font-normal">接口</th><th className="pb-2 font-normal">调用</th><th className="pb-2 font-normal">成功率</th><th className="pb-2 font-normal">平均耗时</th></tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/70">
+                            {reportData.endpoints.map((item) => (
+                              <tr key={item.name}>
+                                <td className="max-w-[260px] truncate py-3 pr-3 text-zinc-300" title={item.name}>{item.name}</td>
+                                <td className="py-3 text-zinc-500">{item.total}</td>
+                                <td className="py-3">
+                                  <div className="flex items-center gap-2"><span className={item.successRate >= 80 ? "text-emerald-300" : "text-rose-300"}>{item.successRate}%</span><span className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-800"><i className={`block h-full rounded-full ${item.successRate >= 80 ? "bg-emerald-400" : "bg-rose-400"}`} style={{ width: `${item.successRate}%` }} /></span></div>
+                                </td>
+                                <td className="py-3 text-zinc-500">{item.avg} ms</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-zinc-800 bg-[#111821] p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Clock3 className="h-3.5 w-3.5 text-cyan-300" />
+                        <h3 className="text-xs font-semibold text-zinc-200">最新执行</h3>
+                      </div>
+                      <div className="space-y-2">
+                        {reportData.items.slice(0, 6).map((item) => (
+                          <div key={item.id} className="rounded bg-zinc-950/70 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-[11px] text-zinc-300">{item.method ?? item.protocol.toUpperCase()} {item.url}</span>
+                              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${item.status !== undefined ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"}`}>{item.status ?? "失败"}</span>
+                            </div>
+                            <div className="mt-2 flex justify-between text-[10px] text-zinc-600"><span>{formatReportTime(item.createdAt)}</span><span>{item.durationMs !== undefined ? `${item.durationMs} ms` : "请求未完成"} · {formatBytes(item.sizeBytes)}</span></div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {loadResult && (
+                    <div className="rounded border border-cyan-500/20 bg-cyan-400/5 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FlaskConical className="h-3.5 w-3.5 text-cyan-300" />
+                        <h3 className="text-xs font-semibold text-zinc-200">最近一次压测摘要</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-[11px] sm:grid-cols-5">
+                        <div><span className="text-zinc-500">请求</span><b className="ml-2 text-zinc-200">{loadResult.total}</b></div>
+                        <div><span className="text-zinc-500">成功</span><b className="ml-2 text-emerald-300">{loadResult.success}</b></div>
+                        <div><span className="text-zinc-500">失败</span><b className="ml-2 text-rose-300">{loadResult.failure}</b></div>
+                        <div><span className="text-zinc-500">P95</span><b className="ml-2 text-zinc-200">{loadResult.p95} ms</b></div>
+                        <div><span className="text-zinc-500">最大</span><b className="ml-2 text-zinc-200">{loadResult.max} ms</b></div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </section>
           )}
         </main>
