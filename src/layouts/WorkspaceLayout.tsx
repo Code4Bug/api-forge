@@ -405,8 +405,13 @@ function TreeNode({
 }) {
   const isFolder = node.type === "folder";
   const { activeApiId } = useWorkspaceStore();
+  const requestMethod = useWorkspaceStore(
+    (state) =>
+      state.workspace?.requests.find((item) => item.id === node.id)?.method,
+  );
   const isActive = activeApiId === node.id;
   const expanded = isFolder ? (expandedFolders[node.id] ?? true) : false;
+  const displayMethod = requestMethod ?? node.method;
   const [isDragOver, setIsDragOver] = useState(false);
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -536,11 +541,11 @@ function TreeNode({
             <ApiTypeIcon protocol={node.protocol} active={isActive} />
           )}
           <span className="min-w-0 flex-1 truncate">{node.name}</span>
-          {node.method && (
+          {displayMethod && (
             <span
-              className={`mr-1 inline-flex h-5 min-w-11 items-center justify-center rounded border px-1.5 text-[10px] font-semibold ${methodClass(node.method)}`}
+              className={`mr-1 inline-flex h-5 min-w-11 items-center justify-center rounded border px-1.5 text-[10px] font-semibold ${methodClass(displayMethod)}`}
             >
-              {node.method}
+              {displayMethod}
             </span>
           )}
           {socketType(node) && (

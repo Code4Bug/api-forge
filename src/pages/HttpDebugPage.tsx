@@ -1004,6 +1004,18 @@ export default function HttpDebugPage() {
     window.setTimeout(() => setSaveMessage(""), 1800);
   }
 
+  function changeMethod(value: string) {
+    const nextMethod = value as HttpMethod;
+    setMethod(nextMethod);
+    if (!activeApiId || !activeRequest || activeRequest.method === nextMethod)
+      return;
+    updateRequest({
+      ...activeRequest,
+      method: nextMethod,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   saveRequestRef.current = saveCurrentRequest;
 
   function buildRequestBody() {
@@ -1401,7 +1413,7 @@ export default function HttpDebugPage() {
                 "OPTIONS",
               ] as HttpMethod[]
             ).map((item) => ({ value: item, label: item }))}
-            onChange={(value) => setMethod(value as HttpMethod)}
+            onChange={changeMethod}
             triggerClassName={`font-semibold ${methodColorClasses[method]}`}
           />
           <div className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-[180px]">
