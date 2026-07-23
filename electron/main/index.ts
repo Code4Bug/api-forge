@@ -16,6 +16,7 @@ const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
+const releaseAssetCache = new Map<string, Promise<string | undefined>>()
 
 function normalizeGitRemoteUrl(remoteUrl: string) {
   if (remoteUrl.startsWith('git@')) {
@@ -89,6 +90,98 @@ function loadChangelogText() {
   }
 }
 
+function resolveGithubReleaseConfig() {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) as {
+      build?: {
+        publish?: {
+          provider?: string
+          owner?: string
+          repo?: string
+        }
+      }
+    }
+    const publish = packageJson.build?.publish
+    if (publish?.provider === 'github' && publish.owner && publish.repo) {
+      return publish
+    }
+  } catch {
+    // 忽略，回退到本地文件。
+  }
+  return undefined
+}
+
+async function fetchGithubReleaseChangelog(tagName: string) {
+  const cacheKey = tagName
+  if (!releaseAssetCache.has(cacheKey)) {
+    releaseAssetCache.set(cacheKey, (async () => {
+      const config = resolveGithubReleaseConfig()
+      if (!config) return undefined
+
+      const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tagName)}`, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'API-forge',
+        },
+      })
+      if (!releaseResponse.ok) return undefined
+
+      const release = await releaseResponse.json() as {
+        assets?: Array<{ name?: string; browser_download_url?: string }>
+      }
+      const changelogAsset = release.assets?.find((asset) => asset.name === 'CHANGELOG.md' && asset.browser_download_url)
+      if (!changelogAsset?.browser_download_url) return undefined
+
+      const changelogResponse = await fetch(changelogAsset.browser_download_url, {
+        headers: {
+          Accept: 'text/plain',
+          'User-Agent': 'API-forge',
+        },
+      })
+      if (!changelogResponse.ok) return undefined
+      return await changelogResponse.text()
+    })())
+  }
+  return await releaseAssetCache.get(cacheKey)
+}
+
+async function loadLatestReleaseChangelog() {
+  const versionTag = `v${resolveApplicationVersion()}`
+  const changelog = await fetchGithubReleaseChangelog(versionTag)
+  if (changelog) return changelog
+
+  const config = resolveGithubReleaseConfig()
+  if (config) {
+    try {
+      const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'API-forge',
+        },
+      })
+      if (releaseResponse.ok) {
+        const release = await releaseResponse.json() as {
+          assets?: Array<{ name?: string; browser_download_url?: string }>
+        }
+        const changelogAsset = release.assets?.find((asset) => asset.name === 'CHANGELOG.md' && asset.browser_download_url)
+        if (changelogAsset?.browser_download_url) {
+          const changelogResponse = await fetch(changelogAsset.browser_download_url, {
+            headers: {
+              Accept: 'text/plain',
+              'User-Agent': 'API-forge',
+            },
+          })
+          if (changelogResponse.ok) return await changelogResponse.text()
+        }
+      }
+    } catch {
+      // 忽略，继续回退本地文件。
+    }
+  }
+
+  return loadChangelogText()
+}
+
 function parseChangelogNotes(markdown: string) {
   const lines = markdown.split(/\r?\n/)
   const sectionIndex = lines.findIndex((line) => /^##\s+/.test(line))
@@ -116,8 +209,8 @@ function parseChangelogNotes(markdown: string) {
   return { range: rangeMatch?.[1] ?? sectionTitle, notes }
 }
 
-function resolveUpdateNotes() {
-  const changelog = loadChangelogText()
+async function resolveUpdateNotes() {
+  const changelog = await loadLatestReleaseChangelog()
   if (changelog) {
     const parsed = parseChangelogNotes(changelog)
     if (parsed.notes.length > 0) {
@@ -149,7 +242,7 @@ function resolveUpdateNotes() {
       })
       .filter((item) => item.hash && item.message)
       : []
-    return { range, notes }
+      return { range, notes }
   } catch {
     return { range: '', notes: [] }
   }
@@ -761,14 +854,14 @@ function createWindow() {
   createApplicationMenu(mainWindow)
 }
 
-ipcMain.handle('app:get-info', () => ({
+ipcMain.handle('app:get-info', async () => ({
   name: app.getName(),
   version: resolveApplicationVersion(),
   platform: process.platform,
   arch: process.arch,
   osType: osType(),
   osRelease: release(),
-  ...resolveUpdateNotes(),
+  ...await resolveUpdateNotes(),
 }))
 ipcMain.handle('app:close-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
