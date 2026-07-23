@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.2.29",
+  "version": "0.2.30",
   "license": "Apache-2.0",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
