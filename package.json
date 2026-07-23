@@ -76,7 +76,7 @@
       "owner": "Code4Bug",
       "repo": "api-forge"
     },
-    "icon": "public/favicon.png",
+    "icon": "build/icon.svg",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -104,6 +104,7 @@
     },
     "linux": {
       "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "afterInstall": "build/linux/deb-after-install.sh",
       "target": [
         {
           "target": "AppImage",
@@ -120,9 +121,6 @@
           ]
         }
       ],
-      "deb": {
-        "afterInstall": "build/linux/deb-after-install.sh"
-      },
       "category": "Utility"
     }
   }
