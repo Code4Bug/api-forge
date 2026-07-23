@@ -621,7 +621,7 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
       submenu: [
         { label: '新建目录', accelerator: 'CmdOrCtrl+Shift+N', click: () => mainWindow.webContents.send('app:menu-action', 'new-folder') },
         { label: '新建 API', accelerator: 'CmdOrCtrl+N', click: () => mainWindow.webContents.send('app:menu-action', 'new-api') },
-        { label: '导入 curl', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow.webContents.send('app:menu-action', 'import-curl') },
+        { label: '导入 API', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow.webContents.send('app:menu-action', 'import-api') },
         { label: '保存当前', accelerator: 'CmdOrCtrl+S', click: () => mainWindow.webContents.send('app:menu-action', 'save-current') },
         { label: '导出工作区', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow.webContents.send('app:menu-action', 'export-workspace') },
         { type: 'separator' as const },

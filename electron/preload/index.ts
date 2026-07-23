@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import type { AiConversation, BashExecRequest, BashExecResult, DesktopApi, HttpSendRequest, WorkspaceSnapshot, RequestHistoryItem, SocketConnectRequest, SocketSendRequest, UpdateStatus } from '../../src/shared/ipc-contracts.js'
 
 const desktopApi: DesktopApi = {
@@ -6,6 +6,10 @@ const desktopApi: DesktopApi = {
   closeWindow: () => ipcRenderer.invoke('app:close-window'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   selectFile: (options) => ipcRenderer.invoke('dialog:select-file', options),
+  clearClipboard: () => {
+    clipboard.clear()
+    return Promise.resolve({ ok: true as const })
+  },
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),

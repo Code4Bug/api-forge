@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { WorkspaceLayout } from "@/layouts/WorkspaceLayout";
 import EnvironmentPage from "@/pages/EnvironmentPage";
 import HistoryPage from "@/pages/HistoryPage";
+import ApiImportPage from "@/pages/ApiImportPage";
 import HttpDebugPage from "@/pages/HttpDebugPage";
 import SocketPage from "@/pages/SocketPage";
 import TestCenterPage from "@/pages/TestCenterPage";
@@ -98,6 +99,7 @@ export default function App() {
           <Route path="/socket" element={<SocketPage />} />
           <Route path="/environments" element={<EnvironmentPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/import" element={<ApiImportPage />} />
           <Route path="/ai" element={null} />
           <Route path="/test" element={<TestCenterPage />} />
           <Route path="/settings" element={<SettingsPage />} />

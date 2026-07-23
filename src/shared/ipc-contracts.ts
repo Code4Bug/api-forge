@@ -314,6 +314,7 @@ export interface DesktopApi {
       filters?: Array<{ name: string; extensions: string[] }>;
     },
   ) => Promise<{ ok: true; path?: string } | { ok: false; error: string }>;
+  clearClipboard: () => Promise<{ ok: true }>;
   checkForUpdates: () => Promise<{ ok: true } | { ok: false; error: string }>;
   downloadUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;
   installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;

@@ -16,6 +16,7 @@ import {
   Download,
   FileCode2,
   FilePlus2,
+  FileUp,
   FlaskConical,
   Folder,
   History,
@@ -52,7 +53,8 @@ import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { Modal } from "@/components/common/Modal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { Drawer } from "@/components/common/Drawer";
-import { buildCurlCommand, parseCurlCommand } from "@/utils/curl";
+import { buildCurlCommand } from "@/utils/curl";
+import { parseApiImportText } from "@/utils/api-import";
 
 type AppMenuAction =
   | "about"
@@ -60,6 +62,7 @@ type AppMenuAction =
   | "new-folder"
   | "save-current"
   | "import-curl"
+  | "import-api"
   | "export-workspace"
   | "open-http"
   | "open-websocket"
@@ -888,6 +891,10 @@ export function WorkspaceLayout() {
     nodeId?: string;
     parentId?: string;
   }>();
+  const [quickMenu, setQuickMenu] = useState<{
+    x: number;
+    y: number;
+  }>();
   const [dialog, setDialog] = useState<{
     mode: "folder" | "api" | "rename";
     parentId?: string;
@@ -900,9 +907,7 @@ export function WorkspaceLayout() {
   const [dialogMethod, setDialogMethod] = useState<HttpMethod | undefined>(
     "GET",
   );
-  const [pendingCurl, setPendingCurl] = useState("");
-  const [parsedCurl, setParsedCurl] =
-    useState<ReturnType<typeof parseCurlCommand>>();
+  const [pendingImportText, setPendingImportText] = useState("");
   const [expandedFolders, setExpandedFolders] = useState(readExpandedFolders);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     Number(localStorage.getItem("sidebarWidth") ?? 260),
@@ -913,6 +918,8 @@ export function WorkspaceLayout() {
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const sidebarResizeOffsetRef = useRef(0);
   const apiTabsRef = useRef<HTMLDivElement>(null);
+  const quickMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const quickMenuPortalRef = useRef<HTMLDivElement>(null);
   const scrollNewApiTabToEndRef = useRef(false);
   const [hasPreviousApiTabs, setHasPreviousApiTabs] = useState(false);
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false);
@@ -932,6 +939,9 @@ export function WorkspaceLayout() {
   const aiReady = Boolean(
     modelConfig?.baseUrl.trim() && modelConfig.model.trim(),
   );
+  const pendingImport = pendingImportText
+    ? parseApiImportText(pendingImportText)
+    : undefined;
 
   useEffect(() => {
     void window.desktopApi
@@ -974,16 +984,33 @@ export function WorkspaceLayout() {
   }, [resizingSidebar]);
 
   useEffect(() => {
-    if (!dialog && !tabMenu && !sidebarMenu) return;
+    if (!dialog && !tabMenu && !sidebarMenu && !quickMenu)
+      return;
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (dialog) setDialog(undefined);
       else if (tabMenu) setTabMenu(undefined);
       else if (sidebarMenu) setSidebarMenu(undefined);
+      else if (quickMenu) setQuickMenu(undefined);
     }
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [dialog, tabMenu, sidebarMenu]);
+  }, [dialog, tabMenu, sidebarMenu, quickMenu]);
+
+  useEffect(() => {
+    if (!quickMenu) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest(".quick-menu")
+      ) {
+        return;
+      }
+      setQuickMenu(undefined);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [quickMenu]);
 
   useEffect(() => {
     if (!sidebarMenu) return;
@@ -1045,6 +1072,7 @@ export function WorkspaceLayout() {
       ["guide", () => openHelpPanel("guide")],
       ["new-api", () => openDialog({ mode: "api" })],
       ["new-folder", () => openDialog({ mode: "folder" })],
+      ["import-api", () => openImportRoute()],
       [
         "save-current",
         () => {
@@ -1052,21 +1080,7 @@ export function WorkspaceLayout() {
         },
       ],
       ["export-workspace", () => exportWorkspace()],
-      [
-        "import-curl",
-        async () => {
-          const text = await navigator.clipboard?.readText().catch(() => "");
-          if (!text) return;
-          const parsed = parseCurlCommand(text);
-          if (!parsed) return;
-          setPendingCurl(text);
-          setParsedCurl(parsed);
-          openDialog({ mode: "api" });
-          setDialogName(parsed.name);
-          setDialogProtocol(parsed.protocol);
-          setDialogMethod(parsed.method);
-        },
-      ],
+      ["import-curl", () => openImportRoute()],
       ["open-http", () => navigate("/http")],
       ["open-websocket", () => navigate("/websocket")],
       ["open-socket", () => navigate("/socket")],
@@ -1085,17 +1099,41 @@ export function WorkspaceLayout() {
       window.addEventListener(eventName, listener);
       return () => window.removeEventListener(eventName, listener);
     });
+    const handleImportedApis = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        ids?: string[];
+        activeApiId?: string;
+        protocol?: Protocol;
+        source?: "clipboard" | "manual";
+      }>).detail;
+      if (!detail?.ids?.length) return;
+      if (detail.source === "clipboard") {
+        setPendingImportText("");
+      }
+      const nextActiveApiId = detail.activeApiId ?? detail.ids[0];
+      updateOpenApiIds(
+        detail.ids.filter((id) => typeof id === "string"),
+        nextActiveApiId,
+      );
+      if (nextActiveApiId) setActiveApiId(nextActiveApiId);
+      if (detail.protocol) navigate(`/${detail.protocol}`);
+    };
+    window.addEventListener("api-forge:open-imported-apis", handleImportedApis);
     return () => {
       unsubscribe.forEach((dispose) => dispose());
+      window.removeEventListener(
+        "api-forge:open-imported-apis",
+        handleImportedApis,
+      );
     };
-  }, [navigate]);
+  }, [navigate, setActiveApiId, updateOpenApiIds]);
 
   useEffect(() => {
     function checkClipboard() {
       void navigator.clipboard
         ?.readText()
         .then((text) => {
-          setPendingCurl(parseCurlCommand(text) ? text : "");
+          setPendingImportText(parseApiImportText(text) ? text : "");
         })
         .catch(() => undefined);
     }
@@ -1141,16 +1179,29 @@ export function WorkspaceLayout() {
     function handleNewApi() {
       openDialog({ mode: "api" });
     }
+    function handleImportApi() {
+      void navigator.clipboard?.readText().then((text) => {
+        const parsed = parseApiImportText(text);
+        openImportRoute({
+          text: parsed ? text : "",
+          source: "clipboard",
+        });
+      });
+    }
     window.addEventListener("focus", checkClipboard);
     document.addEventListener("visibilitychange", checkClipboard);
     window.addEventListener("keydown", handleShortcut);
     window.addEventListener("api-forge:new-api", handleNewApi);
+    window.addEventListener("api-forge:import-api", handleImportApi);
+    window.addEventListener("api-forge:import-curl", handleImportApi);
     checkClipboard();
     return () => {
       window.removeEventListener("focus", checkClipboard);
       document.removeEventListener("visibilitychange", checkClipboard);
       window.removeEventListener("keydown", handleShortcut);
       window.removeEventListener("api-forge:new-api", handleNewApi);
+      window.removeEventListener("api-forge:import-api", handleImportApi);
+      window.removeEventListener("api-forge:import-curl", handleImportApi);
     };
   }, [activeApiId, helpOpen, location.pathname, openApiIds, saveNow, workspace]);
 
@@ -1429,6 +1480,14 @@ export function WorkspaceLayout() {
     );
   }
 
+  function openImportRoute(next?: {
+    parentId?: string;
+    text?: string;
+    source?: "clipboard" | "manual";
+  }) {
+    navigate("/import", { state: next });
+  }
+
   function changeDialogProtocol(protocol: Protocol) {
     setDialogProtocol(protocol);
     const methods = protocolMethods[protocol];
@@ -1447,67 +1506,29 @@ export function WorkspaceLayout() {
         method: dialogMethod,
       });
       if (id) {
-        if (parsedCurl)
-          updateRequest({
-            id,
-            name: dialogName,
-            description: dialogDescription.trim() || undefined,
-            protocol: parsedCurl.protocol,
-            method: parsedCurl.method,
-            url: parsedCurl.url,
-            params: parsedCurl.params.map((item, index) => ({
-              id: `${id}-param-${index}`,
-              ...item,
-            })),
-            headers: parsedCurl.headers.map((item, index) => ({
-              id: `${id}-header-${index}`,
-              ...item,
-            })),
-            body: parsedCurl.body,
-            bodyType: parsedCurl.bodyType,
-            formFields: parsedCurl.formFields?.map((item, index) => ({
-              id: `${id}-form-${index}`,
-              ...item,
-            })),
-            updatedAt: new Date().toISOString(),
-          });
-        else
-          updateRequest({
-            id,
-            name: dialogName,
-            description: dialogDescription.trim() || undefined,
-            protocol: dialogProtocol,
-            method: dialogMethod,
-            url: "",
-            params: [],
-            headers: [],
-            updatedAt: new Date().toISOString(),
-          });
+        updateRequest({
+          id,
+          name: dialogName,
+          description: dialogDescription.trim() || undefined,
+          protocol: dialogProtocol,
+          method: dialogMethod,
+          url: "",
+          params: [],
+          headers: [],
+          updatedAt: new Date().toISOString(),
+        });
         setActiveApiId(id);
-        setParsedCurl(undefined);
         scrollNewApiTabToEndRef.current = true;
         updateOpenApiIds(
           openApiIds.includes(id) ? openApiIds : [...openApiIds, id],
           id,
         );
-        navigate(`/${parsedCurl?.protocol ?? dialogProtocol}`);
+        navigate(`/${dialogProtocol}`);
       }
     }
     if (dialog.mode === "rename" && dialog.node)
       renameNode(dialog.node.id, dialogName);
     setDialog(undefined);
-  }
-
-  function importCurl() {
-    const parsed = parseCurlCommand(pendingCurl);
-    if (!parsed) return;
-    setPendingCurl("");
-    void navigator.clipboard?.writeText("").catch(() => undefined);
-    setParsedCurl(parsed);
-    openDialog({ mode: "api" });
-    setDialogName(parsed.name);
-    setDialogProtocol(parsed.protocol);
-    setDialogMethod(parsed.method);
   }
 
   function exportWorkspace() {
@@ -1678,12 +1699,22 @@ export function WorkspaceLayout() {
                   <ChevronsUp className="h-3.5 w-3.5" />
                 </button>
                 <button
-                  onClick={() => openDialog({ mode: "folder" })}
-                  className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                  title="新建目录"
-                  aria-label="新建目录"
+                  ref={quickMenuButtonRef}
+                  onClick={(event) => {
+                    const rect = quickMenuButtonRef.current?.getBoundingClientRect();
+                    setQuickMenu(
+                      rect
+                        ? { x: rect.left, y: rect.bottom + 4 }
+                        : { x: event.clientX, y: event.clientY },
+                    );
+                  }}
+                  className="inline-flex items-center gap-0.5 rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                  title="新建或导入"
+                  aria-label="新建或导入"
+                  aria-expanded={Boolean(quickMenu)}
                 >
                   <Plus className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3 w-3" />
                 </button>
               </div>
             </div>
@@ -1913,12 +1944,18 @@ export function WorkspaceLayout() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {pendingCurl && (
+            {pendingImport && (
               <button
-                onClick={importCurl}
-                className="flex h-9 w-24 animate-pulse items-center justify-center gap-2 rounded border border-amber-400/50 bg-amber-400/10 px-3 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
+                onClick={() =>
+                  openImportRoute({
+                    text: pendingImportText,
+                    source: "clipboard",
+                  })
+                }
+                className="flex h-9 items-center gap-2 rounded border border-amber-400/50 bg-amber-400/10 px-3 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
               >
-                从 curl 导入
+                <FileUp className="h-3.5 w-3.5" />
+                导入 API
               </button>
             )}
             <div className="flex h-9 w-36 min-w-0 items-center gap-2 rounded border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-300">
@@ -2029,6 +2066,44 @@ export function WorkspaceLayout() {
           </div>
         </>
       )}
+      {quickMenu &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setQuickMenu(undefined)}
+            />
+            <div
+              ref={quickMenuPortalRef}
+              className="quick-menu fixed z-50 w-52 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl"
+              style={{ left: quickMenu.x, top: quickMenu.y }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickMenu(undefined);
+                  openDialog({ mode: "folder" });
+                }}
+                className="flex h-8 w-full items-center gap-2 rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                创建目录（根目录）
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickMenu(undefined);
+                  openImportRoute();
+                }}
+                className="flex h-8 w-full items-center gap-2 rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                导入 API
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
       {sidebarMenu && (
         <div
           className="sidebar-context-menu fixed z-50 w-44 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl"
@@ -2053,6 +2128,16 @@ export function WorkspaceLayout() {
             className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
           >
             新建 API
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              openImportRoute({ parentId: sidebarMenu.parentId });
+              setSidebarMenu(undefined);
+            }}
+            className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+          >
+            导入 API
           </button>
           {sidebarMenu.kind !== "blank" && (
             <>
