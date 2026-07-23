@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path'
 import { homedir, platform, release, type as osType } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
@@ -16,6 +16,94 @@ const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
+
+function normalizeGitRemoteUrl(remoteUrl: string) {
+  if (remoteUrl.startsWith('git@')) {
+    const match = remoteUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/)
+    if (!match) return undefined
+    return `https://${match[1]}/${match[2].replace(/\.git$/, '')}`
+  }
+  if (remoteUrl.startsWith('https://') || remoteUrl.startsWith('http://')) {
+    return remoteUrl.replace(/\.git$/, '')
+  }
+  return undefined
+}
+
+function hasGitTag(tagName: string) {
+  try {
+    execFileSync('git', ['rev-parse', '--verify', `refs/tags/${tagName}`], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function resolveGitRemoteUrl() {
+  try {
+    const remotes = execFileSync('git', ['remote', '-v'], { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const remoteLine = remotes.find((line) => /\(fetch\)$/.test(line))
+    if (!remoteLine) return undefined
+    const remoteUrl = remoteLine.split(/\s+/)[1]
+    return remoteUrl ? normalizeGitRemoteUrl(remoteUrl) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function resolveVersionRef() {
+  const versionTag = `v${resolveApplicationVersion()}`
+  return hasGitTag(versionTag) ? versionTag : 'HEAD'
+}
+
+function resolvePreviousVersionTag(currentRef: string) {
+  try {
+    const tags = execFileSync('git', ['tag', '--sort=creatordate'], { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+    if (tags.length === 0) return undefined
+    if (currentRef === 'HEAD') return tags.at(-1)
+    const currentIndex = tags.indexOf(currentRef)
+    return currentIndex > 0 ? tags[currentIndex - 1] : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function resolveUpdateNotes() {
+  try {
+    const remoteUrl = resolveGitRemoteUrl()
+    const currentRef = resolveVersionRef()
+    const previousTag = resolvePreviousVersionTag(currentRef)
+    const range = previousTag ? `${previousTag}..${currentRef}` : currentRef
+    const rawLog = execFileSync('git', ['log', '--pretty=format:%H%x09%s', range], { encoding: 'utf8' }).trim()
+    if (!rawLog) return []
+    return rawLog
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, ...messageParts] = line.split('\t')
+        const message = messageParts.join('\t').trim()
+        const shortHash = hash.slice(0, 7)
+        return {
+          hash,
+          shortHash,
+          message,
+          url: remoteUrl ? `${remoteUrl}/commit/${hash}` : undefined,
+        }
+      })
+      .filter((item) => item.hash && item.message)
+  } catch {
+    return []
+  }
+}
+
 function resolveApplicationVersion() {
   const packagePath = isDev
     ? join(__dirname, '../../../package.json')
@@ -629,6 +717,8 @@ ipcMain.handle('app:get-info', () => ({
   arch: process.arch,
   osType: osType(),
   osRelease: release(),
+  updateNotesRange: `${resolvePreviousVersionTag(resolveVersionRef()) ?? '起点'}..${resolveVersionRef()}`,
+  updateNotes: resolveUpdateNotes(),
 }))
 ipcMain.handle('app:close-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()

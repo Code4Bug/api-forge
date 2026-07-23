@@ -170,6 +170,15 @@ export interface AppInfo {
   arch: string;
   osType: string;
   osRelease: string;
+  updateNotesRange?: string;
+  updateNotes?: AppUpdateNote[];
+}
+
+export interface AppUpdateNote {
+  hash: string;
+  shortHash: string;
+  message: string;
+  url?: string;
 }
 
 export interface AiMessage {

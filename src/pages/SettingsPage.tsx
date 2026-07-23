@@ -45,6 +45,8 @@ import {
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import {
   getActiveLightModel,
+  type AppInfo,
+  type AppUpdateNote,
   type LargeModelConfig,
   type LightModelConfig,
 } from "@/shared/ipc-contracts";
@@ -369,6 +371,8 @@ export default function SettingsPage() {
   );
   const [generatingSlogan, setGeneratingSlogan] = useState(false);
   const [appVersion, setAppVersion] = useState("");
+  const [updateNotes, setUpdateNotes] = useState<AppUpdateNote[]>([]);
+  const [updateNotesRange, setUpdateNotesRange] = useState("");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     state: "idle",
   });
@@ -442,7 +446,11 @@ export default function SettingsPage() {
   useEffect(() => {
     void window.desktopApi
       ?.getAppInfo()
-      .then((info) => setAppVersion(info.version))
+      .then((info: AppInfo) => {
+        setAppVersion(info.version);
+        setUpdateNotes(info.updateNotes ?? []);
+        setUpdateNotesRange(info.updateNotesRange ?? "");
+      })
       .catch(() => undefined);
     return window.desktopApi?.onUpdateStatus?.(setUpdateStatus);
   }, []);
@@ -1814,6 +1822,45 @@ export default function SettingsPage() {
                     />
                     检查新版本
                   </button>
+                </div>
+                <div className="mt-4 rounded border border-zinc-800 bg-zinc-900/30 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-medium text-zinc-200">更新日志</h3>
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        {updateNotesRange || "当前版本对应的 git 提交范围"}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-zinc-500">
+                      自动联动 git 提交日志
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {updateNotes.length > 0 ? (
+                      updateNotes.map((note) => (
+                        <a
+                          key={note.hash}
+                          href={note.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-start gap-2 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800/70 hover:text-cyan-200"
+                        >
+                          <GitFork className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+                          <span className="min-w-0 flex-1">
+                            <span className="mr-2 font-mono text-[11px] text-zinc-500">
+                              {note.shortHash}
+                            </span>
+                            {note.message}
+                          </span>
+                          <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
+                        </a>
+                      ))
+                    ) : (
+                      <div className="rounded border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-500">
+                        暂无可用的提交日志
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-3 text-xs text-zinc-500">
                   {updateStatus.state === "checking" && "正在检查更新..."}
