@@ -1539,6 +1539,17 @@ export function WorkspaceLayout() {
                   placeholder="搜索接口、目录、路径"
                   className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-500"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                    aria-label="清空搜索"
+                    title="清空搜索"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
