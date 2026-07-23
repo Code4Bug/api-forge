@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.2.22",
+  "version": "0.2.23",
   "license": "Apache-2.0",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
@@ -16,7 +16,7 @@
     "dev:web": "vite",
     "build": "tsc -b && tsc -p tsconfig.electron.json && vite build",
     "lint": "eslint .",
-    "test": "npm run check",
+    "test": "npm run check && node --test",
     "release:tag": "node scripts/release-tag.mjs",
     "preview": "vite preview",
     "check": "tsc -b --noEmit && tsc -p tsconfig.electron.json --noEmit",
@@ -81,6 +81,7 @@
       "dist/**/*",
       "dist-electron/**/*",
       "CHANGELOG.md",
+      "src/shared/**/*",
       "src/skills/**/*",
       "package.json"
     ],

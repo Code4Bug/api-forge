@@ -172,6 +172,8 @@ export interface AppInfo {
   osRelease: string;
   updateNotesRange?: string;
   updateNotes?: AppUpdateNote[];
+  updateNotesSource?: string;
+  releaseHtmlUrl?: string;
 }
 
 export interface AppUpdateNote {

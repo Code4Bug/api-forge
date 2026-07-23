@@ -33,3 +33,6 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 
 source-files/*
+
+
+*.js

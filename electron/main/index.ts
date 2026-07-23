@@ -11,12 +11,17 @@ import { execFile, execFileSync } from 'node:child_process'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import { fetchChangelogMarkdown, formatUpdateNotesInfo, getChangelogDownloadUrl, parseChangelogMarkdown } from '../../src/shared/changelog-utils.js'
 
 const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
 const releaseAssetCache = new Map<string, Promise<string | undefined>>()
+type GithubRelease = {
+  assets?: Array<{ name?: string; url?: string; browser_download_url?: string }>
+  html_url?: string
+}
 
 function normalizeGitRemoteUrl(remoteUrl: string) {
   if (remoteUrl.startsWith('git@')) {
@@ -92,7 +97,10 @@ function loadChangelogText() {
 
 function resolveGithubReleaseConfig() {
   try {
-    const packageJson = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) as {
+    const packagePath = isDev
+      ? join(__dirname, '../../../package.json')
+      : join(process.resourcesPath, 'app.asar', 'package.json')
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8')) as {
       build?: {
         publish?: {
           provider?: string
@@ -111,110 +119,99 @@ function resolveGithubReleaseConfig() {
   return undefined
 }
 
-async function fetchGithubReleaseChangelog(tagName: string) {
-  const cacheKey = tagName
-  if (!releaseAssetCache.has(cacheKey)) {
-    releaseAssetCache.set(cacheKey, (async () => {
-      const config = resolveGithubReleaseConfig()
-      if (!config) return undefined
+async function fetchGithubReleaseChangelog(downloadUrl: string) {
+  const cacheKey = downloadUrl
+  const cached = releaseAssetCache.get(cacheKey)
+  if (cached) return await cached
 
-      const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tagName)}`, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'API-forge',
-        },
-      })
-      if (!releaseResponse.ok) return undefined
+  const request = (async () => {
+    try {
+      const markdown = await fetchChangelogMarkdown(downloadUrl)
+      return markdown || undefined
+    } catch {
+      return undefined
+    }
+  })()
 
-      const release = await releaseResponse.json() as {
-        assets?: Array<{ name?: string; browser_download_url?: string }>
-      }
-      const changelogAsset = release.assets?.find((asset) => asset.name === 'CHANGELOG.md' && asset.browser_download_url)
-      if (!changelogAsset?.browser_download_url) return undefined
-
-      const changelogResponse = await fetch(changelogAsset.browser_download_url, {
-        headers: {
-          Accept: 'text/plain',
-          'User-Agent': 'API-forge',
-        },
-      })
-      if (!changelogResponse.ok) return undefined
-      return await changelogResponse.text()
-    })())
+  releaseAssetCache.set(cacheKey, request)
+  const result = await request
+  if (!result) {
+    releaseAssetCache.delete(cacheKey)
   }
-  return await releaseAssetCache.get(cacheKey)
+  return result
 }
 
-async function loadLatestReleaseChangelog() {
-  const versionTag = `v${resolveApplicationVersion()}`
-  const changelog = await fetchGithubReleaseChangelog(versionTag)
-  if (changelog) return changelog
-
+async function resolveGithubRelease(tagName: string) {
   const config = resolveGithubReleaseConfig()
-  if (config) {
-    try {
-      const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'API-forge',
-        },
-      })
-      if (releaseResponse.ok) {
-        const release = await releaseResponse.json() as {
-          assets?: Array<{ name?: string; browser_download_url?: string }>
-        }
-        const changelogAsset = release.assets?.find((asset) => asset.name === 'CHANGELOG.md' && asset.browser_download_url)
-        if (changelogAsset?.browser_download_url) {
-          const changelogResponse = await fetch(changelogAsset.browser_download_url, {
-            headers: {
-              Accept: 'text/plain',
-              'User-Agent': 'API-forge',
-            },
-          })
-          if (changelogResponse.ok) return await changelogResponse.text()
-        }
+  if (!config) return undefined
+
+  try {
+    const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/tags/${encodeURIComponent(tagName)}`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'API-forge',
+      },
+    })
+    if (!releaseResponse.ok) return undefined
+
+    return await releaseResponse.json() as GithubRelease
+  } catch {
+    return undefined
+  }
+}
+
+async function resolveLatestGithubRelease() {
+  const config = resolveGithubReleaseConfig()
+  if (!config) return undefined
+
+  try {
+    const releaseResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/releases/latest`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'API-forge',
+      },
+    })
+    if (!releaseResponse.ok) return undefined
+    return await releaseResponse.json() as GithubRelease
+  } catch {
+    return undefined
+  }
+}
+
+async function loadLatestReleaseInfo() {
+  const versionTag = `v${resolveApplicationVersion()}`
+  const versionRelease = await resolveGithubRelease(versionTag)
+  const versionDownloadUrl = versionRelease ? getChangelogDownloadUrl(versionRelease) : undefined
+  const changelog = versionDownloadUrl
+    ? await fetchGithubReleaseChangelog(versionDownloadUrl).catch(() => undefined)
+    : undefined
+  if (changelog) {
+    return { changelog, releaseHtmlUrl: versionRelease?.html_url }
+  }
+
+  const latestRelease = await resolveLatestGithubRelease()
+  if (latestRelease) {
+    const downloadUrl = getChangelogDownloadUrl(latestRelease)
+    if (downloadUrl) {
+      const latestChangelog = await fetchGithubReleaseChangelog(downloadUrl)
+      if (latestChangelog) {
+        return { changelog: latestChangelog, releaseHtmlUrl: latestRelease.html_url }
       }
-    } catch {
-      // 忽略，继续回退本地文件。
     }
   }
 
-  return loadChangelogText()
-}
-
-function parseChangelogNotes(markdown: string) {
-  const lines = markdown.split(/\r?\n/)
-  const sectionIndex = lines.findIndex((line) => /^##\s+/.test(line))
-  if (sectionIndex === -1) return { range: '', notes: [] as Array<{ hash: string; shortHash: string; message: string; url?: string }> }
-
-  const sectionTitle = lines[sectionIndex].replace(/^##\s+/, '').trim()
-  const rangeMatch = markdown.match(/生成范围：`([^`]+)`/)
-  const notes: Array<{ hash: string; shortHash: string; message: string; url?: string }> = []
-  for (let index = sectionIndex + 1; index < lines.length; index += 1) {
-    const line = lines[index].trim()
-    if (line.startsWith('## ')) break
-    const linkedMatch = line.match(/^- \[([0-9a-f]{7})\]\(([^)]+)\)\s+(.+)$/i)
-    const plainMatch = line.match(/^- ([0-9a-f]{7})\s+(.+)$/i)
-    const hash = linkedMatch?.[1] ?? plainMatch?.[1]
-    const url = linkedMatch?.[2]
-    const message = linkedMatch?.[3] ?? plainMatch?.[2]
-    if (!hash || !message) continue
-    notes.push({
-      hash,
-      shortHash: hash,
-      message,
-      url,
-    })
-  }
-  return { range: rangeMatch?.[1] ?? sectionTitle, notes }
+  return { changelog: loadChangelogText(), releaseHtmlUrl: latestRelease?.html_url }
 }
 
 async function resolveUpdateNotes() {
-  const changelog = await loadLatestReleaseChangelog()
+  const { changelog, releaseHtmlUrl } = await loadLatestReleaseInfo()
   if (changelog) {
-    const parsed = parseChangelogNotes(changelog)
+    const parsed = parseChangelogMarkdown(changelog)
     if (parsed.notes.length > 0) {
-      return parsed
+      return {
+        ...formatUpdateNotesInfo(parsed, '自动联动 CHANGELOG.md'),
+        releaseHtmlUrl,
+      }
     }
   }
 
@@ -242,9 +239,19 @@ async function resolveUpdateNotes() {
       })
       .filter((item) => item.hash && item.message)
       : []
-      return { range, notes }
+    return {
+      updateNotesRange: range,
+      updateNotes: notes,
+      updateNotesSource: '自动联动 git 提交日志',
+      releaseHtmlUrl,
+    }
   } catch {
-    return { range: '', notes: [] }
+    return {
+      updateNotesRange: '',
+      updateNotes: [],
+      updateNotesSource: '',
+      releaseHtmlUrl,
+    }
   }
 }
 

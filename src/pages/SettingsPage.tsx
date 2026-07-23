@@ -50,6 +50,7 @@ import {
   type LargeModelConfig,
   type LightModelConfig,
 } from "@/shared/ipc-contracts";
+import { getChangelogDownloadUrl, parseChangelogMarkdown } from "@/shared/changelog-utils.js";
 import type { UpdateStatus } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -373,6 +374,7 @@ export default function SettingsPage() {
   const [appVersion, setAppVersion] = useState("");
   const [updateNotes, setUpdateNotes] = useState<AppUpdateNote[]>([]);
   const [updateNotesRange, setUpdateNotesRange] = useState("");
+  const [releaseHtmlUrl, setReleaseHtmlUrl] = useState("");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     state: "idle",
   });
@@ -450,6 +452,7 @@ export default function SettingsPage() {
         setAppVersion(info.version);
         setUpdateNotes(info.updateNotes ?? []);
         setUpdateNotesRange(info.updateNotesRange ?? "");
+        setReleaseHtmlUrl(info.releaseHtmlUrl ?? "");
       })
       .catch(() => undefined);
     return window.desktopApi?.onUpdateStatus?.(setUpdateStatus);
@@ -658,7 +661,6 @@ export default function SettingsPage() {
   async function installUpdate() {
     await window.desktopApi?.installUpdate();
   }
-
   async function copyRepositoryAddress(address: string, name: string) {
     try {
       await navigator.clipboard.writeText(address);
@@ -1831,9 +1833,16 @@ export default function SettingsPage() {
                         {updateNotesRange || "当前版本对应的 git 提交范围"}
                       </p>
                     </div>
-                    <span className="text-[11px] text-zinc-500">
-                      自动联动 git 提交日志
-                    </span>
+                    {releaseHtmlUrl ? (
+                      <a
+                        href={releaseHtmlUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 hover:border-cyan-400 hover:text-cyan-200"
+                      >
+                        打开版本页
+                      </a>
+                    ) : null}
                   </div>
                   <div className="mt-3 space-y-2">
                     {updateNotes.length > 0 ? (
@@ -1843,29 +1852,12 @@ export default function SettingsPage() {
                           className="flex items-start gap-2 rounded px-2 py-1 text-xs text-zinc-300"
                         >
                           <GitFork className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
-                          {note.url ? (
-                            <a
-                              href={note.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="min-w-0 flex-1 hover:text-cyan-200"
-                            >
-                              <span className="mr-2 font-mono text-[11px] text-zinc-500">
-                                {note.shortHash}
-                              </span>
-                              {note.message}
-                            </a>
-                          ) : (
-                            <span className="min-w-0 flex-1">
-                              <span className="mr-2 font-mono text-[11px] text-zinc-500">
-                                {note.shortHash}
-                              </span>
-                              {note.message}
+                          <span className="min-w-0 flex-1">
+                            <span className="mr-2 font-mono text-[11px] text-zinc-500">
+                              {note.shortHash}
                             </span>
-                          )}
-                          {note.url && (
-                            <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
-                          )}
+                            {note.message}
+                          </span>
                         </div>
                       ))
                     ) : (
