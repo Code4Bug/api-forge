@@ -11,7 +11,7 @@ import { execFile, execFileSync } from 'node:child_process'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
-import { fetchChangelogMarkdown, formatUpdateNotesInfo, getChangelogDownloadUrl, parseChangelogMarkdown } from '../../src/shared/changelog-utils.js'
+import { fetchChangelogMarkdown, getChangelogDownloadUrl, parseChangelogMarkdown } from '../../src/shared/changelog-utils.js'
 
 const { autoUpdater } = electronUpdater
 
@@ -21,78 +21,6 @@ const releaseAssetCache = new Map<string, Promise<string | undefined>>()
 type GithubRelease = {
   assets?: Array<{ name?: string; url?: string; browser_download_url?: string }>
   html_url?: string
-}
-
-function normalizeGitRemoteUrl(remoteUrl: string) {
-  if (remoteUrl.startsWith('git@')) {
-    const match = remoteUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/)
-    if (!match) return undefined
-    return `https://${match[1]}/${match[2].replace(/\.git$/, '')}`
-  }
-  if (remoteUrl.startsWith('https://') || remoteUrl.startsWith('http://')) {
-    return remoteUrl.replace(/\.git$/, '')
-  }
-  return undefined
-}
-
-function hasGitTag(tagName: string) {
-  try {
-    execFileSync('git', ['rev-parse', '--verify', `refs/tags/${tagName}`], { stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
-
-function resolveGitRemoteUrl() {
-  try {
-    const remotes = execFileSync('git', ['remote', '-v'], { encoding: 'utf8' })
-      .trim()
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-    const remoteLine = remotes.find((line) => /\(fetch\)$/.test(line))
-    if (!remoteLine) return undefined
-    const remoteUrl = remoteLine.split(/\s+/)[1]
-    return remoteUrl ? normalizeGitRemoteUrl(remoteUrl) : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function resolveVersionRef() {
-  const versionTag = `v${resolveApplicationVersion()}`
-  return hasGitTag(versionTag) ? versionTag : 'HEAD'
-}
-
-function resolvePreviousVersionTag(currentRef: string) {
-  try {
-    const tags = execFileSync('git', ['tag', '--sort=creatordate'], { encoding: 'utf8' })
-      .trim()
-      .split('\n')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-    if (tags.length === 0) return undefined
-    if (currentRef === 'HEAD') return tags.at(-1)
-    const currentIndex = tags.indexOf(currentRef)
-    return currentIndex > 0 ? tags[currentIndex - 1] : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function resolveChangelogPath() {
-  return isDev
-    ? join(__dirname, '../../../CHANGELOG.md')
-    : join(app.getAppPath(), 'CHANGELOG.md')
-}
-
-function loadChangelogText() {
-  try {
-    return readFileSync(resolveChangelogPath(), 'utf8')
-  } catch {
-    return undefined
-  }
 }
 
 function resolveGithubReleaseConfig() {
@@ -200,7 +128,7 @@ async function loadLatestReleaseInfo() {
     }
   }
 
-  return { changelog: loadChangelogText(), releaseHtmlUrl: latestRelease?.html_url }
+  return { changelog: undefined, releaseHtmlUrl: latestRelease?.html_url ?? versionRelease?.html_url }
 }
 
 async function resolveUpdateNotes() {
@@ -209,49 +137,17 @@ async function resolveUpdateNotes() {
     const parsed = parseChangelogMarkdown(changelog)
     if (parsed.notes.length > 0) {
       return {
-        ...formatUpdateNotesInfo(parsed, '自动联动 CHANGELOG.md'),
+        updateNotesRange: parsed.range,
+        updateNotes: parsed.notes,
         releaseHtmlUrl,
       }
     }
   }
 
-  try {
-    const remoteUrl = resolveGitRemoteUrl()
-    const currentRef = resolveVersionRef()
-    const previousTag = resolvePreviousVersionTag(currentRef)
-    const range = previousTag ? `${previousTag}..${currentRef}` : currentRef
-    const rawLog = execFileSync('git', ['log', '--pretty=format:%H%x09%s', range], { encoding: 'utf8' }).trim()
-    const notes = rawLog
-      ? rawLog
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [hash, ...messageParts] = line.split('\t')
-        const message = messageParts.join('\t').trim()
-        const shortHash = hash.slice(0, 7)
-        return {
-          hash,
-          shortHash,
-          message,
-          url: remoteUrl ? `${remoteUrl}/commit/${hash}` : undefined,
-        }
-      })
-      .filter((item) => item.hash && item.message)
-      : []
-    return {
-      updateNotesRange: range,
-      updateNotes: notes,
-      updateNotesSource: '自动联动 git 提交日志',
-      releaseHtmlUrl,
-    }
-  } catch {
-    return {
-      updateNotesRange: '',
-      updateNotes: [],
-      updateNotesSource: '',
-      releaseHtmlUrl,
-    }
+  return {
+    updateNotesRange: '',
+    updateNotes: [],
+    releaseHtmlUrl,
   }
 }
 

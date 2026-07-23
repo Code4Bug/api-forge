@@ -2,7 +2,6 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fetchChangelogMarkdown,
-  formatUpdateNotesInfo,
   getChangelogDownloadUrl,
   parseChangelogMarkdown,
   selectChangelogAsset,
@@ -63,25 +62,6 @@ test('没有 section 时返回空结果', () => {
   const parsed = parseChangelogMarkdown('# CHANGELOG\n\n没有版本段')
   assert.equal(parsed.range, '')
   assert.deepEqual(parsed.notes, [])
-})
-
-test('将解析结果映射为应用更新日志字段', () => {
-  const parsed = {
-    range: 'v0.2.21..v0.2.22',
-    notes: [
-      {
-        hash: 'a84e135',
-        shortHash: 'a84e135',
-        message: 'ci(github workflow): 新增打包更新日志并上传，优化更新日志加载逻辑',
-      },
-    ],
-  }
-
-  assert.deepEqual(formatUpdateNotesInfo(parsed, '自动联动 CHANGELOG.md'), {
-    updateNotesRange: 'v0.2.21..v0.2.22',
-    updateNotes: parsed.notes,
-    updateNotesSource: '自动联动 CHANGELOG.md',
-  })
 })
 
 test('按下载地址获取 CHANGELOG 内容', async () => {

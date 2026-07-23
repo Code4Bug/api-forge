@@ -9,11 +9,6 @@ export interface ChangelogParseResult {
   range: string;
   notes: ChangelogNote[];
 }
-export interface AppUpdateNotesInfo {
-  updateNotesRange: string;
-  updateNotes: ChangelogNote[];
-  updateNotesSource: string;
-}
 
 export interface ReleaseAsset {
   name?: string;
@@ -36,7 +31,3 @@ export function fetchChangelogMarkdown(
   fetchImpl?: typeof fetch,
 ): Promise<string>;
 export function parseChangelogMarkdown(markdown: string): ChangelogParseResult;
-export function formatUpdateNotesInfo(
-  parsed: ChangelogParseResult,
-  source: string,
-): AppUpdateNotesInfo;

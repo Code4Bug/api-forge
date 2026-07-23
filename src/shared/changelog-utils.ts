@@ -10,12 +10,6 @@ export interface ChangelogParseResult {
   notes: ChangelogNote[];
 }
 
-export interface AppUpdateNotesInfo {
-  updateNotesRange: string;
-  updateNotes: ChangelogNote[];
-  updateNotesSource: string;
-}
-
 export interface ReleaseAsset {
   name?: string;
   url?: string;
@@ -94,15 +88,4 @@ export function parseChangelogMarkdown(markdown: string): ChangelogParseResult {
   }
 
   return { range: rangeMatch?.[1] ?? sectionTitle, notes };
-}
-
-export function formatUpdateNotesInfo(
-  parsed: ChangelogParseResult,
-  source: string,
-): AppUpdateNotesInfo {
-  return {
-    updateNotesRange: parsed.range,
-    updateNotes: parsed.notes,
-    updateNotesSource: source,
-  };
 }
