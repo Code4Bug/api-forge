@@ -58,34 +58,46 @@ export async function fetchChangelogMarkdown(
 export function parseChangelogMarkdown(markdown: string): ChangelogParseResult {
   const lines = String(markdown ?? "").split(/\r?\n/);
   const sectionIndex = lines.findIndex((line) => /^##\s+/.test(line));
-  if (sectionIndex === -1) {
-    return { range: "", notes: [] };
-  }
-
-  const sectionTitle = lines[sectionIndex].replace(/^##\s+/, "").trim();
   const rangeMatch = String(markdown ?? "").match(/生成范围：`([^`]+)`/);
   const notes: ChangelogNote[] = [];
 
-  for (let index = sectionIndex + 1; index < lines.length; index += 1) {
-    const line = lines[index].trim();
-    if (line.startsWith("## ")) break;
+  const collectNotes = (targetLines: string[]) => {
+    for (const rawLine of targetLines) {
+      const line = rawLine.trim();
+      const linkedMatch = line.match(
+        /^- \[([0-9a-f]{7,40})\]\(([^)]+)\)\s+(.+)$/i,
+      );
+      const plainMatch = line.match(/^- ([0-9a-f]{7,40})\s+(.+)$/i);
+      const hash = linkedMatch?.[1] ?? plainMatch?.[1];
+      const url = linkedMatch?.[2];
+      const message = linkedMatch?.[3] ?? plainMatch?.[2];
+      if (!hash || !message) continue;
 
-    const linkedMatch = line.match(
-      /^- \[([0-9a-f]{7})\]\(([^)]+)\)\s+(.+)$/i,
-    );
-    const plainMatch = line.match(/^- ([0-9a-f]{7})\s+(.+)$/i);
-    const hash = linkedMatch?.[1] ?? plainMatch?.[1];
-    const url = linkedMatch?.[2];
-    const message = linkedMatch?.[3] ?? plainMatch?.[2];
-    if (!hash || !message) continue;
+      notes.push({
+        hash,
+        shortHash: hash.slice(0, 7),
+        message,
+        url,
+      });
+    }
+  };
 
-    notes.push({
-      hash,
-      shortHash: hash,
-      message,
-      url,
-    });
+  if (sectionIndex !== -1) {
+    const sectionTitle = lines[sectionIndex].replace(/^##\s+/, "").trim();
+    for (let index = sectionIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index].trim();
+      if (line.startsWith("## ")) break;
+      collectNotes([line]);
+    }
+
+    if (notes.length > 0) {
+      return { range: rangeMatch?.[1] ?? sectionTitle, notes };
+    }
+
+    collectNotes(lines);
+    return { range: rangeMatch?.[1] ?? sectionTitle, notes };
   }
 
-  return { range: rangeMatch?.[1] ?? sectionTitle, notes };
+  collectNotes(lines);
+  return { range: rangeMatch?.[1] ?? "", notes };
 }

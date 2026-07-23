@@ -21,6 +21,7 @@ const releaseAssetCache = new Map<string, Promise<string | undefined>>()
 type GithubRelease = {
   assets?: Array<{ name?: string; url?: string; browser_download_url?: string }>
   html_url?: string
+  body?: string
 }
 
 function resolveGithubReleaseConfig() {
@@ -69,6 +70,20 @@ async function fetchGithubReleaseChangelog(downloadUrl: string) {
   return result
 }
 
+async function resolveReleaseChangelog(release?: GithubRelease) {
+  if (!release) return undefined
+
+  const downloadUrl = getChangelogDownloadUrl(release)
+  if (downloadUrl) {
+    const markdown = await fetchGithubReleaseChangelog(downloadUrl)
+    if (markdown) {
+      return markdown
+    }
+  }
+
+  return release.body?.trim() || undefined
+}
+
 async function resolveGithubRelease(tagName: string) {
   const config = resolveGithubReleaseConfig()
   if (!config) return undefined
@@ -109,22 +124,16 @@ async function resolveLatestGithubRelease() {
 async function loadLatestReleaseInfo() {
   const versionTag = `v${resolveApplicationVersion()}`
   const versionRelease = await resolveGithubRelease(versionTag)
-  const versionDownloadUrl = versionRelease ? getChangelogDownloadUrl(versionRelease) : undefined
-  const changelog = versionDownloadUrl
-    ? await fetchGithubReleaseChangelog(versionDownloadUrl).catch(() => undefined)
-    : undefined
+  const changelog = await resolveReleaseChangelog(versionRelease)
   if (changelog) {
     return { changelog, releaseHtmlUrl: versionRelease?.html_url }
   }
 
   const latestRelease = await resolveLatestGithubRelease()
   if (latestRelease) {
-    const downloadUrl = getChangelogDownloadUrl(latestRelease)
-    if (downloadUrl) {
-      const latestChangelog = await fetchGithubReleaseChangelog(downloadUrl)
-      if (latestChangelog) {
-        return { changelog: latestChangelog, releaseHtmlUrl: latestRelease.html_url }
-      }
+    const latestChangelog = await resolveReleaseChangelog(latestRelease)
+    if (latestChangelog) {
+      return { changelog: latestChangelog, releaseHtmlUrl: latestRelease.html_url }
     }
   }
 

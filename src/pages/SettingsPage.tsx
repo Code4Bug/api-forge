@@ -680,6 +680,13 @@ export default function SettingsPage() {
     setRepoActionMessage("已在默认浏览器打开");
   }
 
+  async function openReleasePage() {
+    if (!releaseHtmlUrl) return;
+    const result = await window.desktopApi?.openExternal?.(releaseHtmlUrl);
+    if (!result || result.ok) return;
+    window.open(releaseHtmlUrl, "_blank", "noopener,noreferrer");
+  }
+
   function exportSettings() {
     const settings = {
       version: 1,
@@ -1834,14 +1841,13 @@ export default function SettingsPage() {
                       </p>
                     </div>
                     {releaseHtmlUrl ? (
-                      <a
-                        href={releaseHtmlUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => void openReleasePage()}
                         className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 hover:border-cyan-400 hover:text-cyan-200"
                       >
                         打开版本页
-                      </a>
+                      </button>
                     ) : null}
                   </div>
                   <div className="mt-3 space-y-2">
@@ -1862,7 +1868,9 @@ export default function SettingsPage() {
                       ))
                     ) : (
                       <div className="rounded border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-500">
-                        暂无可用的提交日志
+                        {releaseHtmlUrl
+                          ? "已获取版本信息，但未解析到可展示的日志条目"
+                          : "未获取到可用的更新日志内容"}
                       </div>
                     )}
                   </div>

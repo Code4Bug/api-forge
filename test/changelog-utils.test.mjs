@@ -5,7 +5,7 @@ import {
   getChangelogDownloadUrl,
   parseChangelogMarkdown,
   selectChangelogAsset,
-} from '../src/shared/changelog-utils.js'
+} from '../src/shared/changelog-utils.ts'
 
 test('优先选择 CHANGELOG.md 资产的下载地址', () => {
   const release = {
@@ -59,9 +59,16 @@ test('解析带链接的更新日志条目', () => {
 })
 
 test('没有 section 时返回空结果', () => {
-  const parsed = parseChangelogMarkdown('# CHANGELOG\n\n没有版本段')
+  const parsed = parseChangelogMarkdown('\n- [a84e135](https://github.com/Code4Bug/api-forge/commit/a84e1356c0107aa3c336dd957851594e468adb3b) ci(github workflow): 新增打包更新日志并上传，优化更新日志加载逻辑\n')
+
   assert.equal(parsed.range, '')
-  assert.deepEqual(parsed.notes, [])
+  assert.equal(parsed.notes.length, 1)
+  assert.deepEqual(parsed.notes[0], {
+    hash: 'a84e135',
+    shortHash: 'a84e135',
+    message: 'ci(github workflow): 新增打包更新日志并上传，优化更新日志加载逻辑',
+    url: 'https://github.com/Code4Bug/api-forge/commit/a84e1356c0107aa3c336dd957851594e468adb3b',
+  })
 })
 
 test('按下载地址获取 CHANGELOG 内容', async () => {
