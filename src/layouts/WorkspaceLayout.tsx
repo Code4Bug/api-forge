@@ -77,6 +77,27 @@ function normalizeSearchQuery(query: string) {
   return query.trim().toLowerCase();
 }
 
+function isInteractiveSidebarTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(
+      target.closest(
+        "button, input, textarea, select, option, a, [contenteditable='true']",
+      ),
+    )
+  );
+}
+
+function getSidebarContextParentId(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return undefined;
+  const treeNode = target.closest<HTMLElement>("[data-tree-node-id]");
+  if (!treeNode) return undefined;
+  const nodeType = treeNode.dataset.treeNodeType;
+  if (nodeType === "folder") return treeNode.dataset.treeNodeId;
+  if (nodeType === "api") return treeNode.dataset.treeNodeParentId || undefined;
+  return undefined;
+}
+
 function treeNodeMatchesQuery(
   node: ApiTreeNode,
   normalizedQuery: string,
@@ -546,7 +567,11 @@ function TreeNode({
   }
 
   return (
-    <div>
+    <div
+      data-tree-node-id={node.id}
+      data-tree-node-type={node.type}
+      data-tree-node-parent-id={node.parentId ?? ""}
+    >
       <div
         role="button"
         tabIndex={0}
@@ -839,6 +864,11 @@ export function WorkspaceLayout() {
     x: number;
     y: number;
   }>();
+  const [sidebarMenu, setSidebarMenu] = useState<{
+    x: number;
+    y: number;
+    parentId?: string;
+  }>();
   const [dialog, setDialog] = useState<{
     mode: "folder" | "api" | "rename";
     parentId?: string;
@@ -925,15 +955,16 @@ export function WorkspaceLayout() {
   }, [resizingSidebar]);
 
   useEffect(() => {
-    if (!dialog && !tabMenu) return;
+    if (!dialog && !tabMenu && !sidebarMenu) return;
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (dialog) setDialog(undefined);
       else if (tabMenu) setTabMenu(undefined);
+      else if (sidebarMenu) setSidebarMenu(undefined);
     }
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [dialog, tabMenu]);
+  }, [dialog, tabMenu, sidebarMenu]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -1482,6 +1513,16 @@ export function WorkspaceLayout() {
       <aside
         className={`relative z-20 flex shrink-0 flex-col overflow-visible border-r border-zinc-800 bg-[#0f141b] ${resizingSidebar ? "select-none" : "transition-[width] duration-150"}`}
         style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}
+        onContextMenu={(event) => {
+          if (isInteractiveSidebarTarget(event.target)) return;
+          event.preventDefault();
+          setTabMenu(undefined);
+          setSidebarMenu({
+            x: event.clientX,
+            y: event.clientY,
+            parentId: getSidebarContextParentId(event.target),
+          });
+        }}
       >
         <div
           className={`api-forge-brand flex h-14 items-center border-b border-zinc-800 ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-4"}`}
@@ -1923,6 +1964,40 @@ export function WorkspaceLayout() {
               className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-rose-200 hover:bg-rose-500/15"
             >
               关闭所有
+            </button>
+          </div>
+        </>
+      )}
+      {sidebarMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setSidebarMenu(undefined)}
+          />
+          <div
+            className="fixed z-50 w-44 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl"
+            style={{ left: sidebarMenu.x, top: sidebarMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                openDialog({ mode: "folder", parentId: sidebarMenu.parentId });
+                setSidebarMenu(undefined);
+              }}
+              className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+            >
+              新建目录
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                openDialog({ mode: "api", parentId: sidebarMenu.parentId });
+                setSidebarMenu(undefined);
+              }}
+              className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+            >
+              新建 API
             </button>
           </div>
         </>
