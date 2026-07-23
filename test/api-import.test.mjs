@@ -71,3 +71,58 @@ test("OpenAPI 文档会按路径导入", () => {
   assert.equal(parsed?.items[0]?.url, "https://api.example.com/orders/1001");
   assert.equal(parsed?.items[0]?.params[0]?.key, "from");
 });
+
+test("OpenAPI requestBody 的本地引用会解析为 body", () => {
+  const parsed = parseApiImportText(
+    JSON.stringify({
+      openapi: "3.0.3",
+      info: { title: "Demo API", version: "1.0.0" },
+      servers: [{ url: "https://api.example.com" }],
+      paths: {
+        "/v1/chat/completions": {
+          post: {
+            summary: "Chat Completion",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/ChatRequest",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      components: {
+        schemas: {
+          ChatRequest: {
+            type: "object",
+            properties: {
+              model: { type: "string" },
+              messages: {
+                type: "array",
+                items: {
+                  $ref: "#/components/schemas/Message",
+                },
+              },
+            },
+          },
+          Message: {
+            type: "object",
+            properties: {
+              role: { type: "string" },
+              content: { type: "string" },
+            },
+          },
+        },
+      },
+    }),
+  );
+
+  assert.equal(parsed?.source, "openapi");
+  assert.equal(parsed?.items.length, 1);
+  assert.ok(parsed?.items[0]?.body?.includes('"model"'));
+  assert.ok(parsed?.items[0]?.body?.includes('"messages"'));
+});

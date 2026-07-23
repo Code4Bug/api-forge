@@ -97,9 +97,45 @@ function parseQueryLikeValue(value: unknown, index: number) {
   ].filter((item) => item.key);
 }
 
-function exampleFromSchema(schema: unknown): unknown {
-  if (!schema || typeof schema !== "object") return undefined;
+function getOpenApiComponent(
+  document: Record<string, unknown> | undefined,
+  ref: string,
+): unknown {
+  if (!document || !ref.startsWith("#/")) return undefined;
+  const parts = ref.slice(2).split("/").filter(Boolean);
+  let current: unknown = document;
+  for (const part of parts) {
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function resolveOpenApiSchema(
+  schema: unknown,
+  document: Record<string, unknown> | undefined,
+  seenRefs = new Set<string>(),
+): unknown {
+  if (!schema || typeof schema !== "object") return schema;
   const record = schema as Record<string, unknown>;
+  if (typeof record.$ref === "string") {
+    const ref = record.$ref;
+    if (seenRefs.has(ref)) return undefined;
+    const resolved = getOpenApiComponent(document, ref);
+    if (resolved === undefined) return undefined;
+    seenRefs.add(ref);
+    return resolveOpenApiSchema(resolved, document, seenRefs);
+  }
+  return schema;
+}
+
+function exampleFromSchema(
+  schema: unknown,
+  document?: Record<string, unknown>,
+): unknown {
+  const resolved = resolveOpenApiSchema(schema, document);
+  if (!resolved || typeof resolved !== "object") return undefined;
+  const record = resolved as Record<string, unknown>;
   if (record.example !== undefined) return record.example;
   if (record.default !== undefined) return record.default;
   if (Array.isArray(record.enum) && record.enum.length > 0)
@@ -119,13 +155,13 @@ function exampleFromSchema(schema: unknown): unknown {
         : {};
     const result: Record<string, unknown> = {};
     for (const [key, childSchema] of Object.entries(properties)) {
-      const child = exampleFromSchema(childSchema);
+      const child = exampleFromSchema(childSchema, document);
       if (child !== undefined) result[key] = child;
     }
     return result;
   }
   if (type === "array" || record.items) {
-    const item = exampleFromSchema(record.items);
+    const item = exampleFromSchema(record.items, document);
     return item === undefined ? [] : [item];
   }
   if (type === "integer" || type === "number") return 0;
@@ -377,6 +413,7 @@ function buildOpenApiRequest(
   path: string,
   operation: Record<string, unknown>,
   servers: unknown,
+  document: Record<string, unknown> | undefined,
   index: number,
 ): ImportedApiRequest {
   const serverList = Array.isArray(servers) ? servers : [];
@@ -398,12 +435,12 @@ function buildOpenApiRequest(
     ) as Record<string, unknown> | undefined;
     const schema =
       parameter && typeof parameter.schema === "object"
-        ? parameter.schema
+        ? resolveOpenApiSchema(parameter.schema, document)
         : undefined;
     const value =
       parameter?.example ??
       parameter?.default ??
-      (schema ? exampleFromSchema(schema) : undefined);
+      (schema ? exampleFromSchema(schema, document) : undefined);
     return value === undefined || value === null ? match : String(value);
   });
   const url = basePath
@@ -430,7 +467,7 @@ function buildOpenApiRequest(
         valueToText(
           record.example ??
             record.default ??
-            (schema ? exampleFromSchema(schema) : undefined),
+            (schema ? exampleFromSchema(schema, document) : undefined),
         ),
       );
     })
@@ -453,7 +490,7 @@ function buildOpenApiRequest(
         valueToText(
           record.example ??
             record.default ??
-            (schema ? exampleFromSchema(schema) : undefined),
+            (schema ? exampleFromSchema(schema, document) : undefined),
         ),
       );
     })
@@ -492,7 +529,7 @@ function buildOpenApiRequest(
     (contentValue?.examples && typeof contentValue.examples === "object"
       ? Object.values(contentValue.examples as Record<string, unknown>)[0]
       : undefined) ??
-    (contentValue?.schema ? exampleFromSchema(contentValue.schema) : undefined);
+    (contentValue?.schema ? exampleFromSchema(contentValue.schema, document) : undefined);
 
   if (contentType === "application/x-www-form-urlencoded") {
     return {
@@ -637,6 +674,7 @@ function flattenPostmanItems(
 function flattenOpenApiPaths(
   paths: unknown,
   servers: unknown,
+  document: Record<string, unknown> | undefined,
 ): ImportedApiRequest[] {
   if (!paths || typeof paths !== "object") return [];
   return Object.entries(paths as Record<string, unknown>).flatMap(
@@ -650,6 +688,7 @@ function flattenOpenApiPaths(
             path,
             operation as Record<string, unknown>,
             servers,
+            document,
             index,
           ),
         );
@@ -705,7 +744,7 @@ export function parseApiImportText(value: string): ParsedApiImport | undefined {
   const isOpenApi = typeof record.openapi === "string";
   const isSwagger = typeof record.swagger === "string";
   if ((isOpenApi || isSwagger) && record.paths && typeof record.paths === "object") {
-    const items = flattenOpenApiPaths(record.paths, record.servers);
+    const items = flattenOpenApiPaths(record.paths, record.servers, record);
     if (items.length > 0) {
       return {
         source: isOpenApi ? "openapi" : "swagger",
