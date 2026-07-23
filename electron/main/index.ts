@@ -16,6 +16,17 @@ const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
+type ReleaseArtifact = {
+  version?: string
+  tag?: string
+  range?: string
+  notes?: Array<{
+    hash: string
+    shortHash: string
+    message: string
+    url?: string
+  }>
+}
 
 function normalizeGitRemoteUrl(remoteUrl: string) {
   if (remoteUrl.startsWith('git@')) {
@@ -75,15 +86,39 @@ function resolvePreviousVersionTag(currentRef: string) {
   }
 }
 
+function resolveReleaseJsonPath() {
+  return isDev
+    ? join(__dirname, '../../../release.json')
+    : join(process.resourcesPath, 'app.asar', 'release.json')
+}
+
+function loadReleaseArtifact() {
+  try {
+    const artifact = JSON.parse(readFileSync(resolveReleaseJsonPath(), 'utf8')) as ReleaseArtifact
+    if (Array.isArray(artifact.notes) && artifact.notes.length > 0) return artifact
+  } catch {
+    // 忽略，回退到运行时读取 git 日志。
+  }
+  return undefined
+}
+
 function resolveUpdateNotes() {
+  const releaseArtifact = loadReleaseArtifact()
+  if (releaseArtifact?.notes?.length) {
+    return {
+      range: releaseArtifact.range ?? '',
+      notes: releaseArtifact.notes,
+    }
+  }
+
   try {
     const remoteUrl = resolveGitRemoteUrl()
     const currentRef = resolveVersionRef()
     const previousTag = resolvePreviousVersionTag(currentRef)
     const range = previousTag ? `${previousTag}..${currentRef}` : currentRef
     const rawLog = execFileSync('git', ['log', '--pretty=format:%H%x09%s', range], { encoding: 'utf8' }).trim()
-    if (!rawLog) return []
-    return rawLog
+    const notes = rawLog
+      ? rawLog
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
@@ -99,8 +134,10 @@ function resolveUpdateNotes() {
         }
       })
       .filter((item) => item.hash && item.message)
+      : []
+    return { range, notes }
   } catch {
-    return []
+    return { range: '', notes: [] }
   }
 }
 
@@ -717,8 +754,7 @@ ipcMain.handle('app:get-info', () => ({
   arch: process.arch,
   osType: osType(),
   osRelease: release(),
-  updateNotesRange: `${resolvePreviousVersionTag(resolveVersionRef()) ?? '起点'}..${resolveVersionRef()}`,
-  updateNotes: resolveUpdateNotes(),
+  ...resolveUpdateNotes(),
 }))
 ipcMain.handle('app:close-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
