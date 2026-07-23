@@ -104,7 +104,6 @@
     },
     "linux": {
       "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "afterInstall": "build/linux/deb-after-install.sh",
       "target": [
         {
           "target": "AppImage",
@@ -122,6 +121,9 @@
         }
       ],
       "category": "Utility"
+    },
+    "deb": {
+      "afterInstall": "build/linux/deb-after-install.sh"
     }
   }
 }
