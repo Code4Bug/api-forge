@@ -52,6 +52,7 @@ import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { Modal } from "@/components/common/Modal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { Drawer } from "@/components/common/Drawer";
+import { buildCurlCommand } from "@/utils/curl";
 
 type AppMenuAction =
   | "about"
@@ -1172,19 +1173,9 @@ export function WorkspaceLayout() {
 
   async function copyNodeCurl(node: ApiTreeNode) {
     const request = workspace?.requests.find((item) => item.id === node.id);
-    const method = request?.method ?? node.method ?? "GET";
-    const url = request?.url || "";
-    const parts = [`curl -X ${method} '${url.replace(/'/g, "'\\''")}'`];
-    request?.headers
-      ?.filter((item) => item.enabled && item.key)
-      .forEach((item) =>
-        parts.push(
-          `-H '${`${item.key}: ${item.value}`.replace(/'/g, "'\\''")}'`,
-        ),
-      );
-    if (request?.body)
-      parts.push(`--data-raw '${request.body.replace(/'/g, "'\\''")}'`);
-    const command = parts.join(" \\\n  ");
+    const command = request
+      ? buildCurlCommand(request)
+      : `curl -X ${node.method ?? "GET"} ''`;
     try {
       await navigator.clipboard?.writeText(command);
     } catch {
