@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Check,
   Clock3,
@@ -282,6 +283,7 @@ const settingsCategories: Array<{
 ];
 
 export default function SettingsPage() {
+  const location = useLocation();
   const {
     theme,
     setTheme,
@@ -346,6 +348,11 @@ export default function SettingsPage() {
   >();
   const settingsFileInputRef = useRef<HTMLInputElement>(null);
   const customColorMode = getThemeMode(customColors);
+
+  useEffect(() => {
+    const state = location.state as { category?: SettingsCategory } | null;
+    if (state?.category) setActiveCategory(state.category);
+  }, [location.state]);
 
   useEffect(() => setCustomColors(customTheme), [customTheme]);
   const largeModels = workspace?.preferences.largeModels ?? [];

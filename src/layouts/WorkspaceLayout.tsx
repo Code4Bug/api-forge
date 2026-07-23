@@ -66,6 +66,7 @@ type AppMenuAction =
   | "open-ai"
   | "open-test"
   | "open-settings"
+  | "open-settings-application"
   | "shortcuts"
   | "guide";
 
@@ -933,6 +934,7 @@ export function WorkspaceLayout() {
       ["open-ai", () => navigate("/ai")],
       ["open-test", () => navigate("/test")],
       ["open-settings", () => navigate("/settings")],
+      ["open-settings-application", () => navigate("/settings", { state: { category: "application" } })],
     ];
     const unsubscribe = handlers.map(([action, handler]) => {
       const eventName = `api-forge:${action}`;

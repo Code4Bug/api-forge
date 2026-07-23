@@ -465,6 +465,7 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
       label: app.name,
       submenu: [
         { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },
+        { label: '检查新版本', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings-application') },
         { type: 'separator' as const },
         { label: '系统设置', accelerator: 'CmdOrCtrl+,', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings') },
       ],
@@ -505,7 +506,7 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
         { label: '环境管理', click: () => mainWindow.webContents.send('app:menu-action', 'open-environments') },
         { label: '请求历史', click: () => mainWindow.webContents.send('app:menu-action', 'open-history') },
         { label: 'AI 助手', click: () => mainWindow.webContents.send('app:menu-action', 'open-ai') },
-        { label: '系统设置', accelerator: 'CmdOrCtrl+,', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings') },
+        ...(!isMac ? [{ label: '系统设置', accelerator: 'CmdOrCtrl+,', click: () => mainWindow.webContents.send('app:menu-action', 'open-settings') }] : []),
       ],
     },
     {
@@ -517,8 +518,6 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
       submenu: [
         { label: '快捷键说明', click: () => mainWindow.webContents.send('app:menu-action', 'shortcuts') },
         { label: '使用指南', click: () => mainWindow.webContents.send('app:menu-action', 'guide') },
-        { type: 'separator' as const },
-        { label: '检查新版本', click: () => { void checkForUpdates() } },
         { type: 'separator' as const },
         { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },
       ],
