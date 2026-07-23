@@ -660,7 +660,7 @@ function createApplicationMenu(mainWindow: BrowserWindow) {
     {
       label: '帮助',
       submenu: [
-        { label: '快捷键说明', click: () => mainWindow.webContents.send('app:menu-action', 'shortcuts') },
+        { label: '快捷键说明', accelerator: 'CmdOrCtrl+/', click: () => mainWindow.webContents.send('app:menu-action', 'shortcuts') },
         { label: '使用指南', click: () => mainWindow.webContents.send('app:menu-action', 'guide') },
         { type: 'separator' as const },
         { label: '关于 API-forge', click: () => mainWindow.webContents.send('app:menu-action', 'about') },

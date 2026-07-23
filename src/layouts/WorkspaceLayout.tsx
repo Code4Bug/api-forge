@@ -20,6 +20,7 @@ import {
   Folder,
   History,
   LoaderCircle,
+  Keyboard,
   MoreVertical,
   PanelLeftClose,
   PanelLeftOpen,
@@ -50,6 +51,7 @@ import lightLogo from "@/assets/icons/favicon-light.svg";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { Modal } from "@/components/common/Modal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { Drawer } from "@/components/common/Drawer";
 
 type AppMenuAction =
   | "about"
@@ -179,6 +181,80 @@ const protocolMethods: Record<Protocol, HttpMethod[]> = {
   websocket: [],
   socket: [],
 };
+
+type HelpTab = "guide" | "shortcuts";
+
+const guideSections = [
+  {
+    title: "快速开始",
+    items: [
+      "先在左侧新建目录，再在目录下新建 API，保持工作区结构清晰。",
+      "填好名称、协议、方法和请求地址后，就可以直接发送请求。",
+      "接口保存后会进入标签页，方便在多个接口之间快速切换。",
+    ],
+  },
+  {
+    title: "调试流程",
+    items: [
+      "HTTP 适合常规接口请求，支持方法、请求头、参数和请求体。",
+      "WebSocket 和 Socket 页面更适合长连接、消息收发和协议测试。",
+      "如果接口结构经常变化，建议先保存草稿，再逐步补全字段。",
+    ],
+  },
+  {
+    title: "环境变量",
+    items: [
+      "把常用的域名、Token、环境前缀放到环境变量里，切换环境时会更快。",
+      "同一套接口可以配合多个环境使用，减少重复修改地址和参数。",
+      "建议把敏感信息集中管理，不要直接写死在请求里。",
+    ],
+  },
+  {
+    title: "导入与迁移",
+    items: [
+      "需要迁移已有接口时，优先使用 curl 导入，通常可以直接还原请求方法、地址、请求头和请求体。",
+      "如果导入后有少量差异，建议先保存为新接口，再按工作区规范整理目录。",
+      "批量整理时，可以先按业务线拆目录，再按请求类型细分接口。",
+    ],
+  },
+  {
+    title: "历史与导出",
+    items: [
+      "请求历史会记录最近操作，便于回看调试过程和复用参数。",
+      "工作区支持导出，适合备份、迁移或和团队共享结构。",
+      "左侧标签页可用于快速定位当前正在处理的接口。",
+    ],
+  },
+  {
+    title: "使用习惯",
+    items: [
+      "建议先把目录命名清楚，再补接口名称，后面查找会更省时间。",
+      "经常复用的公共参数，优先放进环境变量或请求头模板里。",
+      "遇到复杂接口时，可以先保存基础版本，再逐步补充请求体和断言信息。",
+    ],
+  },
+];
+
+const shortcutGroups = [
+  {
+    title: "工作区操作",
+    items: [
+      { key: "Ctrl/Cmd + N", label: "新建 API" },
+      { key: "Ctrl/Cmd + Shift + N", label: "新建目录" },
+      { key: "Ctrl/Cmd + Shift + O", label: "导入 curl" },
+      { key: "Ctrl/Cmd + S", label: "保存当前内容" },
+    ],
+  },
+  {
+    title: "应用设置",
+    items: [
+      { key: "Ctrl/Cmd + /", label: "打开快捷键提示" },
+      { key: "Ctrl/Cmd + ,", label: "打开系统设置" },
+      { key: "Ctrl/Cmd + W", label: "关闭当前标签或窗口" },
+      { key: "Esc", label: "关闭弹窗或抽屉" },
+    ],
+  },
+];
 
 function ApiTypeIcon({
   protocol,
@@ -816,8 +892,8 @@ export function WorkspaceLayout() {
   const [hasMoreApiTabs, setHasMoreApiTabs] = useState(false);
   const [appVersion, setAppVersion] = useState("");
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState<HelpTab>("guide");
   const [deleteDialog, setDeleteDialog] = useState<{
     node: ApiTreeNode;
     confirmed?: boolean;
@@ -900,8 +976,8 @@ export function WorkspaceLayout() {
   useEffect(() => {
     const handlers: Array<[AppMenuAction, () => void | Promise<void>]> = [
       ["about", () => setAboutOpen(true)],
-      ["shortcuts", () => setShortcutsOpen(true)],
-      ["guide", () => setGuideOpen(true)],
+      ["shortcuts", () => openHelpPanel("shortcuts")],
+      ["guide", () => openHelpPanel("guide")],
       ["new-api", () => openDialog({ mode: "api" })],
       ["new-folder", () => openDialog({ mode: "folder" })],
       [
@@ -959,6 +1035,11 @@ export function WorkspaceLayout() {
         .catch(() => undefined);
     }
     function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key === "/") {
+        event.preventDefault();
+        toggleHelpPanel("shortcuts");
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
         event.preventDefault();
         if (activeApiId && openApiIds.includes(activeApiId))
@@ -1006,7 +1087,7 @@ export function WorkspaceLayout() {
       window.removeEventListener("keydown", handleShortcut);
       window.removeEventListener("api-forge:new-api", handleNewApi);
     };
-  }, [activeApiId, location.pathname, openApiIds, saveNow, workspace]);
+  }, [activeApiId, helpOpen, location.pathname, openApiIds, saveNow, workspace]);
 
   const apiNodes = workspace ? flattenApiNodes(workspace.apiTree) : [];
   // 按持久化的 ID 顺序恢复标签，接口树的目录排序不应影响标签顺序。
@@ -1379,6 +1460,19 @@ export function WorkspaceLayout() {
 
   function requestDelete(node: ApiTreeNode) {
     setDeleteDialog({ node });
+  }
+
+  function openHelpPanel(tab: HelpTab) {
+    setHelpTab(tab);
+    setHelpOpen(true);
+  }
+
+  function toggleHelpPanel(tab: HelpTab) {
+    if (helpOpen) {
+      setHelpOpen(false);
+      return;
+    }
+    openHelpPanel(tab);
   }
 
   function confirmDeleteNode(node: ApiTreeNode) {
@@ -1987,58 +2081,105 @@ export function WorkspaceLayout() {
           </p>
         </div>
       </Modal>
-      <Modal
-        open={shortcutsOpen}
-        title="快捷键说明"
-        onClose={() => setShortcutsOpen(false)}
-        className="max-w-lg"
+      <Drawer
+        open={helpOpen}
+        title="帮助中心"
+        onClose={() => setHelpOpen(false)}
       >
-        <div className="space-y-2 p-5 text-xs leading-6 text-zinc-300">
-          <p>
-            <code className="rounded bg-zinc-900 px-1.5 py-0.5">
-              Ctrl/Cmd + N
-            </code>{" "}
-            新建 API
-          </p>
-          <p>
-            <code className="rounded bg-zinc-900 px-1.5 py-0.5">
-              Ctrl/Cmd + S
-            </code>{" "}
-            保存当前
-          </p>
-          <p>
-            <code className="rounded bg-zinc-900 px-1.5 py-0.5">
-              Ctrl/Cmd + Shift + N
-            </code>{" "}
-            新建目录
-          </p>
-          <p>
-            <code className="rounded bg-zinc-900 px-1.5 py-0.5">
-              Ctrl/Cmd + Shift + O
-            </code>{" "}
-            导入 curl
-          </p>
-          <p>
-            <code className="rounded bg-zinc-900 px-1.5 py-0.5">
-              Ctrl/Cmd + ,
-            </code>{" "}
-            打开系统设置
-          </p>
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="border-b border-zinc-800 px-5 py-4">
+            <p className="text-xs leading-6 text-zinc-400">
+              这里汇总了常用操作、快捷键和使用提示，方便你在同一处快速查找。
+            </p>
+            <div className="mt-4 inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+              <button
+                type="button"
+                onClick={() => setHelpTab("guide")}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition ${helpTab === "guide" ? "bg-cyan-400 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                使用指南
+              </button>
+              <button
+                type="button"
+                onClick={() => setHelpTab("shortcuts")}
+                className={`ml-1 inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition ${helpTab === "shortcuts" ? "bg-cyan-400 text-zinc-950" : "text-zinc-300 hover:bg-zinc-800"}`}
+              >
+                <Keyboard className="h-3.5 w-3.5" />
+                快捷键
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto px-5 py-5">
+            {helpTab === "guide" ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                  <p className="text-sm font-semibold text-cyan-100">
+                    先建结构，再填内容，最后保存与复用。
+                  </p>
+                  <p className="mt-2 text-xs leading-6 text-cyan-100/80">
+                    建议把目录、接口、环境和历史分开管理，这样工作区会更清晰。
+                  </p>
+                </div>
+                {guideSections.map((section) => (
+                  <section
+                    key={section.title}
+                    className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                  >
+                    <h3 className="text-sm font-semibold text-zinc-100">
+                      {section.title}
+                    </h3>
+                    <ul className="mt-3 space-y-2 text-xs leading-6 text-zinc-300">
+                      {section.items.map((item) => (
+                        <li key={item} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <p className="text-sm font-semibold text-zinc-100">
+                    常用快捷键
+                  </p>
+                  <p className="mt-2 text-xs leading-6 text-zinc-400">
+                    这些快捷键覆盖了最常用的建库、导入、保存和设置入口。
+                  </p>
+                </div>
+                {shortcutGroups.map((group) => (
+                  <section
+                    key={group.title}
+                    className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                  >
+                    <h3 className="text-sm font-semibold text-zinc-100">
+                      {group.title}
+                    </h3>
+                    <div className="mt-3 space-y-2">
+                      {group.items.map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex items-center justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2"
+                        >
+                          <code className="rounded bg-zinc-950 px-2 py-1 text-[11px] text-cyan-200">
+                            {item.key}
+                          </code>
+                          <span className="text-xs text-zinc-300">
+                            {item.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </Modal>
-      <Modal
-        open={guideOpen}
-        title="使用指南"
-        onClose={() => setGuideOpen(false)}
-        className="max-w-lg"
-      >
-        <div className="space-y-3 p-5 text-xs leading-6 text-zinc-300">
-          <p>1. 在左侧创建目录并组织接口。</p>
-          <p>2. 通过顶部菜单或标签页切换当前调试协议。</p>
-          <p>3. 为接口绑定环境变量后发送请求并保存历史。</p>
-          <p>4. 需要迁移已有接口时，直接使用 curl 导入。</p>
-        </div>
-      </Modal>
+      </Drawer>
     </div>
   );
 }
