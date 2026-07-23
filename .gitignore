@@ -36,3 +36,5 @@ source-files/*
 
 
 *.js
+
+CHANGELOG.md
