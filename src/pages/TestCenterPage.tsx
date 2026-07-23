@@ -675,6 +675,8 @@ export default function TestCenterPage() {
           params: request.params ?? [],
           headers: request.headers ?? [],
           body: request.body,
+          bodyType: request.bodyType,
+          formFields: request.formFields,
         });
         results.push(
           response.ok
