@@ -1726,17 +1726,17 @@ export default function HttpDebugPage() {
                         className="h-9 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100"
                       />
                       {field.kind === "file" ? (
-                        <label
-                          htmlFor={`form-file-${field.id}`}
-                          className="flex h-9 min-w-0 cursor-pointer items-center overflow-hidden rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-300 hover:border-zinc-600"
+                        <button
+                          type="button"
+                          className="flex h-9 min-w-0 w-full items-center overflow-hidden rounded border border-zinc-800 bg-zinc-900 px-3 text-left text-xs text-zinc-300 hover:border-zinc-600"
                           onClick={async (event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
                             try {
                               const result = await window.desktopApi?.selectFile?.({
                                 title: "选择 multipart 文件",
                               });
                               if (!result?.ok || !result.path) return;
-                              event.preventDefault();
-                              event.stopPropagation();
                               setFormFields((items) =>
                                 items.map((item, itemIndex) =>
                                   itemIndex === index
@@ -1745,34 +1745,14 @@ export default function HttpDebugPage() {
                                 ),
                               );
                             } catch {
-                              // 原生文件选择不可用时，回退到普通 input。
+                              // 原生文件选择失败时不做额外处理。
                             }
                           }}
                         >
-                          <input
-                            id={`form-file-${field.id}`}
-                            type="file"
-                            className="sr-only"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) return;
-                              const filePath = (file as File & {
-                                path?: string;
-                              }).path ?? file.name;
-                              setFormFields((items) =>
-                                items.map((item, itemIndex) =>
-                                  itemIndex === index
-                                    ? { ...item, value: `@${filePath}` }
-                                    : item,
-                                ),
-                              );
-                              event.currentTarget.value = "";
-                            }}
-                          />
                           <span className="truncate">
                             {formatFileFieldLabel(field.value)}
                           </span>
-                        </label>
+                        </button>
                       ) : (
                         <VariableInput
                           value={field.value}

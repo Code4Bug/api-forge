@@ -88,14 +88,31 @@ function isInteractiveSidebarTarget(target: EventTarget | null) {
   );
 }
 
-function getSidebarContextParentId(target: EventTarget | null) {
+function getSidebarContextTarget(target: EventTarget | null):
+  | {
+      kind: "blank";
+    }
+  | {
+      kind: "folder" | "api";
+      nodeId: string;
+      parentId?: string;
+    }
+  | undefined {
   if (!(target instanceof HTMLElement)) return undefined;
   const treeNode = target.closest<HTMLElement>("[data-tree-node-id]");
-  if (!treeNode) return undefined;
+  if (!treeNode) return { kind: "blank" };
+  const nodeId = treeNode.dataset.treeNodeId;
   const nodeType = treeNode.dataset.treeNodeType;
-  if (nodeType === "folder") return treeNode.dataset.treeNodeId;
-  if (nodeType === "api") return treeNode.dataset.treeNodeParentId || undefined;
-  return undefined;
+  if (!nodeId || (nodeType !== "folder" && nodeType !== "api"))
+    return undefined;
+  return {
+    kind: nodeType,
+    nodeId,
+    parentId:
+      nodeType === "folder"
+        ? treeNode.dataset.treeNodeId
+        : treeNode.dataset.treeNodeParentId || undefined,
+  };
 }
 
 function treeNodeMatchesQuery(
@@ -867,6 +884,8 @@ export function WorkspaceLayout() {
   const [sidebarMenu, setSidebarMenu] = useState<{
     x: number;
     y: number;
+    kind: "blank" | "folder" | "api";
+    nodeId?: string;
     parentId?: string;
   }>();
   const [dialog, setDialog] = useState<{
@@ -965,6 +984,44 @@ export function WorkspaceLayout() {
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [dialog, tabMenu, sidebarMenu]);
+
+  useEffect(() => {
+    if (!sidebarMenu) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest(".sidebar-context-menu")
+      ) {
+        return;
+      }
+      setSidebarMenu(undefined);
+    }
+    function handleContextMenu(event: MouseEvent) {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest(".sidebar-context-menu")
+      ) {
+        event.preventDefault();
+        return;
+      }
+      const target = getSidebarContextTarget(event.target);
+      if (!target) return;
+      event.preventDefault();
+      setSidebarMenu({
+        x: event.clientX,
+        y: event.clientY,
+        kind: target.kind,
+        nodeId: target.kind === "blank" ? undefined : target.nodeId,
+        parentId: target.kind === "blank" ? undefined : target.parentId,
+      });
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, [sidebarMenu]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -1517,10 +1574,14 @@ export function WorkspaceLayout() {
           if (isInteractiveSidebarTarget(event.target)) return;
           event.preventDefault();
           setTabMenu(undefined);
+          const target = getSidebarContextTarget(event.target);
+          if (!target) return;
           setSidebarMenu({
             x: event.clientX,
             y: event.clientY,
-            parentId: getSidebarContextParentId(event.target),
+            kind: target.kind,
+            nodeId: target.kind === "blank" ? undefined : target.nodeId,
+            parentId: target.kind === "blank" ? undefined : target.parentId,
           });
         }}
       >
@@ -1969,38 +2030,66 @@ export function WorkspaceLayout() {
         </>
       )}
       {sidebarMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setSidebarMenu(undefined)}
-          />
-          <div
-            className="fixed z-50 w-44 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl"
-            style={{ left: sidebarMenu.x, top: sidebarMenu.y }}
-            onClick={(event) => event.stopPropagation()}
+        <div
+          className="sidebar-context-menu fixed z-50 w-44 rounded-md border border-zinc-700 bg-[#111821] p-1 shadow-2xl"
+          style={{ left: sidebarMenu.x, top: sidebarMenu.y }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              openDialog({ mode: "folder", parentId: sidebarMenu.parentId });
+              setSidebarMenu(undefined);
+            }}
+            className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
           >
-            <button
-              type="button"
-              onClick={() => {
-                openDialog({ mode: "folder", parentId: sidebarMenu.parentId });
-                setSidebarMenu(undefined);
-              }}
-              className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
-            >
-              新建目录
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                openDialog({ mode: "api", parentId: sidebarMenu.parentId });
-                setSidebarMenu(undefined);
-              }}
-              className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
-            >
-              新建 API
-            </button>
-          </div>
-        </>
+            新建目录
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              openDialog({ mode: "api", parentId: sidebarMenu.parentId });
+              setSidebarMenu(undefined);
+            }}
+            className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+          >
+            新建 API
+          </button>
+          {sidebarMenu.kind !== "blank" && (
+            <>
+              <div className="my-1 border-t border-zinc-700/80" />
+              <button
+                type="button"
+                onClick={() => {
+                  const node = findApiNode(
+                    workspace?.apiTree ?? [],
+                    sidebarMenu.nodeId ?? "",
+                  );
+                  if (node) exportFolderDoc(node, "markdown");
+                  setSidebarMenu(undefined);
+                }}
+                className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+              >
+                导出 API 文档
+              </button>
+              {sidebarMenu.kind === "api" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const node = findApiNode(
+                      workspace?.apiTree ?? [],
+                      sidebarMenu.nodeId ?? "",
+                    );
+                    if (node) void copyNodeCurl(node);
+                    setSidebarMenu(undefined);
+                  }}
+                  className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  导出 cURL 命令
+                </button>
+              )}
+            </>
+          )}
+        </div>
       )}
       <Modal
         open={Boolean(dialog)}
