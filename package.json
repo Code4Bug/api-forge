@@ -1,7 +1,7 @@
 {
   "name": "api-forge",
   "private": true,
-  "version": "0.2.15",
+  "version": "0.2.16",
   "license": "Apache-2.0",
   "description": "接口调试台桌面端 API 测试与调试工具",
   "author": {
@@ -120,6 +120,9 @@
           ]
         }
       ],
+      "deb": {
+        "afterInstall": "build/linux/deb-after-install.sh"
+      },
       "category": "Utility"
     }
   }
