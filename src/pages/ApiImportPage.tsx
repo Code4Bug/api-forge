@@ -197,7 +197,10 @@ export default function ApiImportPage() {
               <textarea
                 autoFocus
                 value={text}
-                onChange={(event) => setText(event.target.value)}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  setSource(undefined);
+                }}
                 className="mt-2 min-h-[240px] flex-1 w-full resize-none rounded border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs leading-5 text-zinc-100 outline-none focus:border-cyan-400/60"
                 placeholder="粘贴 cURL 命令、Postman Collection JSON 或 OpenAPI / Swagger JSON"
               />
@@ -212,6 +215,7 @@ export default function ApiImportPage() {
                   const file = event.currentTarget.files?.[0];
                   event.currentTarget.value = "";
                   if (!file) return;
+                  setSource(undefined);
                   void file.text().then((value) => setText(value));
                 }}
               />
