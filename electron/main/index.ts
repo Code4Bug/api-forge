@@ -16,17 +16,6 @@ const { autoUpdater } = electronUpdater
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = process.env.VITE_DEV_SERVER_URL !== undefined || !app.isPackaged
-type ReleaseArtifact = {
-  version?: string
-  tag?: string
-  range?: string
-  notes?: Array<{
-    hash: string
-    shortHash: string
-    message: string
-    url?: string
-  }>
-}
 
 function normalizeGitRemoteUrl(remoteUrl: string) {
   if (remoteUrl.startsWith('git@')) {
@@ -86,28 +75,53 @@ function resolvePreviousVersionTag(currentRef: string) {
   }
 }
 
-function resolveReleaseJsonPath() {
+function resolveChangelogPath() {
   return isDev
-    ? join(__dirname, '../../../release.json')
-    : join(process.resourcesPath, 'app.asar', 'release.json')
+    ? join(__dirname, '../../../CHANGELOG.md')
+    : join(app.getAppPath(), 'CHANGELOG.md')
 }
 
-function loadReleaseArtifact() {
+function loadChangelogText() {
   try {
-    const artifact = JSON.parse(readFileSync(resolveReleaseJsonPath(), 'utf8')) as ReleaseArtifact
-    if (Array.isArray(artifact.notes) && artifact.notes.length > 0) return artifact
+    return readFileSync(resolveChangelogPath(), 'utf8')
   } catch {
-    // 忽略，回退到运行时读取 git 日志。
+    return undefined
   }
-  return undefined
+}
+
+function parseChangelogNotes(markdown: string) {
+  const lines = markdown.split(/\r?\n/)
+  const sectionIndex = lines.findIndex((line) => /^##\s+/.test(line))
+  if (sectionIndex === -1) return { range: '', notes: [] as Array<{ hash: string; shortHash: string; message: string; url?: string }> }
+
+  const sectionTitle = lines[sectionIndex].replace(/^##\s+/, '').trim()
+  const rangeMatch = markdown.match(/生成范围：`([^`]+)`/)
+  const notes: Array<{ hash: string; shortHash: string; message: string; url?: string }> = []
+  for (let index = sectionIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+    if (line.startsWith('## ')) break
+    const linkedMatch = line.match(/^- \[([0-9a-f]{7})\]\(([^)]+)\)\s+(.+)$/i)
+    const plainMatch = line.match(/^- ([0-9a-f]{7})\s+(.+)$/i)
+    const hash = linkedMatch?.[1] ?? plainMatch?.[1]
+    const url = linkedMatch?.[2]
+    const message = linkedMatch?.[3] ?? plainMatch?.[2]
+    if (!hash || !message) continue
+    notes.push({
+      hash,
+      shortHash: hash,
+      message,
+      url,
+    })
+  }
+  return { range: rangeMatch?.[1] ?? sectionTitle, notes }
 }
 
 function resolveUpdateNotes() {
-  const releaseArtifact = loadReleaseArtifact()
-  if (releaseArtifact?.notes?.length) {
-    return {
-      range: releaseArtifact.range ?? '',
-      notes: releaseArtifact.notes,
+  const changelog = loadChangelogText()
+  if (changelog) {
+    const parsed = parseChangelogNotes(changelog)
+    if (parsed.notes.length > 0) {
+      return parsed
     }
   }
 

@@ -1838,22 +1838,35 @@ export default function SettingsPage() {
                   <div className="mt-3 space-y-2">
                     {updateNotes.length > 0 ? (
                       updateNotes.map((note) => (
-                        <a
+                        <div
                           key={note.hash}
-                          href={note.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-start gap-2 rounded px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800/70 hover:text-cyan-200"
+                          className="flex items-start gap-2 rounded px-2 py-1 text-xs text-zinc-300"
                         >
                           <GitFork className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
-                          <span className="min-w-0 flex-1">
-                            <span className="mr-2 font-mono text-[11px] text-zinc-500">
-                              {note.shortHash}
+                          {note.url ? (
+                            <a
+                              href={note.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="min-w-0 flex-1 hover:text-cyan-200"
+                            >
+                              <span className="mr-2 font-mono text-[11px] text-zinc-500">
+                                {note.shortHash}
+                              </span>
+                              {note.message}
+                            </a>
+                          ) : (
+                            <span className="min-w-0 flex-1">
+                              <span className="mr-2 font-mono text-[11px] text-zinc-500">
+                                {note.shortHash}
+                              </span>
+                              {note.message}
                             </span>
-                            {note.message}
-                          </span>
-                          <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
-                        </a>
+                          )}
+                          {note.url && (
+                            <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
+                          )}
+                        </div>
                       ))
                     ) : (
                       <div className="rounded border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-500">

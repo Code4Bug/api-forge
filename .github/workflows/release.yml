@@ -52,6 +52,9 @@ jobs:
             exit 1
           fi
 
+      - name: 生成更新日志
+        run: node scripts/generate-changelog.mjs
+
       - name: 设置 Node.js
         uses: actions/setup-node@v5
         with:
