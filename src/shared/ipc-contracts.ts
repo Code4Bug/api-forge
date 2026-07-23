@@ -294,6 +294,7 @@ export type BashExecResult =
 export interface DesktopApi {
   getAppInfo: () => Promise<AppInfo>;
   closeWindow: () => Promise<{ ok: true }>;
+  openExternal: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   checkForUpdates: () => Promise<{ ok: true } | { ok: false; error: string }>;
   downloadUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;
   installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;

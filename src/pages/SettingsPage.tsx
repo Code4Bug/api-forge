@@ -22,13 +22,18 @@ import {
   CheckCircle2,
   AlertCircle,
   MousePointer2,
+  Cable,
   SlidersHorizontal,
+  Copy,
   Plus,
   Trash2,
   Power,
   LoaderCircle,
   RotateCcw,
   Shuffle,
+  ExternalLink,
+  Star,
+  GitFork,
 } from "lucide-react";
 import {
   getThemeMode,
@@ -46,6 +51,8 @@ import {
 import type { UpdateStatus } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
+import giteeIcon from "@/assets/icons/gitee.svg";
+import githubIcon from "@/assets/icons/github-fill.svg";
 
 const themes: Array<{
   id: Theme;
@@ -253,7 +260,12 @@ const defaultLightModel: LightModelConfig = {
   maxTokens: 512,
 };
 
-type SettingsCategory = "appearance" | "model" | "workspace" | "application";
+type SettingsCategory =
+  | "appearance"
+  | "model"
+  | "workspace"
+  | "application"
+  | "repository";
 
 const settingsCategories: Array<{
   id: SettingsCategory;
@@ -279,6 +291,27 @@ const settingsCategories: Array<{
     name: "应用",
     description: "版本与更新",
     icon: Download,
+  },
+  {
+    id: "repository",
+    name: "远程仓库",
+    description: "Gitee / GitHub",
+    icon: Cable,
+  },
+];
+
+const remoteRepositories = [
+  {
+    name: "Gitee",
+    description: "国内访问更稳定",
+    href: "https://gitee.com/edward-g/api-forge",
+    icon: giteeIcon,
+  },
+  {
+    name: "GitHub",
+    description: "社区协作与同步更新",
+    href: "https://github.com/Code4Bug/api-forge",
+    icon: githubIcon,
   },
 ];
 
@@ -339,8 +372,10 @@ export default function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({
     state: "idle",
   });
+  const [repoActionMessage, setRepoActionMessage] = useState("");
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategory>("appearance");
+  const isLightTheme = theme === "light" || theme === "lightBlue";
   const [deleteDialog, setDeleteDialog] = useState<
     | { type: "large-model"; id: string; name: string }
     | { type: "light-model"; id: string; name: string }
@@ -614,6 +649,25 @@ export default function SettingsPage() {
 
   async function installUpdate() {
     await window.desktopApi?.installUpdate();
+  }
+
+  async function copyRepositoryAddress(address: string, name: string) {
+    try {
+      await navigator.clipboard.writeText(address);
+      setRepoActionMessage(`已复制 ${name} 地址`);
+    } catch {
+      setRepoActionMessage("复制失败，请手动选择地址");
+    }
+  }
+
+  async function openRepositoryAddress(address: string) {
+    const result = await window.desktopApi?.openExternal?.(address);
+    if (!result || result.ok) {
+      setRepoActionMessage("已在默认浏览器打开");
+      return;
+    }
+    window.open(address, "_blank", "noopener,noreferrer");
+    setRepoActionMessage("已在默认浏览器打开");
   }
 
   function exportSettings() {
@@ -1816,6 +1870,81 @@ export default function SettingsPage() {
                       {updateStatus.message ?? "更新失败"}
                     </span>
                   )}
+                </div>
+              </section>
+            )}
+            {activeCategory === "repository" && (
+              <section className="rounded border border-zinc-800 bg-zinc-950/40 p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <Cable className="h-4 w-4 text-cyan-300" />
+                  <h2 className="text-sm font-medium">远程仓库</h2>
+                </div>
+                <p className="text-xs leading-6 text-zinc-400">
+                  API-forge 是一个本地 API 工作台，专注接口调试、环境管理和工作区保存。
+                  如果这个项目对你有帮助，欢迎前往远端仓库 <strong className="text-zinc-200">Star</strong> 和{" "}
+                  <strong className="text-zinc-200">Fork</strong>，方便你关注更新或基于此项目继续扩展。
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {remoteRepositories.map((repo) => (
+                    <div
+                      key={repo.name}
+                      className="rounded border border-zinc-800 bg-zinc-950/60 p-3 transition-colors hover:border-cyan-400/50 hover:bg-zinc-900/70"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-zinc-800 bg-zinc-900">
+                          <img
+                            src={repo.icon}
+                            alt={`${repo.name} 图标`}
+                            className={`h-5 w-5 ${isLightTheme ? "" : "brightness-0 invert"}`}
+                          />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2 text-xs font-medium text-zinc-100">
+                            {repo.name}
+                            <ExternalLink className="h-3 w-3 text-zinc-500" />
+                          </span>
+                          <span className="mt-1 block truncate text-[11px] text-zinc-500">
+                            {repo.description}
+                          </span>
+                          <span className="mt-1 block truncate text-[10px] text-cyan-300">
+                            {repo.href}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyRepositoryAddress(repo.href, repo.name)
+                          }
+                          className="flex h-8 items-center gap-1.5 rounded border border-zinc-700 px-2.5 text-[11px] text-zinc-300 hover:border-cyan-400 hover:text-cyan-200"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          复制地址
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void openRepositoryAddress(repo.href)}
+                          className="flex h-8 items-center gap-1.5 rounded bg-cyan-400 px-2.5 text-[11px] font-semibold text-zinc-950 hover:bg-cyan-300"
+                        >
+                          跳转打开
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 min-h-5 text-[11px] text-zinc-500">
+                  {repoActionMessage || "复制地址或跳转打开后，这里会显示操作结果。"}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-800 pt-4 text-[11px] text-zinc-500">
+                  <span className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-2.5 py-1 text-zinc-400">
+                    <Star className="h-3.5 w-3.5" />
+                    Star 方便收藏
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded border border-zinc-700 px-2.5 py-1 text-zinc-400">
+                    <GitFork className="h-3.5 w-3.5" />
+                    Fork 便于二次开发
+                  </span>
                 </div>
               </section>
             )}

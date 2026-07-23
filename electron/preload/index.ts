@@ -4,6 +4,7 @@ import type { AiConversation, BashExecRequest, BashExecResult, DesktopApi, HttpS
 const desktopApi: DesktopApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
   closeWindow: () => ipcRenderer.invoke('app:close-window'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),

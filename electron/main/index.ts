@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -633,6 +633,14 @@ ipcMain.handle('app:get-info', () => ({
 ipcMain.handle('app:close-window', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()
   return { ok: true as const }
+})
+ipcMain.handle('app:open-external', async (_event, url: string) => {
+  try {
+    await shell.openExternal(url)
+    return { ok: true as const }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : '打开外部链接失败' }
+  }
 })
 ipcMain.handle('update:check', checkForUpdates)
 ipcMain.handle('update:download', async () => {
