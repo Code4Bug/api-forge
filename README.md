@@ -118,8 +118,12 @@ pnpm start
 | `pnpm lint` | 执行 ESLint 检查 |
 | `pnpm build` | 构建应用 |
 | `pnpm build:mac` | 构建 macOS 安装包 |
+| `pnpm build:win` | 构建 Windows x64 / arm64 安装包 |
 | `pnpm build:win:x64` | 构建 Windows x64 安装包 |
+| `pnpm build:win:arm64` | 构建 Windows arm64 安装包 |
+| `pnpm build:linux` | 构建 Linux x64 / arm64 的 AppImage 与 deb |
 | `pnpm build:linux:x64` | 构建 Linux x64 的 AppImage 与 deb |
+| `pnpm build:linux:arm64` | 构建 Linux arm64 的 AppImage 与 deb |
 
 构建产物输出到 `release/`。macOS 跨平台构建 Windows 安装包需要 Wine；正式分发前还需要自行配置对应平台的代码签名。
 

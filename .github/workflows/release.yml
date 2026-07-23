@@ -25,12 +25,15 @@ jobs:
           - name: macOS
             os: macos-latest
             command: npm run build:mac
+            artifact: release-macos-latest
           - name: Windows
             os: windows-latest
             command: npm run build:win
+            artifact: release-windows-latest
           - name: Linux
             os: ubuntu-latest
             command: npm run build:linux
+            artifact: release-ubuntu-latest
 
     steps:
       - name: 检出代码
@@ -64,7 +67,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v5
         with:
-          name: release-${{ matrix.os }}
+          name: ${{ matrix.artifact }}
           path: release
           if-no-files-found: error
           retention-days: 1
