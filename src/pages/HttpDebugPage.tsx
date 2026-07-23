@@ -35,6 +35,7 @@ import type {
   RequestDefinition,
 } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
+import { findJsonPathAtOffset } from "@/utils/json-path";
 
 interface CachedHttpResponse {
   requestId: string;
@@ -1106,16 +1107,27 @@ export default function HttpDebugPage() {
     }
   }
 
-  function openProcessVariableDialog(selectedText: string, presetKey?: string) {
+  function openProcessVariableDialog(
+    context: {
+      selectedText: string;
+      cursorOffset?: number;
+      modelValue?: string;
+    },
+    presetKey?: string,
+  ) {
     if (!activeApiId) return;
-    const selected = selectedText.trim().replace(/^['"]|['"]$/g, "");
+    const selected = context.selectedText.trim().replace(/^['"]|['"]$/g, "");
     let parsedResponse: unknown;
     try {
       parsedResponse = JSON.parse(responseBody ?? "");
     } catch {
       parsedResponse = undefined;
     }
-    const jsonPath = selected.startsWith("$")
+    const jsonPath =
+      context.modelValue && context.cursorOffset !== undefined
+        ? findJsonPathAtOffset(context.modelValue, context.cursorOffset)
+        : undefined;
+    const fallbackPath = selected.startsWith("$")
       ? selected
       : (findJsonPath(parsedResponse, selected) ??
         `$.${selected.replace(/\s+/g, "")}`);
@@ -1125,7 +1137,7 @@ export default function HttpDebugPage() {
       id: `process-${crypto.randomUUID()}`,
       key: presetKey ?? (selected.split(".").pop() || "response_value"),
       sourceRequestId: activeApiId,
-      jsonPath,
+      jsonPath: jsonPath ?? fallbackPath,
     });
   }
 
@@ -2012,7 +2024,7 @@ export default function HttpDebugPage() {
                       type="button"
                       onClick={() =>
                         openProcessVariableDialog(
-                          template.selectedText,
+                          { selectedText: template.selectedText },
                           template.presetKey,
                         )
                       }
@@ -2198,13 +2210,13 @@ export default function HttpDebugPage() {
               </div>
             ) : isJsonResponse ? (
               <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]">
-                <VariableEditor
-                  height="100%"
-                  language="json"
-                  theme={editorTheme}
-                  variables={{}}
-                  value={formattedResponseBody ?? ""}
-                  onInsertProcessVariable={openProcessVariableDialog}
+                  <VariableEditor
+                    height="100%"
+                    language="json"
+                    theme={editorTheme}
+                    variables={{}}
+                    value={formattedResponseBody ?? ""}
+                    onInsertProcessVariable={openProcessVariableDialog}
                   options={{
                     readOnly: true,
                     minimap: { enabled: false },

@@ -3,7 +3,11 @@ import { useRef } from "react";
 
 interface Props extends Omit<EditorProps, "onMount"> {
   variables: Record<string, string>;
-  onInsertProcessVariable?: (selectedText: string) => void;
+  onInsertProcessVariable?: (context: {
+    selectedText: string;
+    cursorOffset?: number;
+    modelValue: string;
+  }) => void;
 }
 
 export function VariableEditor({
@@ -12,6 +16,7 @@ export function VariableEditor({
   ...props
 }: Props) {
   const variablesRef = useRef(variables);
+  const contextMenuOffsetRef = useRef<number>();
   variablesRef.current = variables;
 
   const onMount: OnMount = (editor, monaco) => {
@@ -46,6 +51,12 @@ export function VariableEditor({
         },
       },
     );
+    const contextMenuDisposable = editor.onContextMenu((event) => {
+      const model = editor.getModel();
+      const position = event.target.position;
+      contextMenuOffsetRef.current =
+        position && model ? model.getOffsetAt(position) : undefined;
+    });
     const processVariableAction = onInsertProcessVariable
       ? editor.addAction({
           id: "api-forge-insert-process-variable",
@@ -53,16 +64,22 @@ export function VariableEditor({
           contextMenuGroupId: "api-forge-process-variable",
           contextMenuOrder: 1,
           run: (currentEditor) => {
+            const model = currentEditor.getModel();
+            const position = currentEditor.getPosition();
             const selection = currentEditor.getSelection();
-            if (!selection) return;
-            onInsertProcessVariable(
-              currentEditor.getModel()?.getValueInRange(selection) ?? "",
-            );
+            onInsertProcessVariable({
+              selectedText: selection && model ? model.getValueInRange(selection) : "",
+              cursorOffset:
+                contextMenuOffsetRef.current ??
+                (position && model ? model.getOffsetAt(position) : undefined),
+              modelValue: model?.getValue() ?? "",
+            });
           },
         })
       : undefined;
     editor.onDidDispose(() => {
       disposable.dispose();
+      contextMenuDisposable.dispose();
       processVariableAction?.dispose();
     });
   };
