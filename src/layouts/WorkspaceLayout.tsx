@@ -73,12 +73,37 @@ type AppMenuAction =
   | "shortcuts"
   | "guide";
 
-function treeHasMatch(nodes: ApiTreeNode[], query: string): boolean {
-  if (!query) return nodes.length > 0;
-  return nodes.some(
-    (node) =>
-      node.name.toLowerCase().includes(query.toLowerCase()) ||
-      (node.children ? treeHasMatch(node.children, query) : false),
+function normalizeSearchQuery(query: string) {
+  return query.trim().toLowerCase();
+}
+
+function treeNodeMatchesQuery(
+  node: ApiTreeNode,
+  normalizedQuery: string,
+  requestUrlsById: Map<string, string>,
+): boolean {
+  if (!normalizedQuery) return true;
+  const requestUrl = requestUrlsById.get(node.id) ?? "";
+  if (
+    node.name.toLowerCase().includes(normalizedQuery) ||
+    requestUrl.toLowerCase().includes(normalizedQuery)
+  ) {
+    return true;
+  }
+  return node.children?.some((child) =>
+    treeNodeMatchesQuery(child, normalizedQuery, requestUrlsById),
+  ) ?? false;
+}
+
+function treeHasMatch(
+  nodes: ApiTreeNode[],
+  query: string,
+  requestUrlsById: Map<string, string>,
+): boolean {
+  if (!query.trim()) return nodes.length > 0;
+  const normalizedQuery = normalizeSearchQuery(query);
+  return nodes.some((node) =>
+    treeNodeMatchesQuery(node, normalizedQuery, requestUrlsById),
   );
 }
 
@@ -402,6 +427,7 @@ function TreeNode({
   depth = 0,
   index = 0,
   query = "",
+  requestUrlsById,
   expandedFolders,
   onFolderExpandedChange,
   onOpenApi,
@@ -418,6 +444,7 @@ function TreeNode({
   depth?: number;
   index?: number;
   query?: string;
+  requestUrlsById: Map<string, string>;
   expandedFolders: Record<string, boolean>;
   onFolderExpandedChange: (folderId: string, expanded: boolean) => void;
   onOpenApi: (node: ApiTreeNode) => void;
@@ -456,12 +483,11 @@ function TreeNode({
   const morePortalRef = useRef<HTMLDivElement>(null);
   const exportButtonRef = useRef<HTMLButtonElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-  const matches =
-    !query ||
-    node.name.toLowerCase().includes(query.toLowerCase()) ||
-    node.children?.some((child) =>
-      child.name.toLowerCase().includes(query.toLowerCase()),
-    );
+  const matches = treeNodeMatchesQuery(
+    node,
+    normalizeSearchQuery(query),
+    requestUrlsById,
+  );
   useEffect(() => {
     const clear = () => {
       setIsDragOver(false);
@@ -746,15 +772,16 @@ function TreeNode({
           className={isDragOver ? "rounded bg-cyan-400/5" : ""}
         >
           {node.children?.map((child, childIndex) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              index={childIndex}
-              depth={depth + 1}
-              query={query}
-              expandedFolders={expandedFolders}
-              onFolderExpandedChange={onFolderExpandedChange}
-              onOpenApi={onOpenApi}
+              <TreeNode
+            key={child.id}
+            node={child}
+            index={childIndex}
+            depth={depth + 1}
+            query={query}
+            requestUrlsById={requestUrlsById}
+            expandedFolders={expandedFolders}
+            onFolderExpandedChange={onFolderExpandedChange}
+            onOpenApi={onOpenApi}
               onCreateFolder={onCreateFolder}
               onCreateApi={onCreateApi}
               onRename={onRename}
@@ -1040,6 +1067,9 @@ export function WorkspaceLayout() {
   }, [activeApiId, helpOpen, location.pathname, openApiIds, saveNow, workspace]);
 
   const apiNodes = workspace ? flattenApiNodes(workspace.apiTree) : [];
+  const requestUrlsById = new Map(
+    (workspace?.requests ?? []).map((request) => [request.id, request.url]),
+  );
   // 按持久化的 ID 顺序恢复标签，接口树的目录排序不应影响标签顺序。
   const openApis = openApiIds
     .map((id) => apiNodes.find((node) => node.id === id))
@@ -1552,6 +1582,7 @@ export function WorkspaceLayout() {
                   node={node}
                   index={index}
                   query={searchQuery}
+                  requestUrlsById={requestUrlsById}
                   expandedFolders={expandedFolders}
                   onFolderExpandedChange={setFolderExpanded}
                   onOpenApi={openApi}
@@ -1569,7 +1600,8 @@ export function WorkspaceLayout() {
                   onExportFolder={exportFolderDoc}
                 />
               ))}
-              {workspace && !treeHasMatch(workspace.apiTree, searchQuery) && (
+              {workspace &&
+                !treeHasMatch(workspace.apiTree, searchQuery, requestUrlsById) && (
                 <div className="p-4 text-center text-xs text-zinc-600">
                   未找到匹配接口
                 </div>

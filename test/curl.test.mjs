@@ -175,3 +175,33 @@ test('导入 data-urlencode curl 会还原为 form-urlencoded', () => {
     enabled: true,
   })
 })
+
+test('导入 GET + data-urlencode curl 会还原为 params', () => {
+  const parsed = parseCurlCommand(
+    "curl -G 'https://api.example.com/search' \\\n" +
+      "  --data-urlencode 'keyword=book' \\\n" +
+      "  --data-urlencode 'page=2'",
+  )
+
+  assert.equal(parsed?.method, 'GET')
+  assert.equal(parsed?.bodyType, undefined)
+  assert.equal(parsed?.params?.length, 2)
+  assert.deepEqual(parsed?.params?.[0], {
+    id: 'curl-param-0-0',
+    key: 'keyword',
+    value: 'book',
+    enabled: true,
+  })
+})
+
+test('空 data 不会把导入的 GET 变成 POST', () => {
+  const parsed = parseCurlCommand(
+    "curl --location 'http://223.113.162.210:9999/idg/idgCase/analysis?court=%E6%B1%9F%E8%8B%8F%E7%9C%81%E5%8D%97%E9%80%9A%E5%B8%82%E5%8F%B8%E6%B3%95%E5%B1%80&applicantType=%E5%85%A8%E9%83%A8&respondentOrgType=%E5%85%A8%E9%83%A8&startDate=2026-01&endDate=2026-07&trialType=32' \\\n" +
+      "--header 'x-access-token: token' \\\n" +
+      "--data ''",
+  )
+
+  assert.equal(parsed?.method, 'GET')
+  assert.equal(parsed?.bodyType, undefined)
+  assert.equal(parsed?.params?.length, 6)
+})

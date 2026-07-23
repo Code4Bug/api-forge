@@ -40,6 +40,28 @@ function buildRequestUrl(url: string, params: KeyValueItem[]) {
   }
 }
 
+function parseQueryLikeValue(raw: string, index: number) {
+  const searchParams = new URLSearchParams(raw);
+  const entries = Array.from(searchParams.entries());
+  if (entries.length > 0) {
+    return entries.map(([key, value], itemIndex) => ({
+      id: `curl-param-${index}-${itemIndex}`,
+      key,
+      value,
+      enabled: true,
+    }));
+  }
+  const eqIndex = raw.indexOf("=");
+  return [
+    {
+      id: `curl-param-${index}`,
+      key: eqIndex >= 0 ? raw.slice(0, eqIndex).trim() : raw.trim(),
+      value: eqIndex >= 0 ? raw.slice(eqIndex + 1) : "",
+      enabled: true,
+    },
+  ];
+}
+
 function buildBodyParts(request: RequestDefinition) {
   const bodyType = request.bodyType ?? "json";
   const enabledFormFields =
@@ -101,7 +123,7 @@ function parseCurlArgs(value: string) {
     .replace(/\r?\n/g, " ");
   const args: Array<{ flag: string; value: string }> = [];
   const pattern =
-    /(?:^|\s)(-X|--request|-H|--header|-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|--form-string)\s+((?:'[^']*(?:'\\''[^']*)*')|(?:"(?:[^"\\]|\\.)*")|[^\s]+)/g;
+    /(?:^|\s)(-X|--request|-H|--header|-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|--form-string|-G|--get)\s+((?:'[^']*(?:'\\''[^']*)*')|(?:"(?:[^"\\]|\\.)*")|[^\s]+)/g;
   for (const match of normalized.matchAll(pattern)) {
     args.push({ flag: match[1], value: unquoteCurlValue(match[2] ?? "") });
   }
@@ -114,6 +136,8 @@ export function parseCurlCommand(value: string): ParsedCurlCommand | undefined {
   const url = normalized.match(/https?:\/\/[^\s'"\\]+/i)?.[0];
   if (!url) return undefined;
   const methodMatch = args.find((item) => item.flag === "-X" || item.flag === "--request");
+  const isGetLike = args.some((item) => item.flag === "-G" || item.flag === "--get");
+  const explicitMethod = methodMatch?.value.toUpperCase();
   const headers = args
     .filter((item) => item.flag === "-H" || item.flag === "--header")
     .map((item, index) => {
@@ -136,9 +160,12 @@ export function parseCurlCommand(value: string): ParsedCurlCommand | undefined {
     item.flag === "--data-raw" ||
     item.flag === "--data-binary",
   );
+  const bodyText = bodyMatch?.value ?? "";
+  const hasMeaningfulBody = bodyText.trim().length > 0;
   let bodyType: RequestDefinition["bodyType"] | undefined;
   let body: string | undefined;
   let nextFormFields: NonNullable<RequestDefinition["formFields"]> | undefined;
+  let nextParams: KeyValueItem[] | undefined;
   if (formFields.length > 0) {
     bodyType = "multipart";
     nextFormFields = formFields.map((item, index) => {
@@ -162,23 +189,34 @@ export function parseCurlCommand(value: string): ParsedCurlCommand | undefined {
       };
     });
   } else if (dataUrlencode.length > 0) {
-    bodyType = "form-urlencoded";
-    nextFormFields = dataUrlencode.map((item, index) => {
-      const raw = item.value;
-      const eqIndex = raw.indexOf("=");
-      return {
+    const mappedFields = dataUrlencode.flatMap((item, index) =>
+      parseQueryLikeValue(item.value, index),
+    );
+    if (isGetLike || methodMatch?.value?.toUpperCase() === "GET") {
+      nextParams = mappedFields;
+    } else {
+      bodyType = "form-urlencoded";
+      nextFormFields = mappedFields.map((item, index) => ({
         id: `curl-form-${index}`,
-        key: eqIndex >= 0 ? raw.slice(0, eqIndex).trim() : raw.trim(),
-        value: eqIndex >= 0 ? raw.slice(eqIndex + 1) : "",
+        key: item.key,
+        value: item.value,
         kind: "text" as const,
         enabled: true,
-      };
-    });
+      }));
+    }
   } else if (bodyMatch) {
-    body = bodyMatch.value;
-    bodyType = bodyMatch.flag === "-d" || bodyMatch.flag === "--data"
-      ? undefined
-      : "json";
+    if (!hasMeaningfulBody) {
+      if (isGetLike || explicitMethod === "GET" || !explicitMethod) {
+        nextParams = [];
+      }
+    } else if (isGetLike || explicitMethod === "GET") {
+      nextParams = parseQueryLikeValue(bodyText, 0);
+    } else {
+      body = bodyText;
+      bodyType = bodyMatch.flag === "-d" || bodyMatch.flag === "--data"
+        ? undefined
+        : "json";
+    }
   }
   const parsed = new URL(url);
   const params = Array.from(parsed.searchParams.entries()).map(
@@ -189,12 +227,15 @@ export function parseCurlCommand(value: string): ParsedCurlCommand | undefined {
       enabled: true,
     }),
   );
+  if (nextParams?.length) params.push(...nextParams);
   parsed.search = "";
   parsed.hash = "";
-  const inferredMethod = (methodMatch?.value?.toUpperCase() ??
-    (bodyMatch || dataUrlencode.length > 0 || formFields.length > 0
-      ? "POST"
-      : "GET")) as NonNullable<RequestDefinition["method"]>;
+  const inferredMethod = (explicitMethod ??
+    (isGetLike
+      ? "GET"
+      : hasMeaningfulBody || dataUrlencode.length > 0 || formFields.length > 0
+        ? "POST"
+        : "GET")) as NonNullable<RequestDefinition["method"]>;
   return {
     name: `${inferredMethod} ${parsed.pathname || "/"}`,
     method: inferredMethod,
