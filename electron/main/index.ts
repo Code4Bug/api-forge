@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen, shell, dialog } from 'electron'
 import electronUpdater from 'electron-updater'
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -12,6 +12,7 @@ import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 import { fetchChangelogMarkdown, getChangelogDownloadUrl, parseChangelogMarkdown } from '../../src/shared/changelog-utils.js'
+import { buildFetchBody, buildFetchHeaders, buildFetchUrl } from '../../src/shared/http-request.js'
 
 const { autoUpdater } = electronUpdater
 
@@ -171,6 +172,7 @@ function resolveApplicationVersion() {
     return app.getVersion()
   }
 }
+
 app.setName('API-forge')
 app.setAppUserModelId('com.api-test-tools.desktop')
 app.setPath('userData', join(homedir(), '.api-forge'))
@@ -787,6 +789,27 @@ ipcMain.handle('app:open-external', async (_event, url: string) => {
     return { ok: false as const, error: error instanceof Error ? error.message : '打开外部链接失败' }
   }
 })
+ipcMain.handle('dialog:select-file', async (_event, options?: {
+  title?: string
+  defaultPath?: string
+  filters?: Array<{ name: string; extensions: string[] }>
+}) => {
+  try {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const result = await dialog.showOpenDialog(win ?? undefined, {
+      title: options?.title,
+      defaultPath: options?.defaultPath,
+      filters: options?.filters,
+      properties: ['openFile'],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: true as const, path: undefined }
+    }
+    return { ok: true as const, path: result.filePaths[0] }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : '选择文件失败' }
+  }
+})
 ipcMain.handle('update:check', checkForUpdates)
 ipcMain.handle('update:download', async () => {
   try { await autoUpdater.downloadUpdate(); return { ok: true as const } } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : '下载更新失败' } }
@@ -916,17 +939,20 @@ ipcMain.handle('http:send', async (event, request) => {
 
   try {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = validateCertificates ? '1' : '0'
-    const response = await fetch(request.url, {
+    const requestUrl = buildFetchUrl(request)
+    const requestBody = await buildFetchBody(request, readFile)
+    const requestHeaders = buildFetchHeaders(request)
+    const response = await fetch(requestUrl, {
       method: request.method,
-      headers: request.headers,
-      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+      headers: requestHeaders,
+      body: requestBody,
       signal: controller.signal,
       redirect: followRedirects ? 'follow' : 'manual',
     })
-    const headers = Object.fromEntries(response.headers.entries())
-    const contentType = headers['content-type'] ?? ''
+    const responseHeaders = Object.fromEntries(response.headers.entries())
+    const contentType = responseHeaders['content-type'] ?? ''
     const isSse = contentType.toLowerCase().startsWith('text/event-stream')
-    let body = ''
+    let responseBody = ''
     if (response.body) {
       const reader = response.body.getReader()
       controller.signal.addEventListener('abort', () => { void reader.cancel().catch(() => undefined) }, { once: true })
@@ -935,21 +961,21 @@ ipcMain.handle('http:send', async (event, request) => {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
-        body += chunk
+        responseBody += chunk
         if (request.requestId) event.sender.send('http:chunk', { requestId: request.requestId, chunk, sse: isSse })
       }
       const tail = decoder.decode()
-      body += tail
+      responseBody += tail
       if (tail && request.requestId) event.sender.send('http:chunk', { requestId: request.requestId, chunk: tail, sse: isSse })
     }
     if (request.requestId) event.sender.send('http:chunk', { requestId: request.requestId, chunk: '', done: true, sse: isSse })
-    const sizeBytes = Buffer.byteLength(body, 'utf8')
+    const sizeBytes = Buffer.byteLength(responseBody, 'utf8')
 
     return {
       ok: true,
       status: response.status,
-      headers,
-      body,
+      headers: responseHeaders,
+      body: responseBody,
       durationMs: Date.now() - startedAt,
       sizeBytes,
     }

@@ -31,6 +31,7 @@ import type {
 } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { StatusPill } from "@/components/common/StatusPill";
+import { buildHttpSendRequest } from "@/shared/http-request";
 
 type TabKey = "single" | "scenario" | "load" | "report";
 
@@ -484,6 +485,8 @@ export default function TestCenterPage() {
       params: resolveFields(params),
       headers: resolveFields(headers),
       body,
+      bodyType: selectedRequest?.bodyType,
+      formFields: selectedRequest?.formFields,
     };
   }
 
@@ -565,24 +568,24 @@ export default function TestCenterPage() {
     params: HttpFieldItem[];
     headers: HttpFieldItem[];
     body?: string;
+    bodyType?: RequestDefinition["bodyType"];
+    formFields?: NonNullable<RequestDefinition["formFields"]>;
   }) {
     if (!window.desktopApi?.httpSend) throw new Error("当前环境不支持请求发送");
+    const requestPayload = buildHttpSendRequest(
+      {
+        method: payload.method,
+        url: payload.url,
+        params: payload.params,
+        headers: payload.headers,
+        body: payload.body,
+        bodyType: payload.bodyType,
+        formFields: payload.formFields,
+      },
+      variables,
+    );
     const response = await window.desktopApi.httpSend({
-      method: payload.method,
-      url: resolveValue(payload.url),
-      params: payload.params
-        .filter((item) => item.enabled && item.key.trim())
-        .map((item) => ({
-          key: resolveValue(item.key),
-          value: resolveValue(item.value),
-          enabled: item.enabled,
-        })),
-      headers: Object.fromEntries(
-        payload.headers
-          .filter((item) => item.enabled && item.key.trim())
-          .map((item) => [resolveValue(item.key), resolveValue(item.value)]),
-      ),
-      body: payload.body ? resolveValue(payload.body) : undefined,
+      ...requestPayload,
       timeout: 30000,
       followRedirects: true,
       validateCertificates: true,
@@ -614,6 +617,8 @@ export default function TestCenterPage() {
         params,
         headers,
         body,
+        bodyType: selectedRequest?.bodyType,
+        formFields: selectedRequest?.formFields,
       });
       setSingleResult(result);
       if (result.ok) {
@@ -710,14 +715,16 @@ export default function TestCenterPage() {
             const current = cursor;
             cursor += 1;
             if (current >= loadIterations) break;
-            const response = await sendRequest({
-              name: selectedRequest.name,
-              method: selectedRequest.method ?? method,
-              url: selectedRequest.url,
-              params: selectedRequest.params ?? [],
-              headers: selectedRequest.headers ?? [],
-              body: selectedRequest.body,
-            });
+              const response = await sendRequest({
+                name: selectedRequest.name,
+                method: selectedRequest.method ?? method,
+                url: selectedRequest.url,
+                params: selectedRequest.params ?? [],
+                headers: selectedRequest.headers ?? [],
+                body: selectedRequest.body,
+                bodyType: selectedRequest.bodyType,
+                formFields: selectedRequest.formFields,
+              });
             if (response.ok) {
               success += 1;
               durations.push(response.durationMs);

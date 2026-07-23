@@ -228,6 +228,8 @@ export interface HttpSendRequest {
   params?: HttpFieldItem[];
   headers?: Record<string, string>;
   body?: string;
+  bodyType?: RequestDefinition["bodyType"];
+  formFields?: NonNullable<RequestDefinition["formFields"]>;
   timeout?: number;
   followRedirects?: boolean;
   validateCertificates?: boolean;
@@ -305,6 +307,13 @@ export interface DesktopApi {
   getAppInfo: () => Promise<AppInfo>;
   closeWindow: () => Promise<{ ok: true }>;
   openExternal: (url: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  selectFile: (
+    options?: {
+      title?: string;
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+    },
+  ) => Promise<{ ok: true; path?: string } | { ok: false; error: string }>;
   checkForUpdates: () => Promise<{ ok: true } | { ok: false; error: string }>;
   downloadUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;
   installUpdate: () => Promise<{ ok: true } | { ok: false; error: string }>;

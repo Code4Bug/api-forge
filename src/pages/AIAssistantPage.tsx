@@ -32,6 +32,7 @@ import {
   replaceEnvironmentVariables,
   useWorkspaceStore,
 } from "@/stores/workspace-store";
+import { buildHttpSendRequest } from "@/shared/http-request";
 
 type Message = AiMessage;
 type Conversation = AiConversation;
@@ -609,9 +610,23 @@ function buildRequestBody(
         ]),
     ).toString();
   }
+  if (request.bodyType === "multipart") return undefined;
   return request.body
     ? replaceEnvironmentVariables(request.body, variables)
     : undefined;
+}
+
+function buildRequestFormFields(
+  request: RequestDefinition,
+  variables: Record<string, string>,
+) {
+  return (request.formFields ?? [])
+    .filter((item) => item.enabled && item.key.trim())
+    .map((item) => ({
+      ...item,
+      key: replaceEnvironmentVariables(item.key, variables),
+      value: replaceEnvironmentVariables(item.value, variables),
+    }));
 }
 
 function buildRequestHeaders(
@@ -1212,17 +1227,21 @@ export default function AIAssistantPage() {
       const request = workspace.requests.find((item) => item.id === id);
       if (!request) return `未找到接口 ${id}`;
       if (!window.desktopApi?.httpSend) return "当前环境不支持 HTTP 测试";
-      const requestBody = buildRequestBody(request, variables);
+      const requestPayload = buildHttpSendRequest(
+        {
+          method: request.method ?? "GET",
+          url: buildRequestUrl(request, variables),
+          params: request.params ?? [],
+          headers: request.headers ?? [],
+          body: request.body,
+          bodyType: request.bodyType,
+          formFields: request.formFields,
+        },
+        variables,
+      );
       const response = await window.desktopApi.httpSend({
         requestId: `ai-test-http-${crypto.randomUUID()}`,
-        method: request.method ?? "GET",
-        url: buildRequestUrl(request, variables),
-        params: resolveFields(request.params ?? [], variables).map((item) => ({
-          ...item,
-          enabled: true,
-        })),
-        headers: buildRequestHeaders(request, variables),
-        body: requestBody,
+        ...requestPayload,
         timeout: 30000,
         followRedirects: true,
         validateCertificates: true,
@@ -1240,20 +1259,18 @@ export default function AIAssistantPage() {
       const concurrency = Math.max(1, Number(args.concurrency) || 3);
       const iterations = Math.max(1, Number(args.iterations) || 12);
       const timeout = Math.max(1000, Number(args.timeout) || 30000);
-      const requestBody = buildRequestBody(request, variables);
-      const requestPayload = {
-        method: request.method ?? "GET",
-        url: buildRequestUrl(request, variables),
-        params: resolveFields(request.params ?? [], variables).map((item) => ({
-          ...item,
-          enabled: true,
-        })),
-        headers: buildRequestHeaders(request, variables),
-        body: requestBody,
-        timeout,
-        followRedirects: true,
-        validateCertificates: true,
-      };
+      const requestPayload = buildHttpSendRequest(
+        {
+          method: request.method ?? "GET",
+          url: buildRequestUrl(request, variables),
+          params: request.params ?? [],
+          headers: request.headers ?? [],
+          body: request.body,
+          bodyType: request.bodyType,
+          formFields: request.formFields,
+        },
+        variables,
+      );
       const durations: number[] = [];
       let success = 0;
       let failure = 0;
@@ -1268,6 +1285,9 @@ export default function AIAssistantPage() {
             const response = await window.desktopApi.httpSend({
               requestId: `ai-test-http-load-${crypto.randomUUID()}`,
               ...requestPayload,
+              timeout,
+              followRedirects: true,
+              validateCertificates: true,
             });
             if (response.ok) {
               success += 1;

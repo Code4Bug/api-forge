@@ -52,7 +52,7 @@ import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { Modal } from "@/components/common/Modal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { Drawer } from "@/components/common/Drawer";
-import { buildCurlCommand } from "@/utils/curl";
+import { buildCurlCommand, parseCurlCommand } from "@/utils/curl";
 
 type AppMenuAction =
   | "about"
@@ -298,57 +298,6 @@ function socketType(node: ApiTreeNode) {
   const value = `${node.name} ${node.id}`.toLowerCase();
   return value.includes("udp") ? "UDP" : "TCP";
 }
-
-function parseCurlCommand(
-  value: string,
-):
-  | {
-      name: string;
-      method: HttpMethod;
-      protocol: Protocol;
-      url: string;
-      headers: HttpFieldItem[];
-      body?: string;
-    }
-  | undefined {
-  if (!/\bcurl\b/i.test(value)) return undefined;
-  const normalized = value
-    .replace(/(?:\\|\^)\r?\n/g, " ")
-    .replace(/\r?\n/g, " ");
-  const url = normalized.match(/https?:\/\/[^\s'"\\]+/i)?.[0];
-  if (!url) return undefined;
-  const methodMatch = normalized.match(
-    /(?:-X|--request)\s+['"]?([A-Z]+)['"]?/i,
-  );
-  const bodyMatch = normalized.match(
-    /(?:-d|--data|--data-raw|--data-binary)\s+(['"])([\s\S]*?)\1/i,
-  );
-  const method = (methodMatch?.[1]?.toUpperCase() ??
-    (bodyMatch ? "POST" : "GET")) as HttpMethod;
-  const parsed = new URL(url);
-  const headers = [
-    ...normalized.matchAll(/(?:-H|--header)\s+(['"])([\s\S]*?)\1/gi),
-  ]
-    .map((match, index) => {
-      const [key, ...valueParts] = match[2].split(":");
-      return {
-        id: `curl-header-${index}`,
-        key: key.trim(),
-        value: valueParts.join(":").trim(),
-        enabled: true,
-      };
-    })
-    .filter((item) => item.key);
-  return {
-    name: `${method} ${parsed.pathname || "/"}`,
-    method,
-    protocol: "http",
-    url,
-    headers,
-    body: bodyMatch?.[2],
-  };
-}
-
 const expandedFoldersStorageKey = "api-forge:expanded-folders";
 
 type SloganEffect = "static" | "typewriter" | "shimmer" | "breathe" | "marquee";
@@ -1388,12 +1337,20 @@ export function WorkspaceLayout() {
             protocol: parsedCurl.protocol,
             method: parsedCurl.method,
             url: parsedCurl.url,
+            params: parsedCurl.params.map((item, index) => ({
+              id: `${id}-param-${index}`,
+              ...item,
+            })),
             headers: parsedCurl.headers.map((item, index) => ({
               id: `${id}-header-${index}`,
               ...item,
             })),
-            params: [],
             body: parsedCurl.body,
+            bodyType: parsedCurl.bodyType,
+            formFields: parsedCurl.formFields?.map((item, index) => ({
+              id: `${id}-form-${index}`,
+              ...item,
+            })),
             updatedAt: new Date().toISOString(),
           });
         else

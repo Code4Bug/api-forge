@@ -36,6 +36,7 @@ import type {
 } from "@/shared/ipc-contracts";
 import { ThemedSelect } from "@/components/common/ThemedSelect";
 import { findJsonPathAtOffset } from "@/utils/json-path";
+import { buildHttpSendRequest } from "@/shared/http-request";
 
 interface CachedHttpResponse {
   requestId: string;
@@ -203,6 +204,12 @@ const processVariableTemplates = [
   { label: "orderId", presetKey: "orderId", selectedText: "orderId" },
   { label: "data.id", presetKey: "dataId", selectedText: "id" },
 ] as const;
+
+function formatFileFieldLabel(value: string) {
+  const filePath = value.startsWith("@") ? value.slice(1) : value;
+  if (!filePath) return "选择文件";
+  return filePath.split(/[\\/]/).pop() || filePath;
+}
 
 const methodColorClasses: Record<HttpMethod, string> = {
   GET: "border-emerald-500/40 bg-emerald-400/10 text-emerald-200",
@@ -1030,6 +1037,7 @@ export default function HttpDebugPage() {
           ]),
       ).toString();
     }
+    if (bodyType === "multipart") return undefined;
     return replaceEnvironmentVariables(body, variables);
   }
 
@@ -1203,13 +1211,27 @@ export default function HttpDebugPage() {
     setSseDisplayMode("stream");
     const requestId = crypto.randomUUID();
     requestIdRef.current = requestId;
-    const requestBody =
-      method === "GET" || method === "HEAD" ? undefined : buildRequestBody();
+    const requestPayload = buildHttpSendRequest(
+      {
+        method,
+        url: nextUrl.toString().replace("http://localhost", ""),
+        params: activeParams,
+        headers: activeHeaders,
+        body,
+        bodyType,
+        formFields,
+      },
+      variables,
+    );
     appendRequestLog(
       `${method} ${nextUrl.toString()}，参数 ${activeParams.length} 个，请求头 ${activeHeaders.length} 个`,
     );
     appendRequestLog(
-      `请求体 ${requestBody ? formatBytes(new TextEncoder().encode(requestBody).length) : "无"}，超时 ${timeout} ms`,
+      requestPayload.bodyType === "multipart"
+        ? `请求体 multipart 表单 ${requestPayload.formFields?.length ?? 0} 个字段，超时 ${timeout} ms`
+        : requestPayload.bodyType === "form-urlencoded"
+          ? `请求体 ${requestPayload.body ? formatBytes(new TextEncoder().encode(requestPayload.body).length) : "无"}，超时 ${timeout} ms`
+          : `请求体 ${requestPayload.body ? formatBytes(new TextEncoder().encode(requestPayload.body).length) : "无"}，超时 ${timeout} ms`,
     );
     appendRequestLog(
       `请求头：${activeHeaders.map((item) => `${item.key}: ${maskHeaderValue(item.key, headers[item.key] ?? item.value)}`).join("；") || "无"}`,
@@ -1218,10 +1240,7 @@ export default function HttpDebugPage() {
       const response = await window.desktopApi.httpSend({
         requestId,
         method,
-        url: nextUrl.toString().replace("http://localhost", ""),
-        params: activeParams,
-        headers,
-        body: requestBody,
+        ...requestPayload,
         timeout,
       });
       if (requestIdRef.current !== requestId) return;
@@ -1710,6 +1729,25 @@ export default function HttpDebugPage() {
                         <label
                           htmlFor={`form-file-${field.id}`}
                           className="flex h-9 min-w-0 cursor-pointer items-center overflow-hidden rounded border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-300 hover:border-zinc-600"
+                          onClick={async (event) => {
+                            try {
+                              const result = await window.desktopApi?.selectFile?.({
+                                title: "选择 multipart 文件",
+                              });
+                              if (!result?.ok || !result.path) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setFormFields((items) =>
+                                items.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, value: `@${result.path}` }
+                                    : item,
+                                ),
+                              );
+                            } catch {
+                              // 原生文件选择不可用时，回退到普通 input。
+                            }
+                          }}
                         >
                           <input
                             id={`form-file-${field.id}`}
@@ -1718,10 +1756,13 @@ export default function HttpDebugPage() {
                             onChange={(event) => {
                               const file = event.target.files?.[0];
                               if (!file) return;
+                              const filePath = (file as File & {
+                                path?: string;
+                              }).path ?? file.name;
                               setFormFields((items) =>
                                 items.map((item, itemIndex) =>
                                   itemIndex === index
-                                    ? { ...item, value: `@${file.name}` }
+                                    ? { ...item, value: `@${filePath}` }
                                     : item,
                                 ),
                               );
@@ -1729,7 +1770,7 @@ export default function HttpDebugPage() {
                             }}
                           />
                           <span className="truncate">
-                            {field.value || "选择文件"}
+                            {formatFileFieldLabel(field.value)}
                           </span>
                         </label>
                       ) : (

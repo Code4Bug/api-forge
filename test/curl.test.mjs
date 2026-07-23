@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildCurlCommand } from '../src/utils/curl.ts'
+import { buildCurlCommand, parseCurlCommand } from '../src/utils/curl.ts'
 
 test('curl 命令会拼接 query、headers 和 JSON body', () => {
   const command = buildCurlCommand({
@@ -98,4 +98,80 @@ test('multipart 会保留请求头并使用 -F', () => {
       "  -F 'title=demo' \\\n" +
       "  -F 'file=@/path/to/file'",
   )
+})
+
+test('multipart 文件字段带 @ 时不会重复拼接', () => {
+  const command = buildCurlCommand({
+    id: 'api-3b',
+    protocol: 'http',
+    name: '上传',
+    method: 'POST',
+    url: 'https://api.example.com/upload',
+    params: [],
+    headers: [
+      {
+        id: 'h1',
+        key: 'Accept',
+        value: '*/*',
+        enabled: true,
+      },
+      {
+        id: 'h2',
+        key: 'x-access-token',
+        value: '{{token}}',
+        enabled: true,
+      },
+    ],
+    bodyType: 'multipart',
+    body: '',
+    formFields: [
+      { id: 'f1', key: 'file', value: '@/Users/edward/Downloads/01_original.jpg', kind: 'file', enabled: true },
+    ],
+    updatedAt: new Date().toISOString(),
+  })
+
+  assert.equal(
+    command,
+    "curl -X POST 'https://api.example.com/upload' \\\n" +
+      "  -H 'Accept: */*' \\\n" +
+      "  -H 'x-access-token: {{token}}' \\\n" +
+      "  -F 'file=@/Users/edward/Downloads/01_original.jpg'",
+  )
+})
+
+test('导入 multipart curl 会还原表单字段', () => {
+  const parsed = parseCurlCommand(
+    "curl -X POST 'https://api.example.com/upload' \\\n" +
+      "  -H 'Content-Type: multipart/form-data' \\\n" +
+      "  -F 'title=demo' \\\n" +
+      "  -F 'file=@/path/to/file'",
+  )
+
+  assert.equal(parsed?.bodyType, 'multipart')
+  assert.equal(parsed?.formFields?.length, 2)
+  assert.deepEqual(parsed?.formFields?.[1], {
+    id: 'curl-form-1',
+    key: 'file',
+    value: '/path/to/file',
+    kind: 'file',
+    enabled: true,
+  })
+})
+
+test('导入 data-urlencode curl 会还原为 form-urlencoded', () => {
+  const parsed = parseCurlCommand(
+    "curl -X POST 'https://api.example.com/login' \\\n" +
+      "  --data-urlencode 'username=alice' \\\n" +
+      "  --data-urlencode 'password=a b'",
+  )
+
+  assert.equal(parsed?.bodyType, 'form-urlencoded')
+  assert.equal(parsed?.formFields?.length, 2)
+  assert.deepEqual(parsed?.formFields?.[0], {
+    id: 'curl-form-0',
+    key: 'username',
+    value: 'alice',
+    kind: 'text',
+    enabled: true,
+  })
 })
