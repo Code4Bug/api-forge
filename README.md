@@ -127,6 +127,20 @@ pnpm start
 
 构建产物输出到 `release/`。macOS 跨平台构建 Windows 安装包需要 Wine；正式分发前还需要自行配置对应平台的代码签名。
 
+### Linux 安装
+
+- `*.AppImage`：下载后先赋予可执行权限，再直接双击或运行。
+  ```bash
+  chmod +x API-forge-*.AppImage
+  ./API-forge-*.AppImage
+  ```
+- `*.deb`：使用系统包管理器安装。
+  ```bash
+  sudo apt install ./API-forge-*.deb
+  ```
+- 安装后在应用启动器里搜索 `API-forge`。
+- 如果一时没显示，先注销重登或刷新桌面菜单缓存；有些桌面环境会把新程序放在“实用工具”分类下。
+
 ## 技术架构
 
 ```text
