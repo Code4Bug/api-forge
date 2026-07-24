@@ -541,6 +541,8 @@ export default function HttpDebugPage() {
   const [body, setBody] = useState(initialBody);
   const [bodyType, setBodyType] =
     useState<NonNullable<RequestDefinition["bodyType"]>>("json");
+  const [responseMode, setResponseMode] =
+    useState<NonNullable<RequestDefinition["responseMode"]>>("auto");
   const [formFields, setFormFields] = useState<
     NonNullable<RequestDefinition["formFields"]>
   >([{ id: "form-0", key: "", value: "", kind: "text", enabled: true }]);
@@ -665,10 +667,11 @@ export default function HttpDebugPage() {
         headers,
         body,
         bodyType,
+        responseMode,
         formFields,
         description,
       }),
-    [method, url, params, headers, body, bodyType, formFields, description],
+    [method, url, params, headers, body, bodyType, responseMode, formFields, description],
   );
   const savedSignature = useMemo(
     () =>
@@ -680,6 +683,7 @@ export default function HttpDebugPage() {
             headers: activeRequest.headers,
             body: activeRequest.body ?? "",
             bodyType: activeRequest.bodyType ?? "json",
+            responseMode: activeRequest.responseMode ?? "auto",
             formFields: activeRequest.formFields ?? [],
             description: activeRequest.description ?? "",
           })
@@ -865,6 +869,7 @@ export default function HttpDebugPage() {
       ]);
       setBody("");
       setBodyType("json");
+      setResponseMode("auto");
       setFormFields([]);
       setBearerToken("");
       setAssertion("");
@@ -897,6 +902,7 @@ export default function HttpDebugPage() {
     );
     setBody(request?.body ?? "");
     setBodyType(request?.bodyType ?? "json");
+    setResponseMode(request?.responseMode ?? "auto");
     setFormFields(
       request?.formFields?.length
         ? request.formFields
@@ -1003,6 +1009,7 @@ export default function HttpDebugPage() {
       })),
       body,
       bodyType,
+      responseMode,
       formFields,
       updatedAt: new Date().toISOString(),
     };
@@ -1219,6 +1226,7 @@ export default function HttpDebugPage() {
         headers: activeHeaders,
         body,
         bodyType,
+        responseMode,
         formFields,
       },
       variables,
@@ -1266,7 +1274,7 @@ export default function HttpDebugPage() {
         );
       }
       if (response.ok === false && response.error.code === "CANCELED") return;
-      if (response.ok && activeApiId)
+      if (response.ok && activeApiId && !response.downloadedFile)
         captureProcessVariables(activeApiId, response.body);
       if (assertion.trim()) {
         const expression = replaceEnvironmentVariables(
@@ -1352,7 +1360,7 @@ export default function HttpDebugPage() {
         createdAt: new Date().toISOString(),
         requestSnapshot: {
           apiId: activeApiId,
-          request: { method, url, params, headers, body, bodyType, formFields },
+          request: { method, url, params, headers, body, bodyType, responseMode, formFields },
         },
         responseSnapshot: failure,
       });
@@ -1371,10 +1379,13 @@ export default function HttpDebugPage() {
     void window.desktopApi?.httpCancel(requestId);
   }
 
+  const downloadInfo = result?.ok ? result.downloadedFile : undefined;
   const responseBody =
     streamBody ||
     (result && result.ok
-      ? result.body
+      ? downloadInfo
+        ? ""
+        : result.body
       : result && "error" in result
         ? result.error.message
         : undefined);
@@ -1408,7 +1419,9 @@ export default function HttpDebugPage() {
         ? sseDisplayMode === "stream"
           ? streamText
           : sseEvents.map((item) => item.rawData).join("\n\n")
-        : (formattedResponseBody ?? responseBody ?? "")
+        : downloadInfo
+          ? downloadInfo.filePath
+          : (formattedResponseBody ?? responseBody ?? "")
       : activeResponseTab === "Headers"
         ? result?.ok
           ? JSON.stringify(result.headers, null, 2)
@@ -1891,6 +1904,29 @@ export default function HttpDebugPage() {
           )}
           {activeRequestTab === "Settings" && (
             <div className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4 text-xs">
+              <div>
+                <div className="mb-2 flex items-center justify-between text-zinc-300">
+                  <span>响应模式</span>
+                </div>
+                <ThemedSelect
+                  size="sm"
+                  className="w-full"
+                  value={responseMode}
+                  options={[
+                    { value: "auto" as const, label: "自动识别" },
+                    { value: "text" as const, label: "文本预览" },
+                    { value: "download" as const, label: "强制下载" },
+                  ]}
+                  onChange={(value) =>
+                    setResponseMode(
+                      value as NonNullable<RequestDefinition["responseMode"]>,
+                    )
+                  }
+                />
+                <p className="mt-2 text-[11px] leading-5 text-zinc-500">
+                  自动模式会在响应头包含下载信息时弹出保存弹窗。
+                </p>
+              </div>
               <div>
                 <div className="mb-2 flex items-center justify-between text-zinc-300">
                   <span>请求超时（毫秒）</span>

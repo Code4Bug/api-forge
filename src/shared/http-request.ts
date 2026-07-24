@@ -8,6 +8,7 @@ import type {
 export interface HttpRequestInput {
   method: HttpMethod;
   url: string;
+  responseMode?: RequestDefinition["responseMode"];
   params?: HttpFieldItem[];
   headers?: HttpFieldItem[];
   body?: string;
@@ -74,6 +75,7 @@ export function buildHttpSendRequest(
   return {
     method: input.method,
     url: replaceTemplateVariables(input.url, variables),
+    responseMode: input.responseMode ?? "auto",
     params,
     headers,
     body,

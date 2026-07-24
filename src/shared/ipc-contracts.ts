@@ -1,4 +1,5 @@
 export type Protocol = "http" | "websocket" | "socket";
+export type HttpResponseMode = "auto" | "text" | "download";
 
 export type HttpMethod =
   "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
@@ -55,6 +56,7 @@ export interface RequestDefinition {
   description?: string;
   method?: HttpMethod;
   url: string;
+  responseMode?: HttpResponseMode;
   params: KeyValueItem[];
   headers: KeyValueItem[];
   body?: string;
@@ -225,6 +227,7 @@ export interface HttpSendRequest {
   requestId?: string;
   method: HttpMethod;
   url: string;
+  responseMode?: HttpResponseMode;
   params?: HttpFieldItem[];
   headers?: Record<string, string>;
   body?: string;
@@ -242,6 +245,11 @@ export interface HttpSendResponse {
   body: string;
   durationMs: number;
   sizeBytes: number;
+  downloadedFile?: {
+    fileName: string;
+    filePath: string;
+    mimeType?: string;
+  };
 }
 
 export interface HttpSendError {

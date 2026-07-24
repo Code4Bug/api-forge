@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, nativeImage, ipcMain, screen, shell, dialog } from 'electron'
 import electronUpdater from 'electron-updater'
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
@@ -8,9 +9,11 @@ import { homedir, platform, release, type as osType } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { execFile, execFileSync } from 'node:child_process'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
-import type { AiConversation, BashExecRequest, BashExecResult, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
+import type { AiConversation, BashExecRequest, BashExecResult, HttpResponseMode, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
 import { fetchChangelogMarkdown, getChangelogDownloadUrl, parseChangelogMarkdown } from '../../src/shared/changelog-utils.js'
 import { buildFetchBody, buildFetchHeaders, buildFetchUrl } from '../../src/shared/http-request.js'
 
@@ -120,6 +123,62 @@ async function resolveLatestGithubRelease() {
   } catch {
     return undefined
   }
+}
+
+function getHeaderValue(headers: Record<string, string>, key: string) {
+  const targetKey = key.toLowerCase()
+  return Object.entries(headers).find(([currentKey]) => currentKey.toLowerCase() === targetKey)?.[1] ?? ''
+}
+
+function parseContentDispositionFilename(value: string) {
+  if (!value) return ''
+  const filenameStar = value.match(/filename\*\s*=\s*([^;]+)/i)?.[1]?.trim()
+  if (filenameStar) {
+    const normalized = filenameStar.replace(/^UTF-8''/i, '').replace(/^"|"$/g, '')
+    try {
+      return decodeURIComponent(normalized)
+    } catch {
+      return normalized
+    }
+  }
+  const filename = value.match(/filename\s*=\s*([^;]+)/i)?.[1]?.trim()
+  if (!filename) return ''
+  return filename.replace(/^"|"$/g, '')
+}
+
+function sanitizeFileName(name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return 'download'
+  return trimmed
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 180)
+}
+
+function guessFileNameFromUrl(requestUrl: string) {
+  try {
+    const url = new URL(requestUrl)
+    const parts = url.pathname.split('/').filter(Boolean)
+    if (!parts.length) return ''
+    return decodeURIComponent(parts[parts.length - 1] || '')
+  } catch {
+    return ''
+  }
+}
+
+function resolveDownloadFileName(headers: Record<string, string>, requestUrl: string) {
+  const contentDisposition = getHeaderValue(headers, 'content-disposition')
+  const headerName = parseContentDispositionFilename(contentDisposition)
+  const urlName = guessFileNameFromUrl(requestUrl)
+  return sanitizeFileName(headerName || urlName || 'download')
+}
+
+function shouldSaveResponse(requestMode: HttpResponseMode | undefined, headers: Record<string, string>) {
+  if (requestMode === 'download') return true
+  if (requestMode === 'text') return false
+  const contentDisposition = getHeaderValue(headers, 'content-disposition')
+  const contentType = getHeaderValue(headers, 'content-type').toLowerCase()
+  return /attachment/i.test(contentDisposition) || /filename\*?=/i.test(contentDisposition) || /^application\/octet-stream\b/i.test(contentType)
 }
 
 async function loadLatestReleaseInfo() {
@@ -924,6 +983,7 @@ ipcMain.handle('http:send', async (event, request) => {
   const timeout = request.timeout ?? 30000
   const followRedirects = request.followRedirects ?? true
   const validateCertificates = request.validateCertificates ?? true
+  const responseMode = request.responseMode ?? 'auto'
 
   if (!request.url || timeout <= 0) {
     return { ok: false, error: { code: 'INVALID_REQUEST', message: 'URL and a positive timeout are required' } }
@@ -952,6 +1012,45 @@ ipcMain.handle('http:send', async (event, request) => {
     const responseHeaders = Object.fromEntries(response.headers.entries())
     const contentType = responseHeaders['content-type'] ?? ''
     const isSse = contentType.toLowerCase().startsWith('text/event-stream')
+    const shouldDownload = shouldSaveResponse(responseMode, responseHeaders)
+    if (shouldDownload) {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const defaultName = resolveDownloadFileName(responseHeaders, requestUrl)
+      const { canceled, filePath } = await dialog.showSaveDialog(window ?? undefined, {
+        title: '保存下载文件',
+        defaultPath: defaultName,
+      })
+      if (canceled || !filePath) {
+        return {
+          ok: false,
+          error: {
+            code: 'CANCELED',
+            message: '保存已取消',
+          },
+        }
+      }
+
+      if (response.body) {
+        await pipeline(Readable.fromWeb(response.body), createWriteStream(filePath))
+      } else {
+        await writeFile(filePath, '')
+      }
+      const savedFile = await stat(filePath)
+
+      return {
+        ok: true,
+        status: response.status,
+        headers: responseHeaders,
+        body: '',
+        durationMs: Date.now() - startedAt,
+        sizeBytes: savedFile.size,
+        downloadedFile: {
+          fileName: defaultName,
+          filePath,
+          mimeType: contentType || undefined,
+        },
+      }
+    }
     let responseBody = ''
     if (response.body) {
       const reader = response.body.getReader()
