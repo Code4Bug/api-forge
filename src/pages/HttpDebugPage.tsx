@@ -1337,7 +1337,7 @@ export default function HttpDebugPage() {
         createdAt: new Date().toISOString(),
         requestSnapshot: {
           apiId: activeApiId,
-          request: { method, url, params, headers, body, bodyType, formFields },
+          request: { method, url, params, headers, body, bodyType, responseMode, formFields },
         },
         responseSnapshot: response,
       });
@@ -2170,11 +2170,12 @@ export default function HttpDebugPage() {
             {loading && (
               <span className="text-xs text-cyan-300">请求进行中...</span>
             )}
-            {result?.ok && (
-              <span className="text-xs text-zinc-500">
-                {result.durationMs} ms · {formatBytes(result.sizeBytes)}
-              </span>
-            )}
+          {result?.ok && (
+            <span className="text-xs text-zinc-500">
+              {result.durationMs} ms · {formatBytes(result.sizeBytes)}
+              {result.downloadedFile ? ` · 已保存 ${result.downloadedFile.fileName}` : ""}
+            </span>
+          )}
             {errorCode && <StatusPill tone="red">{errorCode}</StatusPill>}
           </div>
           <button
@@ -2221,7 +2222,7 @@ export default function HttpDebugPage() {
             </p>
           )}
           {activeResponseTab === "Body" &&
-            responseBody &&
+            (downloadInfo || responseBody) &&
             (streamSse ? (
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="mb-3 flex shrink-0 items-center">
@@ -2265,15 +2266,30 @@ export default function HttpDebugPage() {
                   </div>
                 )}
               </div>
+            ) : downloadInfo ? (
+              <div className="space-y-3 rounded border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                <div className="font-medium">文件已保存</div>
+                <div className="break-all text-xs text-emerald-200">
+                  {downloadInfo.fileName}
+                </div>
+                <div className="break-all text-xs text-emerald-200">
+                  {downloadInfo.filePath}
+                </div>
+                {downloadInfo.mimeType && (
+                  <div className="text-[11px] text-emerald-300">
+                    {downloadInfo.mimeType}
+                  </div>
+                )}
+              </div>
             ) : isJsonResponse ? (
               <div className="relative min-h-0 flex-1 overflow-hidden rounded border border-zinc-800 bg-[#0b0f14]">
-                  <VariableEditor
-                    height="100%"
-                    language="json"
-                    theme={editorTheme}
-                    variables={{}}
-                    value={formattedResponseBody ?? ""}
-                    onInsertProcessVariable={openProcessVariableDialog}
+                <VariableEditor
+                  height="100%"
+                  language="json"
+                  theme={editorTheme}
+                  variables={{}}
+                  value={formattedResponseBody ?? ""}
+                  onInsertProcessVariable={openProcessVariableDialog}
                   options={{
                     readOnly: true,
                     minimap: { enabled: false },

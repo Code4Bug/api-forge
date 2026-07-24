@@ -9,8 +9,6 @@ import { homedir, platform, release, type as osType } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { execFile, execFileSync } from 'node:child_process'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 import * as net from 'node:net'
 import * as dgram from 'node:dgram'
 import type { AiConversation, BashExecRequest, BashExecResult, HttpResponseMode, RequestHistoryItem, UpdateStatus, UserPreferences, WorkspaceSnapshot } from '../../src/shared/ipc-contracts.js'
@@ -1016,10 +1014,13 @@ ipcMain.handle('http:send', async (event, request) => {
     if (shouldDownload) {
       const window = BrowserWindow.fromWebContents(event.sender)
       const defaultName = resolveDownloadFileName(responseHeaders, requestUrl)
-      const { canceled, filePath } = await dialog.showSaveDialog(window ?? undefined, {
+      const saveDialogOptions = {
         title: '保存下载文件',
         defaultPath: defaultName,
-      })
+      }
+      const { canceled, filePath } = window
+        ? await dialog.showSaveDialog(window, saveDialogOptions)
+        : await dialog.showSaveDialog(saveDialogOptions)
       if (canceled || !filePath) {
         return {
           ok: false,
@@ -1031,7 +1032,28 @@ ipcMain.handle('http:send', async (event, request) => {
       }
 
       if (response.body) {
-        await pipeline(Readable.fromWeb(response.body), createWriteStream(filePath))
+        const writer = createWriteStream(filePath)
+        try {
+          const reader = response.body.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (!writer.write(Buffer.from(value))) {
+              await new Promise<void>((resolve, reject) => {
+                writer.once('drain', resolve)
+                writer.once('error', reject)
+              })
+            }
+          }
+          writer.end()
+          await new Promise<void>((resolve, reject) => {
+            writer.once('finish', resolve)
+            writer.once('error', reject)
+          })
+        } catch (error) {
+          writer.destroy()
+          throw error
+        }
       } else {
         await writeFile(filePath, '')
       }

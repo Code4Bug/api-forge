@@ -569,20 +569,22 @@ export default function TestCenterPage() {
     headers: HttpFieldItem[];
     body?: string;
     bodyType?: RequestDefinition["bodyType"];
+    responseMode?: RequestDefinition["responseMode"];
     formFields?: NonNullable<RequestDefinition["formFields"]>;
   }) {
     if (!window.desktopApi?.httpSend) throw new Error("当前环境不支持请求发送");
     const requestPayload = buildHttpSendRequest(
-      {
-        method: payload.method,
-        url: payload.url,
-        params: payload.params,
-        headers: payload.headers,
-        body: payload.body,
-        bodyType: payload.bodyType,
-        formFields: payload.formFields,
-      },
-      variables,
+        {
+          method: payload.method,
+          url: payload.url,
+          params: payload.params,
+          headers: payload.headers,
+          body: payload.body,
+          bodyType: payload.bodyType,
+          responseMode: payload.responseMode,
+          formFields: payload.formFields,
+        },
+        variables,
     );
     const response = await window.desktopApi.httpSend({
       ...requestPayload,
