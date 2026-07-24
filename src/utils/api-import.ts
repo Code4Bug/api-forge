@@ -37,6 +37,83 @@ function createKeyValueItem(
   return { id, key, value, enabled: true };
 }
 
+function toPostmanRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+function normalizePostmanKeyValueItems(
+  value: unknown,
+  itemPrefix: string,
+  index: number,
+) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .filter((entry) => {
+      const record = toPostmanRecord(entry);
+      return (
+        !!record &&
+        record.disabled !== true &&
+        typeof record.key === "string" &&
+        record.key.trim().length > 0
+      );
+    })
+    .map((entry, itemIndex) => {
+      const record = toPostmanRecord(entry)!;
+      return createKeyValueItem(
+        `${itemPrefix}-${index}-${itemIndex}`,
+        String(record.key).trim(),
+        valueToText(record.value),
+      );
+    });
+}
+
+function buildPostmanAuthHeaders(auth: unknown, index: number) {
+  const record = toPostmanRecord(auth);
+  if (!record) return [];
+
+  const type = typeof record.type === "string" ? record.type.trim().toLowerCase() : "";
+  if (type === "bearer") {
+    const bearerValue = Array.isArray(record.bearer)
+      ? record.bearer.find((entry) => {
+          const item = toPostmanRecord(entry);
+          return item && typeof item.value === "string" && item.value.trim();
+        })
+      : toPostmanRecord(record.bearer);
+    const token = bearerValue ? String(bearerValue.value ?? "").trim() : "";
+    if (!token) return [];
+    return [
+      createKeyValueItem(
+        `import-postman-auth-${index}-0`,
+        "Authorization",
+        `Bearer ${token}`,
+      ),
+    ];
+  }
+
+  return [];
+}
+
+function buildPostmanContentTypeHeader(body: Record<string, unknown> | undefined) {
+  if (!body || typeof body !== "object") return undefined;
+  const mode = typeof body.mode === "string" ? body.mode : "";
+  if (mode === "urlencoded") return "application/x-www-form-urlencoded";
+  if (mode === "formdata") return undefined;
+  if (mode !== "raw") return undefined;
+
+  const rawOptions = toPostmanRecord(body.options)?.raw;
+  const language =
+    rawOptions && typeof rawOptions === "object"
+      ? String(toPostmanRecord(rawOptions)?.language ?? "").toLowerCase()
+      : "";
+  if (language === "json") return "application/json";
+  if (language === "xml") return "application/xml";
+  if (language === "html") return "text/html";
+  if (language === "javascript") return "application/javascript";
+  if (language === "text") return "text/plain";
+  return undefined;
+}
+
 function buildUrlFromPostmanUrl(url: unknown) {
   if (typeof url === "string") return url.trim();
   if (!url || typeof url !== "object") return "";
@@ -241,28 +318,34 @@ function buildPostmanRequest(
           ),
         )
     : [];
-  const headers = Array.isArray(request.header)
-    ? request.header
-        .filter(
-          (entry) => {
-            if (!entry || typeof entry !== "object") return false;
-            const record = entry as Record<string, unknown>;
-            return (
-              record.disabled !== true &&
-              typeof record.key === "string" &&
-              record.key.trim().length > 0
-            );
-          },
-        )
-        .map((entry, headerIndex) =>
-          createKeyValueItem(
-            `import-postman-header-${index}-${headerIndex}`,
-            String((entry as Record<string, unknown>).key).trim(),
-            valueToText((entry as Record<string, unknown>).value),
-          ),
-        )
-    : [];
-  const body = request.body as Record<string, unknown> | undefined;
+  const explicitHeaders = [
+    ...normalizePostmanKeyValueItems(request.header, "import-postman-header", index),
+    ...normalizePostmanKeyValueItems(request.headers, "import-postman-header-alt", index),
+  ];
+  const authHeaders = buildPostmanAuthHeaders(request.auth, index);
+  const headers = [...explicitHeaders];
+  for (const header of authHeaders) {
+    const exists = headers.some(
+      (item) => item.key.toLowerCase() === header.key.toLowerCase(),
+    );
+    if (!exists) headers.push(header);
+  }
+  const body = toPostmanRecord(request.body);
+  const contentType = buildPostmanContentTypeHeader(body);
+  if (contentType) {
+    const hasContentType = headers.some(
+      (item) => item.key.toLowerCase() === "content-type",
+    );
+    if (!hasContentType) {
+      headers.push(
+        createKeyValueItem(
+          `import-postman-header-${index}-content-type`,
+          "Content-Type",
+          contentType,
+        ),
+      );
+    }
+  }
   const mode = typeof body?.mode === "string" ? body.mode : "";
   if (mode === "urlencoded") {
     return {
@@ -275,25 +358,13 @@ function buildPostmanRequest(
       headers,
       bodyType: "form-urlencoded",
       formFields: Array.isArray(body.urlencoded)
-        ? body.urlencoded
-            .filter(
-              (field) => {
-                if (!field || typeof field !== "object") return false;
-                const record = field as Record<string, unknown>;
-                return (
-                  record.disabled !== true &&
-                  typeof record.key === "string" &&
-                  record.key.trim().length > 0
-                );
-              },
-            )
-            .map((field, fieldIndex) => ({
-              id: `import-postman-form-${index}-${fieldIndex}`,
-              key: String((field as Record<string, unknown>).key).trim(),
-              value: valueToText((field as Record<string, unknown>).value),
-              kind: "text" as const,
-              enabled: true,
-            }))
+        ? normalizePostmanKeyValueItems(body.urlencoded, "import-postman-form", index).map((item) => ({
+            id: item.id,
+            key: item.key,
+            value: item.value,
+            kind: "text" as const,
+            enabled: item.enabled,
+          }))
         : [],
     };
   }
@@ -308,29 +379,30 @@ function buildPostmanRequest(
       headers,
       bodyType: "multipart",
       formFields: Array.isArray(body.formdata)
-        ? body.formdata
-            .filter(
-              (field) =>
-                field &&
-                typeof field === "object" &&
-                (field as Record<string, unknown>).disabled !== true &&
-                typeof (field as Record<string, unknown>).key === "string" &&
-                String((field as Record<string, unknown>).key).trim(),
-            )
-            .map((field, fieldIndex) => ({
-              id: `import-postman-form-${index}-${fieldIndex}`,
-              key: String((field as Record<string, unknown>).key).trim(),
-              value:
-                (field as Record<string, unknown>).src &&
-                typeof (field as Record<string, unknown>).src === "string"
-                  ? String((field as Record<string, unknown>).src)
-                  : valueToText((field as Record<string, unknown>).value),
-              kind:
-                (field as Record<string, unknown>).type === "file"
-                  ? ("file" as const)
-                  : ("text" as const),
-              enabled: true,
-            }))
+        ? (body.formdata as unknown[])
+            .filter((field) => {
+              const record = toPostmanRecord(field);
+              return (
+                !!record &&
+                record.disabled !== true &&
+                typeof record.key === "string" &&
+                String(record.key).trim().length > 0
+              );
+            })
+            .map((field, fieldIndex) => {
+              const record = toPostmanRecord(field)!;
+              return {
+                id: `import-postman-form-${index}-${fieldIndex}`,
+                key: String(record.key).trim(),
+                value:
+                  typeof record.src === "string"
+                    ? String(record.src)
+                    : valueToText(record.value),
+                kind:
+                  record.type === "file" ? ("file" as const) : ("text" as const),
+                enabled: true,
+              };
+            })
         : [],
     };
   }

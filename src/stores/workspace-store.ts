@@ -99,6 +99,7 @@ interface WorkspaceState {
   moveApi: (apiId: string, parentId?: string, index?: number) => void;
   renameNode: (nodeId: string, name: string) => void;
   deleteNode: (nodeId: string) => void;
+  deleteFolderChildren: (folderId: string) => void;
   saveNow: () => void;
   markUnsaved: () => void;
   setAutoSaveSettings: (enabled: boolean, interval: number) => void;
@@ -916,6 +917,36 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       requests: workspace.requests.filter(
         (item) => !deletedIds.includes(item.id),
       ),
+    };
+    const nextActiveApiId = treeContains(nextWorkspace.apiTree, activeApiId)
+      ? activeApiId
+      : undefined;
+    const nextOpenApiIds = (workspace.preferences.openApiIds ?? []).filter(
+      (id) => treeContains(nextWorkspace.apiTree, id),
+    );
+    const preferences = {
+      ...nextWorkspace.preferences,
+      activeApiId: nextActiveApiId,
+      openApiIds: nextOpenApiIds,
+    };
+    const persistedWorkspace = { ...nextWorkspace, preferences };
+    set({ workspace: persistedWorkspace, activeApiId: nextActiveApiId });
+    saveWorkspace(persistedWorkspace, set);
+  },
+  deleteFolderChildren: (folderId) => {
+    const { workspace, activeApiId } = get();
+    if (!workspace) return;
+    const folder = findTreeNode(workspace.apiTree, folderId);
+    if (!folder || folder.type !== "folder") return;
+    const deletedIds = new Set(
+      (folder.children ?? []).flatMap(collectTreeNodeIds),
+    );
+    const nextWorkspace = {
+      ...workspace,
+      apiTree: updateTree(workspace.apiTree, (node) =>
+        node.id === folderId ? { ...node, children: [] } : node,
+      ),
+      requests: workspace.requests.filter((item) => !deletedIds.has(item.id)),
     };
     const nextActiveApiId = treeContains(nextWorkspace.apiTree, activeApiId)
       ? activeApiId

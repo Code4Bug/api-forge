@@ -43,6 +43,80 @@ test("Postman collection 会展开为多个接口", () => {
   assert.equal(parsed?.items.length, 1);
   assert.equal(parsed?.items[0]?.name, "用户 / 获取详情");
   assert.equal(parsed?.items[0]?.url, "https://api.example.com/users/1");
+  assert.equal(parsed?.items[0]?.headers[0]?.key, "Accept");
+  assert.equal(parsed?.items[0]?.headers[0]?.value, "application/json");
+});
+
+test("Postman collection 会保留请求头并补齐 bearer 鉴权", () => {
+  const parsed = parseApiImportText(
+    JSON.stringify({
+      info: {
+        name: "Demo",
+        schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      },
+      item: [
+        {
+          name: "带鉴权请求",
+          request: {
+            method: "GET",
+            header: [{ key: "x-access-token", value: "{{token}}" }],
+            auth: {
+              type: "bearer",
+              bearer: [{ key: "token", value: "{{token}}" }],
+            },
+            url: "https://api.example.com/secure",
+          },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(parsed?.source, "postman");
+  assert.equal(parsed?.items.length, 1);
+  assert.deepEqual(
+    parsed?.items[0]?.headers.map((item) => [item.key, item.value]),
+    [
+      ["x-access-token", "{{token}}"],
+      ["Authorization", "Bearer {{token}}"],
+    ],
+  );
+});
+
+test("Postman raw JSON 请求会自动补齐 Content-Type", () => {
+  const parsed = parseApiImportText(
+    JSON.stringify({
+      info: {
+        name: "Demo",
+        schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      },
+      item: [
+        {
+          name: "登录",
+          request: {
+            method: "POST",
+            header: [],
+            body: {
+              mode: "raw",
+              raw: "{\"username\":\"admin\"}",
+              options: {
+                raw: {
+                  language: "json",
+                },
+              },
+            },
+            url: "http://127.0.0.1:9999/sys/login",
+          },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(parsed?.source, "postman");
+  assert.equal(parsed?.items.length, 1);
+  assert.deepEqual(
+    parsed?.items[0]?.headers.map((item) => [item.key, item.value]),
+    [["Content-Type", "application/json"]],
+  );
 });
 
 test("OpenAPI 文档会按路径导入", () => {

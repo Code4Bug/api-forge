@@ -4,9 +4,16 @@ import { dirname, join } from 'node:path'
 import { existsSync } from 'node:fs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const electronBin = process.platform === 'win32'
-  ? join(root, 'node_modules', '.bin', 'electron.cmd')
-  : join(root, 'node_modules', '.bin', 'electron')
+const electronDistBin = process.platform === 'win32'
+  ? join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+  : process.platform === 'darwin'
+    ? join(root, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
+    : join(root, 'node_modules', 'electron', 'dist', 'electron')
+const electronBin = existsSync(electronDistBin)
+  ? electronDistBin
+  : process.platform === 'win32'
+    ? join(root, 'node_modules', '.bin', 'electron.cmd')
+    : join(root, 'node_modules', '.bin', 'electron')
 
 if (!existsSync(electronBin)) {
   console.error('未找到 Electron。请先在项目目录执行 pnpm install，然后再运行 npm run dev。')

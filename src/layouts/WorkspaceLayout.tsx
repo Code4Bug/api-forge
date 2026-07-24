@@ -476,6 +476,7 @@ function TreeNode({
   onCreateApi,
   onRename,
   onDelete,
+  onDeleteFolderChildren,
   onMoveApi,
   onCopyName,
   onCopyCurl,
@@ -493,6 +494,7 @@ function TreeNode({
   onCreateApi: (parentId?: string) => void;
   onRename: (node: ApiTreeNode) => void;
   onDelete: (node: ApiTreeNode) => void;
+  onDeleteFolderChildren: (node: ApiTreeNode) => void;
   onMoveApi: (apiId: string, parentId?: string, index?: number) => void;
   onCopyName: (node: ApiTreeNode) => void;
   onCopyCurl: (node: ApiTreeNode) => void;
@@ -761,6 +763,18 @@ function TreeNode({
                 复制为 cURL 命令
               </button>
             )}
+            {isFolder && (
+              <button
+                onClick={() => {
+                  setMoreOpen(false);
+                  onDeleteFolderChildren(node);
+                }}
+                className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs text-rose-200 hover:bg-rose-500/15"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                批量删除子目录/API
+              </button>
+            )}
             <button
               onClick={() => {
                 setMoreOpen(false);
@@ -817,20 +831,21 @@ function TreeNode({
           className={isDragOver ? "rounded bg-cyan-400/5" : ""}
         >
           {node.children?.map((child, childIndex) => (
-              <TreeNode
-            key={child.id}
-            node={child}
-            index={childIndex}
-            depth={depth + 1}
-            query={query}
-            requestUrlsById={requestUrlsById}
-            expandedFolders={expandedFolders}
-            onFolderExpandedChange={onFolderExpandedChange}
-            onOpenApi={onOpenApi}
+            <TreeNode
+              key={child.id}
+              node={child}
+              index={childIndex}
+              depth={depth + 1}
+              query={query}
+              requestUrlsById={requestUrlsById}
+              expandedFolders={expandedFolders}
+              onFolderExpandedChange={onFolderExpandedChange}
+              onOpenApi={onOpenApi}
               onCreateFolder={onCreateFolder}
               onCreateApi={onCreateApi}
               onRename={onRename}
               onDelete={onDelete}
+              onDeleteFolderChildren={onDeleteFolderChildren}
               onMoveApi={onMoveApi}
               onCopyName={onCopyName}
               onCopyCurl={onCopyCurl}
@@ -874,6 +889,7 @@ export function WorkspaceLayout() {
     moveApi,
     renameNode,
     deleteNode,
+    deleteFolderChildren,
   } = useWorkspaceStore();
   const { theme, setTheme, isDark } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
@@ -929,6 +945,7 @@ export function WorkspaceLayout() {
   const [helpTab, setHelpTab] = useState<HelpTab>("guide");
   const [deleteDialog, setDeleteDialog] = useState<{
     node: ApiTreeNode;
+    mode: "single" | "children";
     confirmed?: boolean;
   }>();
   const navigate = useNavigate();
@@ -1546,7 +1563,11 @@ export function WorkspaceLayout() {
   }
 
   function requestDelete(node: ApiTreeNode) {
-    setDeleteDialog({ node });
+    setDeleteDialog({ node, mode: "single" });
+  }
+
+  function requestDeleteFolderChildren(node: ApiTreeNode) {
+    setDeleteDialog({ node, mode: "children" });
   }
 
   function openHelpPanel(tab: HelpTab) {
@@ -1565,6 +1586,20 @@ export function WorkspaceLayout() {
   function confirmDeleteNode(node: ApiTreeNode) {
     deleteNode(node.id);
     const deletedIds = new Set(flattenNodeIds(node));
+    const next = openApiIds.filter((id) => !deletedIds.has(id));
+    updateOpenApiIds(
+      next,
+      activeApiId && !deletedIds.has(activeApiId)
+        ? activeApiId
+        : next[next.length - 1],
+    );
+  }
+
+  function confirmDeleteFolderChildren(node: ApiTreeNode) {
+    deleteFolderChildren(node.id);
+    const deletedIds = new Set(
+      (node.children ?? []).flatMap((child) => flattenNodeIds(child)),
+    );
     const next = openApiIds.filter((id) => !deletedIds.has(id));
     updateOpenApiIds(
       next,
@@ -1738,6 +1773,7 @@ export function WorkspaceLayout() {
                   }
                   onRename={(node) => openDialog({ mode: "rename", node })}
                   onDelete={requestDelete}
+                  onDeleteFolderChildren={requestDeleteFolderChildren}
                   onMoveApi={moveApi}
                   onCopyName={copyNodeName}
                   onCopyCurl={copyNodeCurl}
@@ -2172,6 +2208,22 @@ export function WorkspaceLayout() {
                   导出 cURL 命令
                 </button>
               )}
+              {sidebarMenu.kind === "folder" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const node = findApiNode(
+                      workspace?.apiTree ?? [],
+                      sidebarMenu.nodeId ?? "",
+                    );
+                    if (node) requestDeleteFolderChildren(node);
+                    setSidebarMenu(undefined);
+                  }}
+                  className="flex h-8 w-full items-center rounded px-3 text-left text-xs text-rose-200 hover:bg-rose-500/15"
+                >
+                  批量删除子目录/API
+                </button>
+              )}
             </>
           )}
         </div>
@@ -2292,17 +2344,27 @@ export function WorkspaceLayout() {
       </Modal>
       <ConfirmModal
         open={Boolean(deleteDialog)}
-        title={deleteDialog ? "确认删除" : ""}
-        description={
+        title={
           deleteDialog
-            ? `确定删除${deleteDialog.node.type === "folder" ? "目录及其全部内容" : "接口"}“${deleteDialog.node.name}”吗？`
+            ? deleteDialog.mode === "children"
+              ? "确认批量删除"
+              : "确认删除"
             : ""
         }
-        confirmText="删除"
+        description={
+          deleteDialog
+            ? deleteDialog.mode === "children"
+              ? `确定删除目录“${deleteDialog.node.name}”下所有子目录和 API 吗？当前目录本身会保留。`
+              : `确定删除${deleteDialog.node.type === "folder" ? "目录及其全部内容" : "接口"}“${deleteDialog.node.name}”吗？`
+            : ""
+        }
+        confirmText={deleteDialog?.mode === "children" ? "批量删除" : "删除"}
         onCancel={() => setDeleteDialog(undefined)}
         onConfirm={() => {
           if (!deleteDialog) return;
-          confirmDeleteNode(deleteDialog.node);
+          if (deleteDialog.mode === "children")
+            confirmDeleteFolderChildren(deleteDialog.node);
+          else confirmDeleteNode(deleteDialog.node);
           setDeleteDialog(undefined);
         }}
       />
